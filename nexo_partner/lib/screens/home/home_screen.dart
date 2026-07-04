@@ -45,6 +45,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   final List<dynamic> _jobRequests = [];
   final Set<String> _rejectedJobIds = {};
+  final Set<String> _shownJobIds = {}; // Prevent showing same job banner twice
+  bool _isShowingIncomingJob = false; // Guard: only one banner at a time
   final List<dynamic> _activeGigs = [];
   final SocketService _socketService = SocketService();
   StreamSubscription<Position>? _positionStream;
@@ -78,6 +80,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadUserData();
+    _loadRejectedJobIds(); // Restore persisted rejected IDs
     _requestPermissions();
     _fetchInitialData();
     
@@ -87,6 +90,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _onNewJobSocket(event['job']);
       }
     });
+  }
+
+  Future<void> _loadRejectedJobIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final List<String> saved = prefs.getStringList('rejected_job_ids') ?? [];
+    _rejectedJobIds.addAll(saved);
+  }
+
+  Future<void> _persistRejectedJobIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('rejected_job_ids', _rejectedJobIds.toList());
   }
 
   @override
@@ -420,9 +434,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 'isDiscovery': true,
               };
               _jobRequests.add(newJob);
-              
-              // Trigger the full-screen UI for new pending offers fetched via HTTP
-              Future.microtask(() => _showJobNotification(newJob));
+              // HTTP-fetched jobs go silently into the list.
+              // Only real-time socket events trigger the full-screen alert.
             }
           }
           debugPrint("✅ [AVAILABLE_JOBS_UPDATED] Feed synced.");
@@ -477,9 +490,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 'isDiscovery': true,
               };
               _jobRequests.add(newJob);
-              
-              // Trigger the full-screen UI for new nearby jobs fetched via HTTP
-              Future.microtask(() => _showJobNotification(newJob));
+              // HTTP-fetched jobs go silently into the list.
+              // Only real-time socket events trigger the full-screen alert.
             }
           }
         });
@@ -576,21 +588,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _onNewJobSocket(dynamic job) {
     if (!mounted) return;
-    setState(() {
-      // Logic same as fetch: ensure separation
-      String currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? "";
-      bool isAlreadyActive = _activeGigs.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
-      bool isDuplicate = _jobRequests.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
-      bool isRejected = _rejectedJobIds.contains(currentJobId);
-      
-      if (!isAlreadyActive && !isDuplicate && !isRejected) {
+    String currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? "";
+    
+    // Skip if already rejected, already shown, or duplicate
+    if (_rejectedJobIds.contains(currentJobId)) return;
+    if (_shownJobIds.contains(currentJobId)) return;
+    
+    bool isAlreadyActive = _activeGigs.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
+    bool isDuplicate = _jobRequests.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
+    
+    if (!isAlreadyActive && !isDuplicate) {
+      setState(() {
         _jobRequests.insert(0, job);
-        _showJobNotification(job);
-      }
-    });
+      });
+      _showJobNotification(job);
+    }
   }
 
   void _showJobNotification(dynamic job) async {
+    String currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? "";
+    
+    // GUARD 1: Don't show if already showing a banner
+    if (_isShowingIncomingJob) return;
+    // GUARD 2: Don't show if this job was already shown in this session
+    if (_shownJobIds.contains(currentJobId)) return;
+    // GUARD 3: Don't show if this job was rejected
+    if (_rejectedJobIds.contains(currentJobId)) return;
+    
+    _isShowingIncomingJob = true;
+    _shownJobIds.add(currentJobId);
+
     // Bring app to foreground using MethodChannel
     const platform = MethodChannel('com.nexo.partner/foreground');
     try {
@@ -607,14 +634,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
     );
 
+    _isShowingIncomingJob = false;
+
     if (result != null && result['accepted'] == true) {
       _acceptJob(job);
-    } else if (result != null && result['accepted'] == false) {
-      // Job was declined
+    } else {
+      // Job was declined (or dismissed without action)
       setState(() {
-        String currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? "";
         if (currentJobId.isNotEmpty) {
           _rejectedJobIds.add(currentJobId);
+          _persistRejectedJobIds(); // Save to disk so it survives app restart
         }
         _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
       });
