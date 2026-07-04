@@ -118,6 +118,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _handleAppResume() async {
     debugPrint("📡 [FETCH_ACTIVE_JOBS] Recovering execution state...");
+    await _checkPendingIncomingJob();
     await _fetchActiveGigs();
     
     // Only fetch available if not currently busy (optional business rule)
@@ -168,6 +169,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _refreshTimer = null;
   }
 
+  Future<void> _checkPendingIncomingJob() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pendingStr = prefs.getString('pending_incoming_job');
+      if (pendingStr != null && pendingStr.isNotEmpty) {
+        await prefs.remove('pending_incoming_job');
+        final jobMap = jsonDecode(pendingStr);
+        if (mounted) {
+          _onNewJobSocket(jobMap);
+        }
+      }
+    } catch (e) {
+      debugPrint("Error checking pending incoming job: $e");
+    }
+  }
+
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     final savedOnline = prefs.getBool('isOnline') ?? false;
@@ -194,6 +211,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _fetchNearbyJobs();
       _fetchEarningsSummary();
       _preloadData();
+      _checkPendingIncomingJob();
 
       if (savedOnline) {
         _toggleOnline(true);

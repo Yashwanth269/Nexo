@@ -85,7 +85,9 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
+  WidgetsFlutterBinding.ensureInitialized();
   DartPluginRegistrant.ensureInitialized();
+  await LocalNotificationService.initialize();
   
   if (service is AndroidServiceInstance) {
     service.on('setAsForeground').listen((event) {
@@ -202,6 +204,15 @@ void onStart(ServiceInstance service) async {
         jobMap = data.first;
       } else {
         jobMap = data;
+      }
+
+      if (jobMap != null) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('pending_incoming_job', jsonEncode(jobMap));
+        } catch (e) {
+          debugPrint("Failed to persist background incoming job: $e");
+        }
       }
 
       // 1. Trigger FullScreenIntent local notification to wake device!

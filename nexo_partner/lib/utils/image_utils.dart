@@ -85,7 +85,12 @@ class ImageUtils {
         fit: fit,
         errorBuilder: (context, error, stackTrace) {
           print('❌ [ASSET_LOAD_ERROR] Failed to load local asset: $localPath');
-          return fallback ?? Icon(Icons.broken_image, size: width ?? 24, color: Colors.grey);
+          return fallback ?? Image.asset(
+            'assets/images/logo/Nexo_partner_logo.png',
+            width: width,
+            height: height,
+            fit: fit,
+          );
         },
       );
     }
@@ -104,7 +109,12 @@ class ImageUtils {
       fit: fit,
       errorBuilder: (context, error, stackTrace) {
         print('❌ [ASSET_LOAD_ERROR] Failed to load: $finalUrl');
-        return fallback ?? Icon(Icons.broken_image, size: width ?? 24, color: Colors.grey);
+        return fallback ?? Image.asset(
+          'assets/images/logo/Nexo_partner_logo.png',
+          width: width,
+          height: height,
+          fit: fit,
+        );
       },
     );
   }
