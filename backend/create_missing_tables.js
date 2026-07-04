@@ -89,6 +89,26 @@ CREATE TABLE IF NOT EXISTS backup_worker_pool (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS backup_activations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    primary_worker_id UUID REFERENCES workers(id) ON DELETE SET NULL,
+    scenario VARCHAR(100),
+    metadata JSONB,
+    previous_status VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS backup_activation_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    backup_worker_id UUID REFERENCES workers(id) ON DELETE SET NULL,
+    scenario VARCHAR(100),
+    recovery_time_ms INTEGER,
+    success BOOLEAN,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 8. Advanced Fatigue Scores
 CREATE TABLE IF NOT EXISTS advanced_fatigue_scores (
     worker_id UUID PRIMARY KEY REFERENCES workers(id) ON DELETE CASCADE,

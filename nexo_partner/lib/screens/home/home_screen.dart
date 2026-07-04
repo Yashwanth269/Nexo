@@ -1781,7 +1781,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final String category = job['category'] ?? 'Task';
     
     return GestureDetector(
-      onTap: canAccept ? () => _acceptJob(job) : null,
+      onTap: canAccept ? () async {
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => IncomingJobScreen(jobData: job, playSound: false),
+            fullscreenDialog: true,
+          ),
+        );
+        if (result != null && result['accepted'] == true) {
+          _acceptJob(job);
+        } else if (result != null && result['accepted'] == false) {
+          final currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? '';
+          if (currentJobId.isNotEmpty) {
+            setState(() {
+              _rejectedJobIds.add(currentJobId);
+              _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
+            });
+            _persistRejectedJobIds();
+            _rejectJob(currentJobId);
+          }
+        }
+      } : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),

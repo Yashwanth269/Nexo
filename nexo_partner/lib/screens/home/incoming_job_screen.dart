@@ -7,8 +7,9 @@ import '../../services/socket_service.dart';
 
 class IncomingJobScreen extends StatefulWidget {
   final Map<dynamic, dynamic> jobData;
+  final bool playSound;
 
-  const IncomingJobScreen({Key? key, required this.jobData}) : super(key: key);
+  const IncomingJobScreen({Key? key, required this.jobData, this.playSound = true}) : super(key: key);
 
   @override
   State<IncomingJobScreen> createState() => _IncomingJobScreenState();
@@ -72,8 +73,10 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
 
   Future<void> _initAudio() async {
     _audioPlayer = AudioPlayer();
-    await _audioPlayer.setReleaseMode(ReleaseMode.loop);
-    await _audioPlayer.play(AssetSource('sounds/new_gigs/zomato_sms.mp3'));
+    if (widget.playSound) {
+      await _audioPlayer.setReleaseMode(ReleaseMode.loop);
+      await _audioPlayer.play(AssetSource('sounds/new_gigs/zomato_sms.mp3'));
+    }
   }
 
   void _initTimer() {
