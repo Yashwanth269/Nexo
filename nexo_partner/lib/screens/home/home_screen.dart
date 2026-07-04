@@ -44,6 +44,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   final List<dynamic> _jobRequests = [];
+  final Set<String> _rejectedJobIds = {};
   final List<dynamic> _activeGigs = [];
   final SocketService _socketService = SocketService();
   StreamSubscription<Position>? _positionStream;
@@ -410,8 +411,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             // EXCLUDE: Don't show in "Available" if it's already in "Active"
             bool isAlreadyActive = _activeGigs.any((j) => j['id'] == job['id']);
             bool isDuplicate = _jobRequests.any((j) => j['id'] == job['id']);
+            bool isRejected = _rejectedJobIds.contains(job['id'].toString());
             
-            if (!isAlreadyActive && !isDuplicate) {
+            if (!isAlreadyActive && !isDuplicate && !isRejected) {
               final newJob = {
                 ...job,
                 'isDiscovery': true,
@@ -465,7 +467,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             // Filter out if already in active gigs or requests
             bool isDuplicate = _jobRequests.any((j) => j['id'] == job['id']) || 
                                _activeGigs.any((j) => j['id'] == job['id']);
-            if (!isDuplicate) {
+            bool isRejected = _rejectedJobIds.contains(job['id'].toString());
+            
+            if (!isDuplicate && !isRejected) {
               final newJob = {
                 ...job,
                 'isDiscovery': true,
@@ -574,8 +578,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // Logic same as fetch: ensure separation
       bool isAlreadyActive = _activeGigs.any((j) => j['id'] == job['id']);
       bool isDuplicate = _jobRequests.any((j) => j['id'] == job['id']);
+      bool isRejected = _rejectedJobIds.contains(job['id'].toString());
       
-      if (!isAlreadyActive && !isDuplicate) {
+      if (!isAlreadyActive && !isDuplicate && !isRejected) {
         _jobRequests.insert(0, job);
         _showJobNotification(job);
       }
@@ -604,6 +609,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     } else if (result != null && result['accepted'] == false) {
       // Job was declined
       setState(() {
+        if (job['id'] != null) {
+          _rejectedJobIds.add(job['id'].toString());
+        }
         _jobRequests.removeWhere((j) => j['id'] == job['id']);
       });
     }

@@ -5,7 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../services/socket_service.dart';
 
 class IncomingJobScreen extends StatefulWidget {
-  final Map<String, dynamic> jobData;
+  final Map<dynamic, dynamic> jobData;
 
   const IncomingJobScreen({Key? key, required this.jobData}) : super(key: key);
 
