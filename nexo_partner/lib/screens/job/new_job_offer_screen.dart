@@ -552,6 +552,7 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                     ],
                   ),
                 ),
+              ),
             ],
           ),
         ),
