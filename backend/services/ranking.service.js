@@ -8,6 +8,8 @@ const userTrustService = require('./user_trust.service');
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
 
+let mlServiceOfflineUntil = 0;
+
 class RankingService {
     async getTopRatedWorkers(lat, lng, userId = null, category = null) {
         const start = Date.now();
@@ -496,6 +498,9 @@ class RankingService {
     }
 
     postRequest(endpoint, body) {
+        if (Date.now() < mlServiceOfflineUntil) {
+            return Promise.reject(new Error('ML service is currently offline (Circuit Breaker active)'));
+        }
         return new Promise((resolve, reject) => {
             const urlObj = new URL(ML_SERVICE_URL + endpoint);
             const options = {
@@ -514,6 +519,7 @@ class RankingService {
                         if (res.statusCode >= 200 && res.statusCode < 300) {
                             resolve(JSON.parse(data));
                         } else {
+                            mlServiceOfflineUntil = Date.now() + 30000; // Mark offline for 30 seconds
                             reject(new Error(`Status ${res.statusCode}`));
                         }
                     } catch (e) {
@@ -521,8 +527,15 @@ class RankingService {
                     }
                 });
             });
-            req.on('error', reject);
-            req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+            req.on('error', (err) => {
+                mlServiceOfflineUntil = Date.now() + 30000; // Mark offline for 30 seconds
+                reject(err);
+            });
+            req.on('timeout', () => { 
+                req.destroy(); 
+                mlServiceOfflineUntil = Date.now() + 30000; // Mark offline for 30 seconds
+                reject(new Error('Timeout')); 
+            });
             req.write(JSON.stringify(body));
             req.end();
         });

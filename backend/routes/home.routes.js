@@ -233,46 +233,61 @@ router.get('/services', async (req, res) => {
 async function computeFallbackMetrics(userLat, userLng, categories) {
     try {
         const results = [];
+        
+        // 1. Get total online/available workers count once
+        const totalRes = await db.query("SELECT COUNT(*) as count FROM workers WHERE is_online = true AND is_available = true");
+        const totalAvailable = parseInt(totalRes.rows[0]?.count || 1);
+
+        // 2. Fetch all online/available workers within 30km radius once
+        const workersRes = await db.query(`
+            SELECT skills, rating FROM workers
+            WHERE is_online = true AND is_available = true
+              AND current_lat IS NOT NULL AND current_lng IS NOT NULL
+              AND earth_distance(ll_to_earth($1, $2), ll_to_earth(current_lat, current_lng)) / 1000.0 <= 30
+        `, [userLat, userLng]);
+        const localWorkers = workersRes.rows || [];
+
+        // 3. Fetch all jobs in the last 24h within 30km radius once
+        const jobsRes = await db.query(`
+            SELECT category, created_at FROM jobs
+            WHERE created_at >= NOW() - INTERVAL '24 hours'
+              AND location_lat IS NOT NULL AND location_lng IS NOT NULL
+              AND earth_distance(ll_to_earth($1, $2), ll_to_earth(location_lat, location_lng)) / 1000.0 <= 30
+        `, [userLat, userLng]);
+        const localJobs = jobsRes.rows || [];
+
+        const now = Date.now();
+        const oneHourAgo = now - 3600000;
+
         for (const category of categories) {
             const catLower = category.toLowerCase();
 
-            const onlineRes = await db.query(`
-                SELECT COUNT(*) as count FROM workers
-                WHERE is_online = true AND is_available = true
-                AND current_lat IS NOT NULL AND current_lng IS NOT NULL
-                AND earth_distance(ll_to_earth($1, $2), ll_to_earth(current_lat, current_lng)) / 1000.0 <= 30
-                AND (EXISTS (SELECT 1 FROM unnest(skills) s WHERE LOWER(s) LIKE $3))
-            `, [userLat, userLng, `%${catLower}%`]);
-            const onlineWorkers = parseInt(onlineRes.rows[0]?.count || 0);
+            // Filter workers matching category in skills in-memory
+            const matchingWorkers = localWorkers.filter(w => {
+                if (!w.skills || !Array.isArray(w.skills)) return false;
+                return w.skills.some(s => {
+                    const sLower = s.toLowerCase();
+                    return sLower.includes(catLower) || catLower.includes(sLower);
+                });
+            });
+            const onlineWorkers = matchingWorkers.length;
 
-            const totalRes = await db.query("SELECT COUNT(*) as count FROM workers WHERE is_online = true AND is_available = true");
-            const totalAvailable = parseInt(totalRes.rows[0]?.count || 1);
+            // Calculate average reputation in-memory
+            const sumRep = matchingWorkers.reduce((sum, w) => sum + parseFloat(w.rating || 0), 0);
+            const avgRep = matchingWorkers.length > 0 ? (sumRep / matchingWorkers.length) : 0;
 
-            const jobsRes = await db.query(`
-                SELECT COUNT(*) as count FROM jobs
-                WHERE LOWER(category) LIKE $1
-                AND created_at >= NOW() - INTERVAL '1 hour'
-                AND location_lat IS NOT NULL AND location_lng IS NOT NULL
-                AND earth_distance(ll_to_earth($2, $3), ll_to_earth(location_lat, location_lng)) / 1000.0 <= 30
-            `, [`%${catLower}%`, userLat, userLng]);
-            const jobsLast1h = parseInt(jobsRes.rows[0]?.count || 0);
+            // Filter jobs matching category in-memory
+            const matchingJobs = localJobs.filter(j => {
+                if (!j.category) return false;
+                return j.category.toLowerCase().includes(catLower);
+            });
+            const jobsLast24h = matchingJobs.length;
 
-            const jobs24Res = await db.query(`
-                SELECT COUNT(*) as count FROM jobs
-                WHERE LOWER(category) LIKE $1
-                AND created_at >= NOW() - INTERVAL '24 hours'
-                AND location_lat IS NOT NULL AND location_lng IS NOT NULL
-                AND earth_distance(ll_to_earth($2, $3), ll_to_earth(location_lat, location_lng)) / 1000.0 <= 30
-            `, [`%${catLower}%`, userLat, userLng]);
-            const jobsLast24h = parseInt(jobs24Res.rows[0]?.count || 0);
-
-            const repRes = await db.query(`
-                SELECT COALESCE(AVG(w.rating), 0) as avg_rep FROM workers w
-                WHERE EXISTS (SELECT 1 FROM unnest(w.skills) s WHERE LOWER(s) LIKE $1)
-                AND w.current_lat IS NOT NULL AND w.current_lng IS NOT NULL
-                AND earth_distance(ll_to_earth($2, $3), ll_to_earth(w.current_lat, w.current_lng)) / 1000.0 <= 30
-            `, [`%${catLower}%`, userLat, userLng]);
-            const avgRep = parseFloat(repRes.rows[0]?.avg_rep || 0);
+            // Filter jobs in last 1 hour in-memory
+            const jobsLast1h = matchingJobs.filter(j => {
+                const jobTime = new Date(j.created_at).getTime();
+                return jobTime >= oneHourAgo;
+            }).length;
 
             const availabilityScore = Math.min(1, onlineWorkers / Math.max(totalAvailable, 1));
             const demand = jobsLast1h > 15 ? 'VERY_HIGH' : jobsLast1h > 8 ? 'HIGH' : jobsLast1h > 3 ? 'NORMAL' : 'LOW';

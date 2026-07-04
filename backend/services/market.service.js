@@ -114,29 +114,6 @@ const jobsQuery = `
     GROUP BY category
 `;
 
-const workersQuery = `
-    WITH geo_workers AS (
-        SELECT 
-            skills
-        FROM workers
-        WHERE 
-            is_online = true 
-            AND is_available = true
-            AND location_cube IS NOT NULL
-            AND earth_distance(ll_to_earth($1::double precision, $2::double precision), location_cube) / 1000.0 <= $3::double precision
-    )
-    SELECT 
-        c.category,
-        COUNT(w.skills) AS active_workers
-    FROM (SELECT unnest($4::text[]) AS category) c
-    LEFT JOIN geo_workers w ON EXISTS (
-        SELECT 1 FROM unnest(w.skills) s 
-        WHERE LOWER(s) LIKE LOWER('%' || c.category || '%') 
-           OR LOWER(c.category) LIKE LOWER('%' || s || '%')
-    )
-    GROUP BY c.category
-`;
-
 // ─────────────────────────────────────────────────────────────────────────────
 //  STARTUP CACHE WARMER
 // ─────────────────────────────────────────────────────────────────────────────
@@ -434,10 +411,29 @@ const computeRegionTrends = async (userLat, userLng, userId, userHistory = {}) =
     const localCats = Object.keys(jobStats);
     const catsToScore = localCats.length >= 3 ? localCats : ALL_CATEGORIES;
 
-    const workersRes = await db.query(workersQuery, [userLat, userLng, radius, catsToScore]);
+    // Fetch all online/available workers within radius once and count in-memory
+    const workersRes = await db.query(`
+        SELECT skills FROM workers
+        WHERE is_online = true AND is_available = true
+          AND location_cube IS NOT NULL
+          AND earth_distance(ll_to_earth($1::double precision, $2::double precision), location_cube) / 1000.0 <= $3::double precision
+    `, [userLat, userLng, radius]);
+    const localWorkers = workersRes.rows || [];
+
     const workerCounts = {};
-    for (const row of workersRes.rows) {
-        workerCounts[row.category] = parseInt(row.active_workers || 0);
+    for (const cat of catsToScore) {
+        const catLower = cat.toLowerCase();
+        let count = 0;
+        for (const w of localWorkers) {
+            if (w.skills && Array.isArray(w.skills)) {
+                const hasSkill = w.skills.some(s => {
+                    const sLower = s.toLowerCase();
+                    return sLower.includes(catLower) || catLower.includes(sLower);
+                });
+                if (hasSkill) count++;
+            }
+        }
+        workerCounts[cat] = count;
     }
 
     let ruralCount = 0, urbanCount = 0;
