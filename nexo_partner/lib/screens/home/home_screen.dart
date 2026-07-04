@@ -19,6 +19,8 @@ import '../../widgets/skeleton_loader.dart';
 import '../../utils/network_helper.dart';
 import '../../utils/image_utils.dart';
 import '../../components/glass_components.dart';
+import 'incoming_job_screen.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 
 import '../auth/login_screen.dart';
 import '../settings/settings_screen.dart';
@@ -69,6 +71,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Map<String, dynamic>? _earningsSummary;
   String _selectedTimeframe = 'today'; // 'today', 'week', 'month', 'year', 'random'
   String? _selectedCustomDateStr;
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +79,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _loadUserData();
     _requestPermissions();
     _fetchInitialData();
+    
+    // Listen for background service socket events
+    FlutterBackgroundService().on('incoming_job').listen((event) {
+      if (event != null && event['job'] != null) {
+        _onNewJobSocket(event['job']);
+      }
+    });
   }
 
   @override
@@ -564,18 +574,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
   }
 
-  void _showJobNotification(dynamic job) {
-    Navigator.push(
+  void _showJobNotification(dynamic job) async {
+    // Bring app to foreground using MethodChannel
+    const platform = MethodChannel('com.nexo.partner/foreground');
+    try {
+      await platform.invokeMethod('bringToForeground');
+    } catch (e) {
+      debugPrint("Could not bring app to foreground: $e");
+    }
+
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => NewJobOfferScreen(
-          job: job,
-          onAccept: () => _acceptJob(job),
-          onDecline: () => _rejectJob(job['id']),
-          onCounterOffer: (price) => _submitCounterOffer(job['id'], price),
-        ),
+        builder: (context) => IncomingJobScreen(jobData: job),
+        fullscreenDialog: true,
       ),
     );
+
+    if (result != null && result['accepted'] == true) {
+      _acceptJob(job);
+    } else if (result != null && result['accepted'] == false) {
+      // Job was declined
+      setState(() {
+        _jobRequests.removeWhere((j) => j['id'] == job['id']);
+      });
+    }
   }
 
   Widget _buildModernJobDialog(dynamic job) {

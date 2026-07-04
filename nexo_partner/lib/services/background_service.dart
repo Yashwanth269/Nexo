@@ -9,6 +9,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import '../utils/network_helper.dart';
+import 'package:socket_io_client/socket_io_client.dart' as io;
+import 'package:flutter/services.dart';
 
 class BackgroundTracker {
   static Future<void> initializeService() async {
@@ -123,7 +125,7 @@ void onStart(ServiceInstance service) async {
         if (service is AndroidServiceInstance) {
           service.setForegroundNotificationInfo(
             title: "On The Way",
-            content: "Location updating... (${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)})",
+            content: "Location tracking active. Syncing with customer...",
           );
         }
         
@@ -148,7 +150,7 @@ void onStart(ServiceInstance service) async {
         if (service is AndroidServiceInstance) {
           service.setForegroundNotificationInfo(
             title: "Available & Online",
-            content: "Waiting for nearby jobs... (${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)})",
+            content: "Waiting for nearby jobs...",
           );
         }
         
@@ -176,8 +178,46 @@ void onStart(ServiceInstance service) async {
     }
   );
 
-  service.on('stopService').listen((event) {
-    positionStream?.cancel();
-    service.stopSelf();
-  });
+  // Read preferences for background socket
+  final prefs = await SharedPreferences.getInstance();
+  final String workerPhone = prefs.getString('workerPhone') ?? prefs.getString('worker_phone') ?? "";
+  final String token = prefs.getString('worker_token') ?? prefs.getString('workerToken') ?? "";
+  
+  if (workerPhone.isNotEmpty) {
+    io.Socket socket = io.io(NetworkHelper.baseUrl, <String, dynamic>{
+      'transports': ['websocket'],
+      'autoConnect': false,
+      'auth': {'token': token}
+    });
+
+    socket.onConnect((_) {
+      socket.emit('worker_online', {'phoneNumber': workerPhone});
+    });
+
+    socket.on('new_job_request', (data) async {
+      // 1. Force the screen to wake up using MethodChannel
+      const platform = MethodChannel('com.nexo.partner/foreground');
+      try {
+        await platform.invokeMethod('bringToForeground');
+      } catch (e) {
+        debugPrint("Background wake failed: $e");
+      }
+      
+      // 2. Send the job data to the main isolate to display the UI
+      service.invoke('incoming_job', {'job': data});
+    });
+
+    socket.connect();
+    
+    service.on('stopService').listen((event) {
+      socket.disconnect();
+      positionStream?.cancel();
+      service.stopSelf();
+    });
+  } else {
+    service.on('stopService').listen((event) {
+      positionStream?.cancel();
+      service.stopSelf();
+    });
+  }
 }
