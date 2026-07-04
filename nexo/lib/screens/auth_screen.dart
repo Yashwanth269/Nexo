@@ -9,6 +9,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:nexo/services/shared_prefs_helper.dart';
 import 'package:app_links/app_links.dart';
 import 'package:nexo/utils/network_helper.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import 'home_screen.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -245,7 +247,37 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  Future<void> _fetchLiveLocation() async {
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+        Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 5),
+        );
+        List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
+        if (placemarks.isNotEmpty) {
+          Placemark place = placemarks[0];
+          String city = place.locality ?? place.subAdministrativeArea ?? place.administrativeArea ?? "";
+          String area = place.subLocality ?? "";
+          String fullLocation = area.isNotEmpty ? "$area, $city" : city;
+          if (mounted && _cityController.text.isEmpty) {
+            setState(() {
+              _cityController.text = fullLocation;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      print("Error fetching live location: $e");
+    }
+  }
+
   Future<void> _sendOtp() async {
+    if (_isLoading) return;
     if (_phoneController.text.length != 10) return;
     setState(() => _isLoading = true);
     try {
@@ -349,6 +381,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _verifyOtp() async {
+    if (_isLoading) return;
     final otp = _otpControllers.map((c) => c.text).join();
     if (otp.length != 6) return;
     setState(() => _isLoading = true);
@@ -426,6 +459,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _saveUserProfile() async {
+    if (_isLoading) return;
     setState(() => _isLoading = true);
     try {
       String? photoUrl;
@@ -444,10 +478,14 @@ class _AuthScreenState extends State<AuthScreen> {
       }
 
       final userId = await SharedPrefsHelper.getUserId();
+      final token = await SharedPrefsHelper.getToken();
       
       final response = await http.post(
         Uri.parse('$baseUrl/api/user/save-profile'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
         body: jsonEncode({
           'userId': userId,
           'phoneNumber': _phoneController.text,
@@ -514,7 +552,12 @@ class _AuthScreenState extends State<AuthScreen> {
   void _nextPage() {
     if (_currentStep < 2) {
       _pageController.nextPage(duration: const Duration(milliseconds: 400), curve: Curves.easeOutCubic);
-      setState(() => _currentStep++);
+      setState(() {
+        _currentStep++;
+        if (_currentStep == 2) {
+          _fetchLiveLocation();
+        }
+      });
     } else {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomeScreen()));
     }
