@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'package:nexo/services/shared_prefs_helper.dart';
 import 'package:app_links/app_links.dart';
+import 'package:nexo/utils/network_helper.dart';
 import 'home_screen.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -51,7 +52,7 @@ class _AuthScreenState extends State<AuthScreen> {
   // State for Step 3
   List<String> _selectedSkills = ["Delivery", "Plumbing"];
 
-  final String baseUrl = 'http://10.0.2.2:5000';
+  final String baseUrl = NetworkHelper.baseUrl;
 
   @override
   void initState() {
