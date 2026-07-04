@@ -943,10 +943,23 @@ router.patch('/:userId/:jobId', async (req, res) => {
             // Global fallback broadcast
             io.emit('job_cancelled_by_user', { jobId: job.id });
             
-            // Clean up Redis active jobs list and status cache
+            // Clean up corresponding job offers in DB
+            await db.query(
+                "UPDATE job_offers SET status = 'CANCELLED' WHERE job_id = $1 AND status = 'PENDING'",
+                [job.id]
+            ).catch(err => console.error("⚠️ [DB-CLEANUP] Failed to cancel job offers:", err.message));
+
+            // Clean up Redis active jobs list, geo location index and status cache
             const redis = require('../config/redis');
             await redis.zrem('jobs:active', job.id).catch(() => {});
             await redis.set(`job:${job.id}:status`, 'CANCELLED').catch(() => {});
+            
+            const geohash = await redis.get(`job:${job.id}:geohash`).catch(() => null);
+            if (geohash) {
+                await redis.zrem(`jobs:geo:${geohash}`, job.id).catch(() => {});
+            }
+            await redis.del(`job:${job.id}:geohash`).catch(() => {});
+            await redis.srem('jobs:active_set', job.id).catch(() => {});
 
             // Log to event_logs via JobService for consistency
             await jobService.logEvent(job.id, job.worker_id, 'status_change_CANCELLED', { 

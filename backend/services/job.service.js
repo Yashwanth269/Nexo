@@ -894,7 +894,8 @@ class JobService {
             `SELECT j.*, jo.id as offer_id, jo.status as offer_status 
              FROM job_offers jo
              JOIN jobs j ON jo.job_id = j.id
-             WHERE jo.worker_id = $1 AND jo.status = 'PENDING' AND jo.expires_at > NOW()`,
+             WHERE jo.worker_id = $1 AND jo.status = 'PENDING' AND jo.expires_at > NOW()
+               AND j.status IN ('OPEN', 'REDISTRIBUTING', 'REASSIGNING')`,
             [worker.id]
         );
         return result.rows;
