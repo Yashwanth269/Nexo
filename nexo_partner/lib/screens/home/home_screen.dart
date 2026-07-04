@@ -597,10 +597,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     bool isAlreadyActive = _activeGigs.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
     bool isDuplicate = _jobRequests.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
     
-    if (!isAlreadyActive && !isDuplicate) {
-      setState(() {
-        _jobRequests.insert(0, job);
-      });
+    if (!isAlreadyActive) {
+      if (!isDuplicate) {
+        setState(() {
+          _jobRequests.insert(0, job);
+        });
+      }
       _showJobNotification(job);
     }
   }
@@ -639,14 +641,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (result != null && result['accepted'] == true) {
       _acceptJob(job);
     } else {
-      // Job was declined (or dismissed without action)
-      setState(() {
-        if (currentJobId.isNotEmpty) {
+      // Job was declined (or dismissed without action) — persist to backend + local
+      if (currentJobId.isNotEmpty) {
+        setState(() {
           _rejectedJobIds.add(currentJobId);
-          _persistRejectedJobIds(); // Save to disk so it survives app restart
-        }
-        _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
-      });
+          _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
+        });
+        _persistRejectedJobIds(); // Save to disk so it survives app restart
+        _rejectJob(currentJobId);  // 🔑 Tell the backend: never send this gig to this partner again
+      }
     }
   }
 

@@ -48,7 +48,7 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
   Future<void> _initAudio() async {
     _audioPlayer = AudioPlayer();
     await _audioPlayer.setReleaseMode(ReleaseMode.loop);
-    await _audioPlayer.play(AssetSource('sounds/New gigs/zomato_sms.mp3'));
+    await _audioPlayer.play(AssetSource('sounds/new_gigs/zomato_sms.mp3'));
   }
 
   void _initTimer() {
