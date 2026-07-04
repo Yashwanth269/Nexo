@@ -23,9 +23,13 @@ class SocketService {
     // Retrieve current position with a timeout fallback
     Position? position;
     try {
-      position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 3),
+      // Try last known position first (instant cache lookup)
+      position = await Geolocator.getLastKnownPosition();
+      
+      // Fallback to low accuracy getCurrentPosition if no cached location is available
+      position ??= await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.low,
+        timeLimit: const Duration(seconds: 2),
       );
     } catch (e) {
       debugPrint("⚠️ [SOCKET] Could not fetch startup position: $e");

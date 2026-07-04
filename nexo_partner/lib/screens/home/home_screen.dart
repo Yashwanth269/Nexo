@@ -237,13 +237,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _refreshLocation() async {
     setState(() => _currentArea = "Detecting area...");
     try {
-      Position position = await Geolocator.getCurrentPosition(
+      Position? position = await Geolocator.getLastKnownPosition();
+      position ??= await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
         timeLimit: const Duration(seconds: 5),
       );
-      _updateLocationUI(position);
-      if (_isOnline) {
-        _socketService.updateLocation(position.latitude, position.longitude);
+      if (position != null) {
+        _updateLocationUI(position);
+        if (_isOnline) {
+          _socketService.updateLocation(position.latitude, position.longitude);
+        }
+      } else {
+        setState(() => _currentArea = "Location Unavailable");
       }
     } catch (e) {
       setState(() => _currentArea = "Detection Timeout");
