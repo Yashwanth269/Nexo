@@ -685,29 +685,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       debugPrint("Could not bring app to foreground: $e");
     }
 
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => IncomingJobScreen(jobData: job),
-        fullscreenDialog: true,
-      ),
-    );
-
-    _isShowingIncomingJob = false;
-
-    if (result != null && result['accepted'] == true) {
-      _acceptJob(job);
-    } else {
-      // Job was declined (or dismissed without action) — persist to backend + local
-      if (currentJobId.isNotEmpty) {
-        setState(() {
-          _rejectedJobIds.add(currentJobId);
-          _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
-        });
-        _persistRejectedJobIds(); // Save to disk so it survives app restart
-        _rejectJob(currentJobId);  // 🔑 Tell the backend: never send this gig to this partner again
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        _isShowingIncomingJob = false;
+        return;
       }
-    }
+      
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => IncomingJobScreen(jobData: job),
+          fullscreenDialog: true,
+        ),
+      );
+
+      _isShowingIncomingJob = false;
+
+      if (result != null && result['accepted'] == true) {
+        _acceptJob(job);
+      } else if (result != null && result['accepted'] == false) {
+        if (currentJobId.isNotEmpty) {
+          setState(() {
+            _rejectedJobIds.add(currentJobId);
+            _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
+          });
+          _persistRejectedJobIds();
+          _rejectJob(currentJobId);
+        }
+      }
+    });
   }
 
   Widget _buildModernJobDialog(dynamic job) {
