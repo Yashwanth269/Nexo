@@ -1,5 +1,7 @@
 import os
 import json
+from dotenv import load_dotenv
+load_dotenv()
 import joblib
 import logging
 from datetime import datetime
