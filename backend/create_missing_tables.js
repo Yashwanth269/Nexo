@@ -238,6 +238,23 @@ ALTER TABLE worker_features ADD COLUMN IF NOT EXISTS fatigue_24h DECIMAL DEFAULT
 ALTER TABLE worker_features ADD COLUMN IF NOT EXISTS fatigue_7d DECIMAL DEFAULT 0.0;
 ALTER TABLE worker_features ADD COLUMN IF NOT EXISTS fatigue_30d DECIMAL DEFAULT 0.0;
 
+-- 20. Ensure worker_reputation_scores has correct columns
+CREATE TABLE IF NOT EXISTS worker_reputation_scores (
+    worker_id UUID PRIMARY KEY REFERENCES workers(id) ON DELETE CASCADE,
+    trust_score DECIMAL DEFAULT 50.0,
+    reliability_score DECIMAL DEFAULT 50.0,
+    quality_score DECIMAL DEFAULT 50.0,
+    response_score DECIMAL DEFAULT 50.0,
+    overall_score DECIMAL DEFAULT 50.0,
+    calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE worker_reputation_scores ADD COLUMN IF NOT EXISTS quality_score DECIMAL DEFAULT 50.0;
+ALTER TABLE worker_reputation_scores ADD COLUMN IF NOT EXISTS response_score DECIMAL DEFAULT 50.0;
+ALTER TABLE worker_reputation_scores ADD COLUMN IF NOT EXISTS overall_score DECIMAL DEFAULT 50.0;
+ALTER TABLE worker_reputation_scores ADD COLUMN IF NOT EXISTS calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+
 
 
 `;

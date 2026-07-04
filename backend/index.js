@@ -293,11 +293,13 @@ io.on('connection', (socket) => {
         console.log(`👷 [WORKER] ${phoneNumber} joined active room.`);
 
         // Sync with DB
+        let workerUuid = null;
         try {
             // Also resolve worker UUID and join that room for consistent event delivery
             const wRes = await db.query("SELECT id FROM workers WHERE phone_number = $1", [phoneNumber]);
             if (wRes.rowCount > 0) {
                 socket.workerId = wRes.rows[0].id;
+                workerUuid = wRes.rows[0].id;
                 socket.join(`worker:${wRes.rows[0].id}`);
             }
             await db.query("UPDATE workers SET is_online = true WHERE phone_number = $1", [phoneNumber]);
@@ -310,7 +312,7 @@ io.on('connection', (socket) => {
         // Update real-time position in Redis
         if (location) {
             await matchingEngine.updateWorkerLocation(phoneNumber, location.lat, location.lng);
-            await eventStream.publish('worker_online', { lat: location.lat, lng: location.lng, workerId: phoneNumber });
+            await eventStream.publish('worker_online', { lat: location.lat, lng: location.lng, workerId: workerUuid || phoneNumber });
             const geoKey = require('./services/geo_hash.service').encode(location.lat, location.lng, 6);
             socket.join(`trending:${geoKey}`);
 
