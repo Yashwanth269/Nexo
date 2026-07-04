@@ -2634,8 +2634,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
 
   Widget _buildCategoriesGrid() {
     final categories = _popularServices.isNotEmpty ? _popularServices : ServiceData.categories;
-    final displayCount = _categoriesExpanded ? categories.length : 5;
-    final totalItemCount = _categoriesExpanded ? categories.length : 6;
+    final displayCount = _categoriesExpanded ? categories.length : min(5, categories.length);
+    final totalItemCount = _categoriesExpanded ? categories.length : (categories.length > 5 ? 6 : categories.length);
 
     return GridView.builder(
       shrinkWrap: true,
@@ -2648,7 +2648,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
       ),
       itemCount: totalItemCount,
       itemBuilder: (context, index) {
-        if (!_categoriesExpanded && index == 5) {
+        if (!_categoriesExpanded && categories.length > 5 && index == 5) {
           return InkWell(
             onTap: () {
               setState(() {
