@@ -13,6 +13,7 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 import '../../services/socket_service.dart';
 import '../../services/cache_service.dart';
+import '../../services/background_service.dart';
 import '../../widgets/job_request_modal.dart';
 import '../../widgets/skeleton_loader.dart';
 import '../../utils/network_helper.dart';

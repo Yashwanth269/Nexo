@@ -28,7 +28,7 @@ class LocalNotificationService {
         ?.createNotificationChannel(channel);
 
     await _notificationsPlugin.initialize(
-      initializationSettings,
+      settings: initializationSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
         // App is opened via notification tapping
       },
@@ -52,10 +52,10 @@ class LocalNotificationService {
         NotificationDetails(android: androidPlatformChannelSpecifics);
 
     await _notificationsPlugin.show(
-      999, // notification id
-      title,
-      body,
-      platformChannelSpecifics,
+      id: 999, // notification id
+      title: title,
+      body: body,
+      notificationDetails: platformChannelSpecifics,
     );
   }
 }
