@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Razorpay Checkout</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            min-height: 100vh;
+        }
+        .font-outfit {
+            font-family: 'Outfit', sans-serif;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center p-6 text-slate-100">
+    <div class="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+        <!-- Background glows -->
+        <div class="absolute -top-20 -right-20 w-48 h-48 bg-orange-500/10 rounded-full blur-3xl"></div>
+        <div class="absolute -bottom-20 -left-20 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl"></div>
+
+        <div class="relative z-10">
+            <!-- Header -->
+            <div class="text-center mb-8">
+                <span class="px-3 py-1 bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded-full text-xs font-semibold tracking-wider uppercase">
+                    Razorpay Secure Pay
+                </span>
+                <h1 class="font-outfit text-3xl font-bold mt-4 text-white">Payment Checkout</h1>
+                <p class="text-slate-400 text-sm mt-2">Complete your job payment securely</p>
+            </div>
+
+            <!-- Details Card -->
+            <div class="bg-white/5 border border-white/5 rounded-2xl p-6 mb-8">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-slate-400 text-sm">Job Reference</span>
+                    <span id="job-id-display" class="text-slate-200 font-semibold font-mono text-sm">--</span>
+                </div>
+                <div class="border-t border-white/5 my-4"></div>
+                <div class="text-center">
+                    <span class="text-slate-400 text-xs uppercase tracking-wider block mb-1">Total Amount</span>
+                    <span id="amount-display" class="font-outfit text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-300">
+                        ₹0.00
+                    </span>
+                </div>
+            </div>
+
+            <!-- Error Banner -->
+            <div id="error-banner" class="hidden mb-6 p-4 bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm rounded-xl flex items-start gap-3">
+                <svg class="w-5 h-5 shrink-0 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+                <span id="error-text">An error occurred.</span>
+            </div>
+
+            <!-- Action Button -->
+            <button id="pay-btn" class="w-full py-4 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold rounded-2xl shadow-lg transition-all duration-300 transform active:scale-95 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2">
+                <span id="btn-text">PAY WITH RAZORPAY</span>
+                <div id="btn-spinner" class="hidden w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            </button>
+
+            <!-- Success Banner -->
+            <div id="success-banner" class="hidden mt-6 p-6 bg-emerald-500/10 border border-emerald-500/20 text-center rounded-2xl">
+                <div class="w-12 h-12 bg-emerald-500/20 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-6 h-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                    </svg>
+                </div>
+                <h3 class="font-outfit text-lg font-bold text-emerald-400">Payment Verified!</h3>
+                <p class="text-slate-400 text-xs mt-1">Transaction ID: <span id="payment-id-display" class="font-mono text-slate-300"></span></p>
+                <p class="text-slate-400 text-xs mt-3">You can close this tab and return to the app.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Parse Query Params
+        const urlParams = new URLSearchParams(window.location.search);
+        const jobId = urlParams.get('jobId') || 'test_job_123';
+        const amountInRupees = parseFloat(urlParams.get('amount') || '10.00');
+        const token = urlParams.get('token') || '';
+
+        document.getElementById('job-id-display').innerText = jobId.substring(0, 18) + (jobId.length > 18 ? '...' : '');
+        document.getElementById('amount-display').innerText = '₹' + amountInRupees.toFixed(2);
+
+        const payBtn = document.getElementById('pay-btn');
+        const btnText = document.getElementById('btn-text');
+        const btnSpinner = document.getElementById('btn-spinner');
+        const errorBanner = document.getElementById('error-banner');
+        const errorText = document.getElementById('error-text');
+        const successBanner = document.getElementById('success-banner');
+
+        function showError(msg) {
+            errorText.innerText = msg;
+            errorBanner.classList.remove('hidden');
+            setLoading(false);
+        }
+
+        function setLoading(loading) {
+            if (loading) {
+                payBtn.disabled = true;
+                btnText.classList.add('hidden');
+                btnSpinner.classList.remove('hidden');
+                errorBanner.classList.add('hidden');
+            } else {
+                payBtn.disabled = false;
+                btnText.classList.remove('hidden');
+                btnSpinner.classList.add('hidden');
+            }
+        }
+
+        payBtn.addEventListener('click', async () => {
+            setLoading(true);
+            try {
+                // 1. Fetch Razorpay Public Key
+                const keyRes = await fetch('/api/payment/razorpay-key', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!keyRes.ok) throw new Error("Failed to fetch Razorpay public key ID");
+                const { keyId } = await keyRes.json();
+
+                // 2. Create Order on Backend (amount is in paise)
+                const orderRes = await fetch('/api/payment/create-order', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        amount: Math.round(amountInRupees * 100), // convert to paise
+                        currency: 'INR',
+                        receipt: `receipt_job_${jobId}`
+                    })
+                });
+
+                if (!orderRes.ok) {
+                    const errData = await orderRes.json();
+                    throw new Error(errData.message || "Failed to create payment order");
+                }
+
+                const orderData = await orderRes.json();
+                
+                // 3. Open Razorpay Checkout Modal
+                const options = {
+                    key: keyId,
+                    amount: orderData.amount,
+                    currency: orderData.currency,
+                    name: 'Flex Marketplace',
+                    description: `Job Payment: ${jobId}`,
+                    order_id: orderData.order_id,
+                    handler: async function (response) {
+                        setLoading(true);
+                        try {
+                            // 4. Verify Payment Signature
+                            const verifyRes = await fetch('/api/payment/verify-payment', {
+                                method: 'POST',
+                                headers: { 
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                },
+                                body: JSON.stringify({
+                                    razorpay_order_id: response.razorpay_order_id,
+                                    razorpay_payment_id: response.razorpay_payment_id,
+                                    razorpay_signature: response.razorpay_signature,
+                                    jobId: jobId
+                                })
+                            });
+
+                            if (!verifyRes.ok) {
+                                const verifyErr = await verifyRes.json();
+                                throw new Error(verifyErr.message || "Payment signature verification failed");
+                            }
+
+                            const verifyData = await verifyRes.json();
+                            if (verifyData.success) {
+                                payBtn.classList.add('hidden');
+                                successBanner.classList.remove('hidden');
+                                document.getElementById('payment-id-display').innerText = response.razorpay_payment_id;
+                            }
+                        } catch (err) {
+                            showError(err.message);
+                        } finally {
+                            setLoading(false);
+                        }
+                    },
+                    modal: {
+                        ondismiss: function () {
+                            setLoading(false);
+                        }
+                    },
+                    prefill: {
+                        name: 'Flex User',
+                        email: 'user@flex.com',
+                        contact: '9999999999'
+                    },
+                    theme: {
+                        color: '#F97316'
+                    }
+                };
+
+                const rzp = new Razorpay(options);
+                rzp.on('payment.failed', function (response) {
+                    showError("Payment failed: " + response.error.description);
+                });
+                rzp.open();
+
+            } catch (err) {
+                showError(err.message);
+            }
+        });
+    </script>
+</body>
+</html>

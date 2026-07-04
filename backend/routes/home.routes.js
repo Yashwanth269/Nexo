@@ -1,0 +1,352 @@
+'use strict';
+
+const express = require('express');
+const router = express.Router();
+const redis = require('../config/redis');
+const db = require('../config/db');
+const { getIO } = require('../config/socket');
+const { logEvent } = require('../services/ml_events.service');
+const { invalidateTrendCache } = require('../services/market.service');
+
+const CACHE_TTL_SECONDS = 45;
+
+const ALL_CATEGORIES = [
+    'Agriculture', 'Construction', 'Delivery', 'Events',
+    'Home Services', 'Household', 'Mechanic', 'Shops',
+    'Skilled', 'Smart Tech', 'Transport',
+    'Electrical', 'Plumbing', 'Cleaning', 'Painting', 'AC Repair',
+    'Labour', 'Security', 'Healthcare',
+];
+
+const getTimeSegment = (hour) => {
+    if (hour >= 4  && hour < 7)  return 'dawn';
+    if (hour >= 7  && hour < 12) return 'morning';
+    if (hour >= 12 && hour < 17) return 'afternoon';
+    if (hour >= 17 && hour < 21) return 'evening';
+    if (hour >= 21 && hour < 24) return 'night';
+    return 'latenight';
+};
+
+const getSegmentBoosts = (segment) => {
+    const boosts = {
+        dawn: { Agriculture: 1.6, Labour: 1.4, Transport: 1.3, Delivery: 1.2 },
+        morning: { Cleaning: 1.5, Household: 1.4, Agriculture: 1.3, Construction: 1.3, Healthcare: 1.2 },
+        afternoon: { Labour: 1.4, Agriculture: 1.3, Construction: 1.3, Delivery: 1.2, Transport: 1.2 },
+        evening: { Electrical: 1.5, 'AC Repair': 1.5, Plumbing: 1.3, Mechanic: 1.2, 'Home Services': 1.3, Events: 1.2 },
+        night: { Delivery: 1.5, Security: 1.4, Electrical: 1.2, Mechanic: 1.2 },
+        latenight: { Delivery: 1.3, Security: 1.5 },
+    };
+    return boosts[segment] || {};
+};
+
+const computeHomeRankingScore = (cat, segment) => {
+    const segBoosts = getSegmentBoosts(segment);
+    const timeBoost = segBoosts[cat.name] || 1.0;
+
+    return (
+        0.30 * cat.availabilityScore +
+        0.25 * ({ LOW: 0.2, NORMAL: 0.5, HIGH: 0.8, VERY_HIGH: 1.0 }[cat.demand] || 0.5) +
+        0.20 * cat.acceptanceProbability +
+        0.15 * (cat.avgReputation / 5.0) +
+        0.10 * timeBoost
+    );
+};
+
+const mapServiceStatus = (availabilityScore) => {
+    if (availabilityScore > 0.90) return { status: 'AVAILABLE', label: 'Available Now' };
+    if (availabilityScore > 0.70) return { status: 'AVAILABLE', label: 'Available' };
+    if (availabilityScore > 0.50) return { status: 'BUSY', label: 'Busy' };
+    if (availabilityScore > 0.30) return { status: 'LIMITED', label: 'Limited' };
+    return { status: 'UNAVAILABLE', label: 'Unavailable' };
+};
+
+const mapDemandLabel = (demand) => {
+    const labels = {
+        LOW: { badge: 'Low Demand', color: '#94A3B8' },
+        NORMAL: { badge: 'Normal', color: '#3B82F6' },
+        HIGH: { badge: 'High Demand', color: '#F97316' },
+        VERY_HIGH: { badge: 'Peak Hours', color: '#EF4444' },
+    };
+    return labels[demand] || labels.NORMAL;
+};
+
+const mapAcceptanceLabel = (prob) => {
+    if (prob > 0.95) return { badge: 'Fast Response', color: '#10B981' };
+    if (prob > 0.90) return { badge: 'Likely Available', color: '#3B82F6' };
+    if (prob > 0.75) return { badge: 'Response Expected', color: '#F97316' };
+    return { badge: 'Limited Availability', color: '#EF4444' };
+};
+
+const mapSkillLabel = (confidence) => {
+    if (confidence > 0.90) return { badge: 'Verified Experts', color: '#10B981' };
+    if (confidence > 0.80) return { badge: 'Highly Skilled', color: '#3B82F6' };
+    if (confidence > 0.70) return { badge: 'Experienced', color: '#F97316' };
+    return { badge: 'Available', color: '#94A3B8' };
+};
+
+// GET /api/home/services
+router.get('/services', async (req, res) => {
+    const startTime = Date.now();
+    try {
+        const { lat, lng, userId } = req.query;
+
+        if (!lat || !lng) {
+            return res.status(400).json({ success: false, error: 'Location coordinates required (lat, lng)' });
+        }
+
+        const userLat = parseFloat(lat);
+        const userLng = parseFloat(lng);
+        const hour = new Date().getHours();
+        const segment = getTimeSegment(hour);
+        const cacheKey = `home_services:${userLat.toFixed(4)}:${userLng.toFixed(4)}`;
+
+        // Try cache
+        try {
+            const cached = await redis.get(cacheKey);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                const responseTime = Date.now() - startTime;
+                logEvent(userId, 'HOME_SERVICES_VIEWED', { cached: true, responseTime, categoryCount: parsed.categories?.length });
+                return res.json({ ...parsed, meta: { ...parsed.meta, cached: true } });
+            }
+        } catch (cacheErr) {
+            console.warn('[HOME_SERVICES] Redis cache read error:', cacheErr.message);
+        }
+
+        // Determine real categories from the system
+        let activeCategories = [];
+        try {
+            const catRes = await db.query("SELECT DISTINCT category FROM jobs WHERE created_at >= NOW() - INTERVAL '30 days'");
+            activeCategories = catRes.rows.map(r => r.category);
+        } catch (_) {}
+
+        if (activeCategories.length < 5) {
+            activeCategories = [...ALL_CATEGORIES];
+        }
+
+        // Call ML service for predictions
+        let mlResults = [];
+        let mlMeta = {};
+        try {
+            const mlServiceUrl = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+            const axios = require('axios');
+            const mlResponse = await axios.post(`${mlServiceUrl}/predict/home-services`, {
+                categories: activeCategories,
+                lat: userLat,
+                lng: userLng,
+                user_id: userId || null,
+            }, { timeout: 10000 });
+
+            if (mlResponse.data && mlResponse.data.success) {
+                mlResults = mlResponse.data.categories || [];
+                mlMeta = mlResponse.data.meta || {};
+            }
+        } catch (mlErr) {
+            console.warn('[HOME_SERVICES] ML service call failed, using DB-only fallback:', mlErr.message);
+            mlResults = await computeFallbackMetrics(userLat, userLng, activeCategories);
+        }
+
+        // Compute home ranking scores and sort
+        const enriched = mlResults.map(cat => {
+            const statusInfo = mapServiceStatus(cat.availabilityScore || 0);
+            const demandInfo = mapDemandLabel(cat.demand || 'NORMAL');
+            const acceptanceInfo = mapAcceptanceLabel(cat.acceptanceProbability || 0);
+            const skillInfo = mapSkillLabel(cat.skillConfidence || 0);
+
+            const homeRankingScore = computeHomeRankingScore(
+                { ...cat, name: cat.name },
+                segment
+            );
+
+            return {
+                id: cat.id || cat.name?.toLowerCase().replace(/\s+/g, '_'),
+                name: cat.name,
+                icon: null,
+                status: statusInfo.status,
+                statusLabel: statusInfo.label,
+                onlineWorkers: cat.onlineWorkers || 0,
+                availableWorkers: cat.availableWorkers || 0,
+                avgETA: cat.avgETA || null,
+                availabilityScore: cat.availabilityScore || 0,
+                acceptanceProbability: cat.acceptanceProbability || 0,
+                avgReputation: cat.avgReputation || 0,
+                skillConfidence: cat.skillConfidence || 0,
+                demand: cat.demand || 'NORMAL',
+                demandBadge: demandInfo.badge,
+                demandColor: demandInfo.color,
+                acceptanceBadge: acceptanceInfo.badge,
+                acceptanceColor: acceptanceInfo.color,
+                skillBadge: skillInfo.badge,
+                skillColor: skillInfo.color,
+                serviceHealth: cat.serviceHealth || 'GOOD',
+                homeRankingScore: Math.round(homeRankingScore * 100) / 100,
+                jobsLastHour: cat.jobsLastHour || 0,
+                jobsLast24h: cat.jobsLast24h || 0,
+            };
+        });
+
+        // Sort by home ranking score descending
+        enriched.sort((a, b) => b.homeRankingScore - a.homeRankingScore);
+
+        // Assign ranks
+        enriched.forEach((cat, i) => {
+            cat.rank = i + 1;
+        });
+
+        const payload = {
+            success: true,
+            categories: enriched,
+            meta: {
+                segment,
+                generatedAt: new Date().toISOString(),
+                cached: false,
+                cacheTtlSeconds: CACHE_TTL_SECONDS,
+                responseTimeMs: Date.now() - startTime,
+                modelsUsed: mlMeta.models || {},
+                categoryCount: enriched.length,
+            },
+        };
+
+        // Cache in Redis
+        try {
+            await redis.set(cacheKey, JSON.stringify(payload), 'EX', CACHE_TTL_SECONDS);
+        } catch (cacheErr) {
+            console.warn('[HOME_SERVICES] Redis cache write error:', cacheErr.message);
+        }
+
+        // Log metrics
+        logEvent(userId, 'HOME_SERVICES_VIEWED', {
+            cached: false,
+            responseTime: Date.now() - startTime,
+            categoryCount: enriched.length,
+            topCategories: enriched.slice(0, 5).map(c => ({ name: c.name, score: c.homeRankingScore })),
+            segment,
+        });
+
+        res.json(payload);
+    } catch (error) {
+        console.error('[HOME_SERVICES] Error:', error);
+        res.status(500).json({ success: false, error: 'Internal Server Error' });
+    }
+});
+
+async function computeFallbackMetrics(userLat, userLng, categories) {
+    try {
+        const results = [];
+        for (const category of categories) {
+            const catLower = category.toLowerCase();
+
+            const onlineRes = await db.query(`
+                SELECT COUNT(*) as count FROM workers
+                WHERE is_online = true AND is_available = true
+                AND current_lat IS NOT NULL AND current_lng IS NOT NULL
+                AND earth_distance(ll_to_earth($1, $2), ll_to_earth(current_lat, current_lng)) / 1000.0 <= 30
+                AND (EXISTS (SELECT 1 FROM unnest(skills) s WHERE LOWER(s) LIKE $3))
+            `, [userLat, userLng, `%${catLower}%`]);
+            const onlineWorkers = parseInt(onlineRes.rows[0]?.count || 0);
+
+            const totalRes = await db.query("SELECT COUNT(*) as count FROM workers WHERE is_online = true AND is_available = true");
+            const totalAvailable = parseInt(totalRes.rows[0]?.count || 1);
+
+            const jobsRes = await db.query(`
+                SELECT COUNT(*) as count FROM jobs
+                WHERE LOWER(category) LIKE $1
+                AND created_at >= NOW() - INTERVAL '1 hour'
+                AND location_lat IS NOT NULL AND location_lng IS NOT NULL
+                AND earth_distance(ll_to_earth($2, $3), ll_to_earth(location_lat, location_lng)) / 1000.0 <= 30
+            `, [`%${catLower}%`, userLat, userLng]);
+            const jobsLast1h = parseInt(jobsRes.rows[0]?.count || 0);
+
+            const jobs24Res = await db.query(`
+                SELECT COUNT(*) as count FROM jobs
+                WHERE LOWER(category) LIKE $1
+                AND created_at >= NOW() - INTERVAL '24 hours'
+                AND location_lat IS NOT NULL AND location_lng IS NOT NULL
+                AND earth_distance(ll_to_earth($2, $3), ll_to_earth(location_lat, location_lng)) / 1000.0 <= 30
+            `, [`%${catLower}%`, userLat, userLng]);
+            const jobsLast24h = parseInt(jobs24Res.rows[0]?.count || 0);
+
+            const repRes = await db.query(`
+                SELECT COALESCE(AVG(w.rating), 0) as avg_rep FROM workers w
+                WHERE EXISTS (SELECT 1 FROM unnest(w.skills) s WHERE LOWER(s) LIKE $1)
+                AND w.current_lat IS NOT NULL AND w.current_lng IS NOT NULL
+                AND earth_distance(ll_to_earth($2, $3), ll_to_earth(w.current_lat, w.current_lng)) / 1000.0 <= 30
+            `, [`%${catLower}%`, userLat, userLng]);
+            const avgRep = parseFloat(repRes.rows[0]?.avg_rep || 0);
+
+            const availabilityScore = Math.min(1, onlineWorkers / Math.max(totalAvailable, 1));
+            const demand = jobsLast1h > 15 ? 'VERY_HIGH' : jobsLast1h > 8 ? 'HIGH' : jobsLast1h > 3 ? 'NORMAL' : 'LOW';
+
+            results.push({
+                name: category,
+                onlineWorkers,
+                availableWorkers: totalAvailable,
+                avgETA: null,
+                availabilityScore,
+                acceptanceProbability: Math.min(0.95, 0.5 + (onlineWorkers / Math.max(totalAvailable, 1)) * 0.3),
+                avgReputation: avgRep,
+                skillConfidence: Math.min(1, avgRep / 5),
+                demand,
+                serviceHealth: availabilityScore > 0.5 ? 'GOOD' : availabilityScore > 0.3 ? 'WARNING' : 'CRITICAL',
+                jobsLastHour: jobsLast1h,
+                jobsLast24h,
+            });
+        }
+        return results;
+    } catch (err) {
+        console.error('[HOME_SERVICES] Fallback computation error:', err.message);
+        return [];
+    }
+}
+
+// POST /api/home/invalidate-cache
+router.post('/invalidate-cache', async (req, res) => {
+    try {
+        const { lat, lng } = req.body;
+        if (lat && lng) {
+            await invalidateServiceCache(lat, lng);
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[HOME_SERVICES] Cache invalidation error:', err.message);
+        res.status(500).json({ success: false, error: 'Internal Server Error' });
+    }
+});
+
+async function invalidateServiceCache(lat, lng) {
+    try {
+        const keys = [
+            `home_services:${parseFloat(lat).toFixed(4)}:${parseFloat(lng).toFixed(4)}`,
+        ];
+        for (const k of keys) {
+            await redis.del(k);
+        }
+    } catch (err) {
+        console.warn('[HOME_SERVICES] Cache invalidation error:', err.message);
+    }
+}
+
+async function invalidateAllHomeServicesCaches() {
+    try {
+        const keys = await redis.keys('home_services:*');
+        if (keys.length > 0) {
+            await redis.del(...keys);
+        }
+        console.log(`[HOME_SERVICES] Invalidated ${keys.length} home services caches`);
+        
+        const { getIO } = require('../config/socket');
+        const io = getIO();
+        if (io) {
+            io.emit('services_updated', { trigger: 'data_changed' });
+            console.log("[HOME_SERVICES] Broadcasted 'services_updated' socket event");
+        }
+    } catch (err) {
+        console.warn('[HOME_SERVICES] Global cache invalidation error:', err.message);
+    }
+}
+
+module.exports = {
+    router,
+    invalidateServiceCache,
+    invalidateAllHomeServicesCaches,
+};
