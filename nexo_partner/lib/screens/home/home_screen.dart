@@ -70,6 +70,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String _currentArea = "Detecting location...";
   StreamSubscription<ConnectivityResult>? _connectivitySubscription;
   DateTime? _lastGeocodeTime;
+  Timer? _refreshTimer;
   
   Map<String, dynamic>? _earningsSummary;
   String _selectedTimeframe = 'today'; // 'today', 'week', 'month', 'year', 'random'
@@ -108,6 +109,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       debugPrint("🚀 [APP_RESUMED] Re-synchronizing state...");
       _socketService.connect((job) => _onNewJobSocket(job)); // Ensure socket resync
+      if (_isOnline) {
+        _startRefreshTimer();
+      }
       _handleAppResume();
     }
   }
@@ -143,7 +147,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _connectivitySubscription?.cancel();
     _positionStream?.cancel();
     _socketService.disconnect();
+    _stopRefreshTimer();
     super.dispose();
+  }
+
+  void _startRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (!_isOnline || !mounted) {
+        timer.cancel();
+        return;
+      }
+      _fetchJobsAndOffers();
+      _fetchNearbyJobs();
+    });
+  }
+
+  void _stopRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
   }
 
   Future<void> _loadUserData() async {
@@ -522,6 +544,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (_isOnline) {
       _fetchJobsAndOffers();
       _fetchNearbyJobs();
+      _startRefreshTimer();
       
       _socketService.connect((job) => _onNewJobSocket(job));
       BackgroundTracker.startOnlineService();
@@ -587,6 +610,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     } else {
       _socketService.disconnect();
       BackgroundTracker.stopTracking();
+      _stopRefreshTimer();
       setState(() => _jobRequests.clear());
     }
   }
