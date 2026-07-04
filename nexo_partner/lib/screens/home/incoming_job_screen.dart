@@ -24,12 +24,37 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
   GoogleMapController? _mapController;
   LatLng? _jobLocation;
 
+  Function(dynamic)? _cancelListener;
+
   @override
   void initState() {
     super.initState();
     _initAudio();
     _initTimer();
     _initLocation();
+
+    _cancelListener = (data) {
+      if (data != null) {
+        final String? cancelledJobId = (data['jobId'] ?? data['job_id'])?.toString();
+        final String currentJobId = (widget.jobData['id'] ?? widget.jobData['_id'] ?? widget.jobData['jobId'] ?? widget.jobData['job_id'])?.toString() ?? "";
+        if (cancelledJobId == currentJobId) {
+          debugPrint("🚫 [SOCKET] Current incoming job offer was cancelled by user.");
+          _countdownTimer?.cancel();
+          _audioPlayer.stop();
+          if (mounted) {
+            Navigator.of(context).pop({'accepted': false});
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("The customer has cancelled this job request."),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
+        }
+      }
+    };
+    SocketService().socket?.on('job_cancelled_by_user', _cancelListener!);
+    SocketService().socket?.on('USER_CANCELLED_JOB', _cancelListener!);
   }
 
   void _initLocation() {
@@ -77,6 +102,10 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
     _audioPlayer.dispose();
     _timerController.dispose();
     _countdownTimer?.cancel();
+    if (_cancelListener != null) {
+      SocketService().socket?.off('job_cancelled_by_user', _cancelListener);
+      SocketService().socket?.off('USER_CANCELLED_JOB', _cancelListener);
+    }
     super.dispose();
   }
 

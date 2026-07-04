@@ -196,11 +196,19 @@ void onStart(ServiceInstance service) async {
     });
 
     socket.on('new_job_request', (data) async {
+      dynamic jobMap;
+      if (data is List) {
+        if (data.isEmpty) return;
+        jobMap = data.first;
+      } else {
+        jobMap = data;
+      }
+
       // 1. Trigger FullScreenIntent local notification to wake device!
       try {
-        final title = (data is Map) ? (data['category'] ?? "New Job Request") : "New Job Request";
-        final price = (data is Map) ? (data['price'] ?? data['earnings'] ?? "0") : "0";
-        final distance = (data is Map) ? (data['distance'] ?? "Nearby") : "Nearby";
+        final title = (jobMap is Map) ? (jobMap['category'] ?? "New Job Request") : "New Job Request";
+        final price = (jobMap is Map) ? (jobMap['price'] ?? jobMap['earnings'] ?? "0") : "0";
+        final distance = (jobMap is Map) ? (jobMap['distance'] ?? "Nearby") : "Nearby";
         
         await LocalNotificationService.showNewJobNotification(
           "New Gig Request: $title",
@@ -219,7 +227,7 @@ void onStart(ServiceInstance service) async {
       }
       
       // 3. Send the job data to the main isolate to display the UI
-      service.invoke('incoming_job', {'job': data});
+      service.invoke('incoming_job', {'job': jobMap});
     });
 
     socket.connect();

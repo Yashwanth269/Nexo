@@ -410,6 +410,14 @@ cronService.start();
 const gracefulShutdown = (signal) => {
     console.log(`\n[${signal}] Shutting down gracefully...`);
     
+    // Close Socket.IO first to close all open client connections
+    try {
+        io.close();
+        console.log('[SHUTDOWN] Socket.IO server closed.');
+    } catch (e) {
+        console.error('[SHUTDOWN] Socket.IO close error:', e.message);
+    }
+
     // Stop accepting new connections
     server.close(async () => {
         console.log('[SHUTDOWN] HTTP server closed.');

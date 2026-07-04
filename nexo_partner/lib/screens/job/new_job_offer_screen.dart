@@ -6,6 +6,7 @@ import 'package:audioplayers/audioplayers.dart';
 import '../../utils/image_utils.dart';
 import '../../utils/network_helper.dart';
 import '../../components/glass_components.dart';
+import '../../services/socket_service.dart';
 
 class NewJobOfferScreen extends StatefulWidget {
   final dynamic job;
@@ -34,6 +35,7 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
   AnimationController? _pulseController;
   Animation<double>? _pulseAnimation;
   final AudioPlayer _audioPlayer = AudioPlayer();
+  Function(dynamic)? _cancelListener;
 
   @override
   void initState() {
@@ -62,6 +64,29 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
       );
     }
 
+    _cancelListener = (data) {
+      if (data != null) {
+        final String? cancelledJobId = (data['jobId'] ?? data['job_id'])?.toString();
+        final String currentJobId = (widget.job['id'] ?? widget.job['_id'])?.toString() ?? "";
+        if (cancelledJobId == currentJobId) {
+          debugPrint("🚫 [SOCKET] Current job offer was cancelled by user.");
+          _timer?.cancel();
+          _audioPlayer.stop();
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("The customer has cancelled this job request."),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
+        }
+      }
+    };
+    SocketService().socket?.on('job_cancelled_by_user', _cancelListener!);
+    SocketService().socket?.on('USER_CANCELLED_JOB', _cancelListener!);
+
     _startTimer();
     _playRingtone();
   }
@@ -69,7 +94,7 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
   Future<void> _playRingtone() async {
     try {
       await _audioPlayer.setReleaseMode(ReleaseMode.loop);
-      await _audioPlayer.play(AssetSource('sounds/New gigs/zomato_sms.mp3'));
+      await _audioPlayer.play(AssetSource('sounds/new_gigs/zomato_sms.mp3'));
       debugPrint("🎵 [RINGTONE] Started playing zomato_sms.mp3 in loop");
     } catch (e) {
       debugPrint("⚠️ [RINGTONE] Error playing audio: $e");
@@ -98,6 +123,10 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
     _pulseController?.dispose();
     _priceController.dispose();
     _priceFocus.dispose();
+    if (_cancelListener != null) {
+      SocketService().socket?.off('job_cancelled_by_user', _cancelListener);
+      SocketService().socket?.off('USER_CANCELLED_JOB', _cancelListener);
+    }
     super.dispose();
   }
 

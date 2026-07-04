@@ -588,7 +588,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _onNewJobSocket(dynamic job) {
     if (!mounted) return;
-    String currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? "";
+    
+    dynamic jobMap;
+    if (job is List) {
+      if (job.isEmpty) return;
+      jobMap = job.first;
+    } else {
+      jobMap = job;
+    }
+    
+    if (jobMap == null) return;
+    String currentJobId = jobMap['id']?.toString() ?? jobMap['_id']?.toString() ?? "";
     
     // Skip if already rejected, already shown, or duplicate
     if (_rejectedJobIds.contains(currentJobId)) return;
@@ -600,10 +610,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!isAlreadyActive) {
       if (!isDuplicate) {
         setState(() {
-          _jobRequests.insert(0, job);
+          _jobRequests.insert(0, jobMap);
         });
       }
-      _showJobNotification(job);
+      _showJobNotification(jobMap);
     }
   }
 

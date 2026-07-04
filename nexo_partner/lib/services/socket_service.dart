@@ -54,15 +54,23 @@ class SocketService {
 
     socket!.on('new_job_request', (data) {
       debugPrint('🔔 [SOCKET] New Job Received: $data');
-      if (data is Map && data['offerId'] != null) {
-        socket!.emit('new_job_request_ack', {'offerId': data['offerId']});
+      dynamic jobMap;
+      if (data is List) {
+        if (data.isEmpty) return;
+        jobMap = data.first;
+      } else {
+        jobMap = data;
+      }
+
+      if (jobMap is Map && jobMap['offerId'] != null) {
+        socket!.emit('new_job_request_ack', {'offerId': jobMap['offerId']});
       }
       
       // Trigger background / local notifications
       try {
-        final title = (data is Map) ? (data['category'] ?? "New Job Request") : "New Job Request";
-        final price = (data is Map) ? (data['price'] ?? data['earnings'] ?? "0") : "0";
-        final distance = (data is Map) ? (data['distance'] ?? "Nearby") : "Nearby";
+        final title = (jobMap is Map) ? (jobMap['category'] ?? "New Job Request") : "New Job Request";
+        final price = (jobMap is Map) ? (jobMap['price'] ?? jobMap['earnings'] ?? "0") : "0";
+        final distance = (jobMap is Map) ? (jobMap['distance'] ?? "Nearby") : "Nearby";
         LocalNotificationService.showNewJobNotification(
           "New Gig Request: $title",
           "Earnings: ₹$price | Distance: $distance. Tap to open!",
@@ -71,7 +79,7 @@ class SocketService {
         debugPrint("⚠️ [SOCKET] Failed to show local notification: $e");
       }
 
-      onJobRequest(data);
+      onJobRequest(jobMap);
     });
 
     socket!.on('job_taken', (data) {
