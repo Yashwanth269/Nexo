@@ -16,7 +16,7 @@ class NetworkHelper {
     int attempt = 0;
     while (attempt < maxRetries) {
       try {
-        final response = await requestFn().timeout(const Duration(seconds: 10));
+        final response = await requestFn().timeout(const Duration(seconds: 30));
         if (response.statusCode >= 200 && response.statusCode < 300) {
           return response;
         }

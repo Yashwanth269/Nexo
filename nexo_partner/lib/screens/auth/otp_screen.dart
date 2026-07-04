@@ -20,7 +20,7 @@ class OtpScreen extends StatefulWidget {
 
 class _OtpScreenState extends State<OtpScreen> {
   final List<TextEditingController> _controllers = List.generate(6, (index) => TextEditingController());
-  final List<FocusNode> _otpFocusNodes = List.generate(6, (index) => FocusNode());
+  final List<FocusNode> _otpFocusNodes = [];
   bool _isLoading = false;
   final String baseUrl = NetworkHelper.baseUrl;
   
@@ -33,10 +33,22 @@ class _OtpScreenState extends State<OtpScreen> {
   void initState() {
     super.initState();
     _startTimer();
-    for (var node in _otpFocusNodes) {
+    for (int i = 0; i < 6; i++) {
+      final node = FocusNode(
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.backspace) {
+            if (_controllers[i].text.isEmpty && i > 0) {
+              _otpFocusNodes[i - 1].requestFocus();
+              return KeyEventResult.handled;
+            }
+          }
+          return KeyEventResult.ignored;
+        },
+      );
       node.addListener(() {
         if (mounted) setState(() {});
       });
+      _otpFocusNodes.add(node);
     }
   }
 
@@ -73,7 +85,7 @@ class _OtpScreenState extends State<OtpScreen> {
         Uri.parse('$baseUrl/api/worker/auth/send-otp'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'phoneNumber': widget.phoneNumber}),
-      );
+      ).timeout(const Duration(seconds: 30));
       final data = json.decode(response.body);
       if (response.statusCode == 200 && data['success'] == true) {
         _startTimer();
@@ -158,7 +170,7 @@ class _OtpScreenState extends State<OtpScreen> {
         Uri.parse('$baseUrl/api/worker/auth/verify-otp'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'phoneNumber': widget.phoneNumber, 'otp': otp}),
-      );
+      ).timeout(const Duration(seconds: 30));
 
       debugPrint("Verify Status: ${response.statusCode}");
       debugPrint("Verify Body: ${response.body}");
@@ -247,49 +259,39 @@ class _OtpScreenState extends State<OtpScreen> {
   }
 
   Widget _buildOtpBox(int index) {
-    return KeyboardListener(
-      focusNode: _otpFocusNodes[index],
-      onKeyEvent: (event) {
-        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.backspace) {
-          if (_controllers[index].text.isEmpty && index > 0) {
-            _otpFocusNodes[index - 1].requestFocus();
-          }
-        }
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 44,
-        height: 54,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _otpFocusNodes[index].hasFocus ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0),
-            width: 1.5,
-          ),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      width: 44,
+      height: 54,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _otpFocusNodes[index].hasFocus ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0),
+          width: 1.5,
         ),
-        child: Center(
-          child: TextField(
-            controller: _controllers[index],
-            focusNode: _otpFocusNodes[index],
-            textAlign: TextAlign.center,
-            keyboardType: TextInputType.number,
-            maxLength: 1,
-            style: GoogleFonts.inter(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF0F172A),
-            ),
-            decoration: const InputDecoration(counterText: "", border: InputBorder.none),
-            onChanged: (value) {
-              if (value.isNotEmpty && index < 5) {
-                _otpFocusNodes[index + 1].requestFocus();
-              }
-              if (value.isEmpty && index > 0) {
-                _otpFocusNodes[index - 1].requestFocus();
-              }
-            },
+      ),
+      child: Center(
+        child: TextField(
+          controller: _controllers[index],
+          focusNode: _otpFocusNodes[index],
+          textAlign: TextAlign.center,
+          keyboardType: TextInputType.number,
+          maxLength: 1,
+          style: GoogleFonts.inter(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF0F172A),
           ),
+          decoration: const InputDecoration(counterText: "", border: InputBorder.none),
+          onChanged: (value) {
+            if (value.isNotEmpty && index < 5) {
+              _otpFocusNodes[index + 1].requestFocus();
+            }
+            if (value.isEmpty && index > 0) {
+              _otpFocusNodes[index - 1].requestFocus();
+            }
+          },
         ),
       ),
     );

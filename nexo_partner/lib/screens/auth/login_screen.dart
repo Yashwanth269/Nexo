@@ -15,8 +15,24 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _phoneController = TextEditingController();
+  final FocusNode _phoneFocusNode = FocusNode();
   bool _isLoading = false;
   final String baseUrl = NetworkHelper.baseUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _phoneFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _phoneFocusNode.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
 
   Future<void> _sendOtp() async {
     if (_phoneController.text.length < 10) {
@@ -38,7 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Uri.parse(fullUrl),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'phoneNumber': _phoneController.text}),
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 30));
 
       debugPrint("Response Status: ${response.statusCode}");
       debugPrint("Response Body: ${response.body}");
@@ -214,60 +230,54 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Focus(
-                        child: Builder(
-                          builder: (context) {
-                            final isFocused = Focus.of(context).hasFocus;
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(30),
-                                border: Border.all(
-                                  color: isFocused ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
-                                  width: 1.5,
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(
+                            color: _phoneFocusNode.hasFocus ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
+                            width: 1.5,
+                          ),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                        child: Row(
+                          children: [
+                            Text(
+                              "🇮🇳 +91",
+                              style: GoogleFonts.inter(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Container(
+                              width: 1,
+                              height: 20,
+                              color: const Color(0xFFE2E8F0),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextField(
+                                controller: _phoneController,
+                                focusNode: _phoneFocusNode,
+                                keyboardType: TextInputType.phone,
+                                maxLength: 10,
+                                style: GoogleFonts.inter(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                                decoration: InputDecoration(
+                                  border: InputBorder.none,
+                                  counterText: "",
+                                  hintText: "98765 43210",
+                                  hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8)),
                                 ),
                               ),
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                              child: Row(
-                                children: [
-                                  Text(
-                                    "🇮🇳 +91",
-                                    style: GoogleFonts.inter(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                      color: const Color(0xFF0F172A),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Container(
-                                    width: 1,
-                                    height: 20,
-                                    color: const Color(0xFFE2E8F0),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _phoneController,
-                                      keyboardType: TextInputType.phone,
-                                      maxLength: 10,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: const Color(0xFF0F172A),
-                                      ),
-                                      decoration: InputDecoration(
-                                        border: InputBorder.none,
-                                        counterText: "",
-                                        hintText: "98765 43210",
-                                        hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8)),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 24),
