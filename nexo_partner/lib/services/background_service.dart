@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import '../utils/network_helper.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:flutter/services.dart';
+import 'notification_service.dart';
 
 class BackgroundTracker {
   static Future<void> initializeService() async {
@@ -195,7 +196,21 @@ void onStart(ServiceInstance service) async {
     });
 
     socket.on('new_job_request', (data) async {
-      // 1. Force the screen to wake up using MethodChannel
+      // 1. Trigger FullScreenIntent local notification to wake device!
+      try {
+        final title = (data is Map) ? (data['category'] ?? "New Job Request") : "New Job Request";
+        final price = (data is Map) ? (data['price'] ?? data['earnings'] ?? "0") : "0";
+        final distance = (data is Map) ? (data['distance'] ?? "Nearby") : "Nearby";
+        
+        await LocalNotificationService.showNewJobNotification(
+          "New Gig Request: $title",
+          "Earnings: ₹$price | Distance: $distance",
+        );
+      } catch (e) {
+        debugPrint("Background notification failed: $e");
+      }
+      
+      // 2. Also try native MethodChannel (fallback)
       const platform = MethodChannel('com.nexo.partner/foreground');
       try {
         await platform.invokeMethod('bringToForeground');
@@ -203,7 +218,7 @@ void onStart(ServiceInstance service) async {
         debugPrint("Background wake failed: $e");
       }
       
-      // 2. Send the job data to the main isolate to display the UI
+      // 3. Send the job data to the main isolate to display the UI
       service.invoke('incoming_job', {'job': data});
     });
 

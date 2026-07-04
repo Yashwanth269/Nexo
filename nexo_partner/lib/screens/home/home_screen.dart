@@ -412,10 +412,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             bool isDuplicate = _jobRequests.any((j) => j['id'] == job['id']);
             
             if (!isAlreadyActive && !isDuplicate) {
-              _jobRequests.add({
+              final newJob = {
                 ...job,
                 'isDiscovery': true,
-              });
+              };
+              _jobRequests.add(newJob);
+              
+              // Trigger the full-screen UI for new pending offers fetched via HTTP
+              Future.microtask(() => _showJobNotification(newJob));
             }
           }
           debugPrint("✅ [AVAILABLE_JOBS_UPDATED] Feed synced.");
@@ -462,10 +466,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             bool isDuplicate = _jobRequests.any((j) => j['id'] == job['id']) || 
                                _activeGigs.any((j) => j['id'] == job['id']);
             if (!isDuplicate) {
-              _jobRequests.add({
+              final newJob = {
                 ...job,
                 'isDiscovery': true,
-              });
+              };
+              _jobRequests.add(newJob);
+              
+              // Trigger the full-screen UI for new nearby jobs fetched via HTTP
+              Future.microtask(() => _showJobNotification(newJob));
             }
           }
         });

@@ -45,6 +45,7 @@ class LocalNotificationService {
       priority: Priority.high,
       playSound: true,
       enableVibration: true,
+      fullScreenIntent: true,
       styleInformation: BigTextStyleInformation(''),
     );
 
