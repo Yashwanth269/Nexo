@@ -274,6 +274,9 @@ ALTER TABLE worker_reputation_scores ADD COLUMN IF NOT EXISTS response_score DEC
 ALTER TABLE worker_reputation_scores ADD COLUMN IF NOT EXISTS overall_score DECIMAL DEFAULT 50.0;
 ALTER TABLE worker_reputation_scores ADD COLUMN IF NOT EXISTS calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS search_radius_km DECIMAL;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS search_state_stage INTEGER DEFAULT 1;
+
 
 
 
