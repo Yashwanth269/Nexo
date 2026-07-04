@@ -1383,9 +1383,9 @@ def train_skill_confidence_model(req: SpecializedTrainingRequest):
             conn.commit()
             cur.close()
             conn.close()
-    except Exception as e:
-        logger.error(f"Failed to persist skill confidence model: {e}")
-        return {"success": False, "error": str(e)}
+        except Exception as e:
+            logger.error(f"Failed to persist skill confidence model: {e}")
+            return {"success": False, "error": str(e)}
     except HTTPException:
         raise
     except Exception as e:
