@@ -17,21 +17,20 @@ class IncomingJobScreen extends StatefulWidget {
 
 class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProviderStateMixin {
   late AudioPlayer _audioPlayer;
-  late AnimationController _timerController;
-  int _secondsLeft = 30;
-  Timer? _countdownTimer;
+  late AnimationController _pulseController;
 
   // Map settings
   GoogleMapController? _mapController;
   LatLng? _jobLocation;
 
   Function(dynamic)? _cancelListener;
+  Function(dynamic)? _jobTakenListener;
 
   @override
   void initState() {
     super.initState();
     _initAudio();
-    _initTimer();
+    _initPulse();
     _initLocation();
 
     _cancelListener = (data) {
@@ -40,7 +39,6 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
         final String currentJobId = (widget.jobData['id'] ?? widget.jobData['_id'] ?? widget.jobData['jobId'] ?? widget.jobData['job_id'])?.toString() ?? "";
         if (cancelledJobId == currentJobId) {
           debugPrint("🚫 [SOCKET] Current incoming job offer was cancelled by user.");
-          _countdownTimer?.cancel();
           _audioPlayer.stop();
           if (mounted) {
             Navigator.of(context).pop({'accepted': false});
@@ -56,6 +54,27 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
     };
     SocketService().socket?.on('job_cancelled_by_user', _cancelListener!);
     SocketService().socket?.on('USER_CANCELLED_JOB', _cancelListener!);
+
+    _jobTakenListener = (data) {
+      if (data != null) {
+        final String? takenJobId = (data['jobId'] ?? data['job_id'])?.toString();
+        final String currentJobId = (widget.jobData['id'] ?? widget.jobData['_id'] ?? widget.jobData['jobId'] ?? widget.jobData['job_id'])?.toString() ?? "";
+        if (takenJobId == currentJobId) {
+          debugPrint("🚫 [SOCKET] Current incoming job was accepted by another worker.");
+          _audioPlayer.stop();
+          if (mounted) {
+            Navigator.of(context).pop({'accepted': false});
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("This gig was accepted by another worker."),
+                backgroundColor: Colors.orangeAccent,
+              ),
+            );
+          }
+        }
+      }
+    };
+    SocketService().socket?.on('job_taken', _jobTakenListener!);
   }
 
   void _initLocation() {
@@ -79,42 +98,30 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
     }
   }
 
-  void _initTimer() {
-    _timerController = AnimationController(
+  void _initPulse() {
+    _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 30),
+      duration: const Duration(milliseconds: 1000),
     );
-    
-    _timerController.reverse(from: 1.0);
-
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return;
-      setState(() {
-        if (_secondsLeft > 0) {
-          _secondsLeft--;
-        } else {
-          _countdownTimer?.cancel();
-          _declineGig(); // Auto decline when timer runs out
-        }
-      });
-    });
+    _pulseController.repeat(reverse: true);
   }
 
   @override
   void dispose() {
     _audioPlayer.dispose();
-    _timerController.dispose();
-    _countdownTimer?.cancel();
+    _pulseController.dispose();
     if (_cancelListener != null) {
       SocketService().socket?.off('job_cancelled_by_user', _cancelListener);
       SocketService().socket?.off('USER_CANCELLED_JOB', _cancelListener);
+    }
+    if (_jobTakenListener != null) {
+      SocketService().socket?.off('job_taken', _jobTakenListener);
     }
     super.dispose();
   }
 
   void _acceptGig() {
     _audioPlayer.stop();
-    _countdownTimer?.cancel();
     
     final String offerId = widget.jobData['offerId']?.toString() ?? 
                            widget.jobData['id']?.toString() ?? 
@@ -126,7 +133,6 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
 
   void _declineGig() {
     _audioPlayer.stop();
-    _countdownTimer?.cancel();
     
     final String offerId = widget.jobData['offerId']?.toString() ?? 
                            widget.jobData['id']?.toString() ?? 
@@ -161,20 +167,26 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Outer Blue Progress Border (Timer)
-                    SizedBox(
-                      width: 170,
-                      height: 170,
-                      child: AnimatedBuilder(
-                        animation: _timerController,
-                        builder: (context, child) {
-                          return CircularProgressIndicator(
-                            value: _timerController.value,
-                            strokeWidth: 6.0,
-                            backgroundColor: Colors.white24,
-                            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF3B82F6)),
-                          );
-                        },
+                    // Outer pulsing border
+                    ScaleTransition(
+                      scale: Tween<double>(begin: 0.95, end: 1.05).animate(
+                        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+                      ),
+                      child: FadeTransition(
+                        opacity: Tween<double>(begin: 0.4, end: 0.9).animate(
+                          CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+                        ),
+                        child: Container(
+                          width: 172,
+                          height: 172,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF3B82F6),
+                              width: 4.0,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                     // Circular Map View
@@ -218,25 +230,6 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
                                   size: 48,
                                 ),
                               ),
-                      ),
-                    ),
-                    // Seconds badge
-                    Positioned(
-                      bottom: 0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3B82F6),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          "${_secondsLeft}s",
-                          style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
                       ),
                     ),
                   ],
