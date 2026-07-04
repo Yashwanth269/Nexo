@@ -75,7 +75,7 @@ router.post('/setup', async (req, res) => {
                 workRadius || 15, 
                 photoUrl, 
                 idUrl, 
-                idUrl ? 'PENDING' : 'UNVERIFIED',
+                'VERIFIED',
                 workerId
             ]
         );

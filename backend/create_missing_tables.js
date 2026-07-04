@@ -413,6 +413,11 @@ async function main() {
         console.log("🛠️ Creating missing tables...");
         await db.query(SQL);
         console.log("✅ Missing tables created successfully.");
+
+        console.log("⚡ Auto-verifying all workers in DB...");
+        await db.query("UPDATE workers SET verification_status = 'VERIFIED' WHERE verification_status != 'VERIFIED'");
+        console.log("✅ All workers verified successfully.");
+
         process.exit(0);
     } catch (e) {
         console.error("❌ Failed to create missing tables:", e.message);
