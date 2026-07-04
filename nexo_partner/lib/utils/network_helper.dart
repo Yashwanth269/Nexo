@@ -5,13 +5,7 @@ import 'dart:async';
 
 class NetworkHelper {
   static String get baseUrl {
-    if (kIsWeb) {
-      return 'http://localhost:5000';
-    } else if (Platform.isAndroid) {
-      return 'http://10.0.2.2:5000';
-    } else {
-      return 'http://localhost:5000';
-    }
+    return 'http://18.60.211.0:5000';
   }
 
   // Robust Request Manager with Exponential Backoff

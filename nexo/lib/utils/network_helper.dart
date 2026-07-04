@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 class NetworkHelper {
-  static const String baseUrl = 'http://10.0.2.2:5000';
+  static const String baseUrl = 'http://18.60.211.0:5000';
   static final Connectivity _connectivity = Connectivity();
   static final StreamController<bool> _connectionStreamController = StreamController<bool>.broadcast();
   static bool _isOffline = false;
