@@ -174,6 +174,63 @@ CREATE TABLE IF NOT EXISTS job_dispute_risk (
     calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 14. Completed Job Posts (Social Feed)
+CREATE TABLE IF NOT EXISTS completed_job_posts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    category VARCHAR(100) NOT NULL,
+    title VARCHAR(255),
+    caption TEXT,
+    location_lat DECIMAL(10, 8),
+    location_lng DECIMAL(11, 8),
+    address TEXT,
+    image_urls JSONB DEFAULT '[]'::jsonb,
+    likes_count INTEGER DEFAULT 0,
+    comments_count INTEGER DEFAULT 0,
+    saves_count INTEGER DEFAULT 0,
+    views_count INTEGER DEFAULT 0,
+    is_flagged BOOLEAN DEFAULT FALSE,
+    fraud_risk_score DECIMAL(3, 2) DEFAULT 0.0,
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 15. Completed Post Likes
+CREATE TABLE IF NOT EXISTS completed_post_likes (
+    post_id UUID REFERENCES completed_job_posts(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (post_id, user_id)
+);
+
+-- 16. Completed Post Saves
+CREATE TABLE IF NOT EXISTS completed_post_saves (
+    post_id UUID REFERENCES completed_job_posts(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (post_id, user_id)
+);
+
+-- 17. Completed Post Views
+CREATE TABLE IF NOT EXISTS completed_post_views (
+    post_id UUID REFERENCES completed_job_posts(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (post_id, user_id)
+);
+
+-- 18. User-Worker Affinity
+CREATE TABLE IF NOT EXISTS user_worker_affinity (
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+    hire_count INTEGER DEFAULT 1,
+    last_hired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, worker_id)
+);
+
+
 `;
 
 async function main() {

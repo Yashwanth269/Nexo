@@ -450,6 +450,55 @@ const computeRegionTrends = async (userLat, userLng, userId, userHistory = {}) =
 
     const maxCatJobs24h = Math.max(...catsToScore.map(c => jobStats[c]?.count24h || 0), 1);
 
+    // Fetch all historical hourly averages in one single database query!
+    const historicalAverages = {};
+    try {
+        const histRes = await db.query(`
+            SELECT category, COUNT(*) AS count
+            FROM jobs
+            WHERE 
+                EXTRACT(HOUR FROM created_at AT TIME ZONE 'UTC') = $1::integer
+                AND created_at >= NOW() - INTERVAL '7 days'
+                AND location_cube IS NOT NULL
+                AND earth_distance(ll_to_earth($2::double precision, $3::double precision), location_cube) / 1000.0 <= $4::double precision
+            GROUP BY category
+        `, [hour, userLat, userLng, radius]);
+        for (const row of histRes.rows) {
+            historicalAverages[row.category] = parseInt(row.count || 0) / 7.0;
+        }
+    } catch (err) {
+        console.error('Error fetching historical averages batch:', err.message);
+    }
+
+    // Fetch all search intent scores in one Redis call!
+    const intentKey = `search_intent:${geoKey6}`;
+    let allIntents = {};
+    try {
+        allIntents = await redis.hgetall(intentKey) || {};
+    } catch (err) {
+        console.warn('[SEARCH_INTENT] Batch load failed:', err.message);
+    }
+
+    // Fetch all saturation cooldowns in one Redis call!
+    const cooldownKeys = catsToScore.map(cat => `cooldown:${cat}`);
+    const saturationMultipliers = {};
+    try {
+        const cooldownVals = await redis.mget(cooldownKeys);
+        catsToScore.forEach((cat, index) => {
+            const cached = cooldownVals[index];
+            if (!cached) {
+                saturationMultipliers[cat] = 1.0;
+            } else {
+                const entry = JSON.parse(cached);
+                const ageMs = Date.now() - entry.since;
+                saturationMultipliers[cat] = Math.max(0.65, 1.0 - (ageMs / (20 * 60_000)) * 0.35);
+            }
+        });
+    } catch (err) {
+        console.warn('[SATURATION] Batch load failed:', err.message);
+        catsToScore.forEach(cat => { saturationMultipliers[cat] = 1.0; });
+    }
+
     const results = [];
 
     for (const cat of catsToScore) {
@@ -479,9 +528,10 @@ const computeRegionTrends = async (userLat, userLng, userId, userHistory = {}) =
         const supplyPressure = stats.count1h / Math.max(activeWorkers, 1);
         const supplyPressureNorm = Math.min(supplyPressure / 10, 1);
 
-        const intentScore = await getSearchIntentScore(geoKey6, cat);
+        const intentCount = parseInt(allIntents[cat] || 0);
+        const intentScore = Math.min(intentCount / 20, 1.0);
 
-        const predictedHourlyAvg = await getHistoricalHourlyAvg(cat, hour, userLat, userLng, radius);
+        const predictedHourlyAvg = historicalAverages[cat] || 0.0;
         const predictiveUplift = predictedHourlyAvg > 0
             ? Math.min(stats.count1h / (predictedHourlyAvg + 0.1), 2) / 2
             : 0;
@@ -492,7 +542,7 @@ const computeRegionTrends = async (userLat, userLng, userId, userHistory = {}) =
 
         const confidence = computeConfidence(stats.count24h, activeWorkers);
         const segmentBoost = segBoosts[cat] || 1.0;
-        const saturationMult = await getSaturationMultiplier(cat);
+        const saturationMult = saturationMultipliers[cat] || 1.0;
 
         const rawScore = (
             WEIGHTS.bookingVelocity  * Math.min(bookingVelocity, 1) +
