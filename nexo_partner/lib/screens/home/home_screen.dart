@@ -409,9 +409,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           
           for (var job in pending) {
             // EXCLUDE: Don't show in "Available" if it's already in "Active"
-            bool isAlreadyActive = _activeGigs.any((j) => j['id'] == job['id']);
-            bool isDuplicate = _jobRequests.any((j) => j['id'] == job['id']);
-            bool isRejected = _rejectedJobIds.contains(job['id'].toString());
+            String currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? "";
+            bool isAlreadyActive = _activeGigs.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
+            bool isDuplicate = _jobRequests.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
+            bool isRejected = _rejectedJobIds.contains(currentJobId);
             
             if (!isAlreadyActive && !isDuplicate && !isRejected) {
               final newJob = {
@@ -465,9 +466,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         setState(() {
           for (var job in nearby) {
             // Filter out if already in active gigs or requests
-            bool isDuplicate = _jobRequests.any((j) => j['id'] == job['id']) || 
-                               _activeGigs.any((j) => j['id'] == job['id']);
-            bool isRejected = _rejectedJobIds.contains(job['id'].toString());
+            String currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? "";
+            bool isDuplicate = _jobRequests.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId) || 
+                               _activeGigs.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
+            bool isRejected = _rejectedJobIds.contains(currentJobId);
             
             if (!isDuplicate && !isRejected) {
               final newJob = {
@@ -576,9 +578,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!mounted) return;
     setState(() {
       // Logic same as fetch: ensure separation
-      bool isAlreadyActive = _activeGigs.any((j) => j['id'] == job['id']);
-      bool isDuplicate = _jobRequests.any((j) => j['id'] == job['id']);
-      bool isRejected = _rejectedJobIds.contains(job['id'].toString());
+      String currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? "";
+      bool isAlreadyActive = _activeGigs.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
+      bool isDuplicate = _jobRequests.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
+      bool isRejected = _rejectedJobIds.contains(currentJobId);
       
       if (!isAlreadyActive && !isDuplicate && !isRejected) {
         _jobRequests.insert(0, job);
@@ -609,10 +612,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     } else if (result != null && result['accepted'] == false) {
       // Job was declined
       setState(() {
-        if (job['id'] != null) {
-          _rejectedJobIds.add(job['id'].toString());
+        String currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? "";
+        if (currentJobId.isNotEmpty) {
+          _rejectedJobIds.add(currentJobId);
         }
-        _jobRequests.removeWhere((j) => j['id'] == job['id']);
+        _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
       });
     }
   }
