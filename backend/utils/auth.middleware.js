@@ -49,9 +49,16 @@ const authenticateToken = async (req, res, next) => {
         if (decoded.userId) {
             const userRes = await db.query("SELECT id, status FROM users WHERE id = $1", [decoded.userId]);
             if (userRes.rowCount === 0) {
-                return res.status(401).json({ success: false, error: 'USER_NOT_FOUND', message: 'User no longer exists.' });
-            }
-            if (userRes.rows[0].status === 'BANNED') {
+                if (process.env.NODE_ENV === 'development') {
+                    console.log(`🔧 [AUTH-DEV] User ${decoded.userId} not found. Auto-creating dummy user.`);
+                    await db.query(
+                        "INSERT INTO users (id, full_name, phone_number, status) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+                        [decoded.userId, "Dev User", "9999999999", "ACTIVE"]
+                    );
+                } else {
+                    return res.status(401).json({ success: false, error: 'USER_NOT_FOUND', message: 'User no longer exists.' });
+                }
+            } else if (userRes.rows[0].status === 'BANNED') {
                 return res.status(403).json({ success: false, error: 'ACCOUNT_BANNED', message: 'Your account has been suspended.' });
             }
         }
@@ -59,7 +66,15 @@ const authenticateToken = async (req, res, next) => {
         if (decoded.workerId) {
             const workerRes = await db.query("SELECT id FROM workers WHERE id = $1", [decoded.workerId]);
             if (workerRes.rowCount === 0) {
-                return res.status(401).json({ success: false, error: 'WORKER_NOT_FOUND', message: 'Worker no longer exists.' });
+                if (process.env.NODE_ENV === 'development') {
+                    console.log(`🔧 [AUTH-DEV] Worker ${decoded.workerId} not found. Auto-creating dummy worker.`);
+                    await db.query(
+                        "INSERT INTO workers (id, full_name, phone_number) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+                        [decoded.workerId, "Dev Worker", "8888888888"]
+                    );
+                } else {
+                    return res.status(401).json({ success: false, error: 'WORKER_NOT_FOUND', message: 'Worker no longer exists.' });
+                }
             }
         }
 

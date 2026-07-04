@@ -230,6 +230,15 @@ CREATE TABLE IF NOT EXISTS user_worker_affinity (
     PRIMARY KEY (user_id, worker_id)
 );
 
+-- 19. Ensure worker_features has correct columns for ranking
+ALTER TABLE worker_features ADD COLUMN IF NOT EXISTS last_job_event_at TIMESTAMP;
+ALTER TABLE worker_features ADD COLUMN IF NOT EXISTS last_event_at TIMESTAMP;
+ALTER TABLE worker_features ADD COLUMN IF NOT EXISTS category_scores JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE worker_features ADD COLUMN IF NOT EXISTS fatigue_24h DECIMAL DEFAULT 0.0;
+ALTER TABLE worker_features ADD COLUMN IF NOT EXISTS fatigue_7d DECIMAL DEFAULT 0.0;
+ALTER TABLE worker_features ADD COLUMN IF NOT EXISTS fatigue_30d DECIMAL DEFAULT 0.0;
+
+
 
 `;
 
