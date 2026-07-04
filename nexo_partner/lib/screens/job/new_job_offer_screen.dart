@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:dotted_line/dotted_line.dart';
 import 'dart:async';
+import 'package:audioplayers/audioplayers.dart';
 import '../../utils/image_utils.dart';
 import '../../utils/network_helper.dart';
 import '../../components/glass_components.dart';
@@ -32,6 +33,7 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
   bool _isNegotiating = false;
   AnimationController? _pulseController;
   Animation<double>? _pulseAnimation;
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
   void initState() {
@@ -61,6 +63,17 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
     }
 
     _startTimer();
+    _playRingtone();
+  }
+
+  Future<void> _playRingtone() async {
+    try {
+      await _audioPlayer.setReleaseMode(ReleaseMode.loop);
+      await _audioPlayer.play(AssetSource('sounds/New gigs/zomato_sms.mp3'));
+      debugPrint("🎵 [RINGTONE] Started playing zomato_sms.mp3 in loop");
+    } catch (e) {
+      debugPrint("⚠️ [RINGTONE] Error playing audio: $e");
+    }
   }
 
   void _startTimer() {
@@ -79,6 +92,8 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
 
   @override
   void dispose() {
+    _audioPlayer.stop();
+    _audioPlayer.dispose();
     _timer?.cancel();
     _pulseController?.dispose();
     _priceController.dispose();
@@ -93,17 +108,16 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
     final primaryColor = const Color(0xFFFF6A00);
     final isUrgent = job['isUrgent'] == true || job['status'] == 'REDISTRIBUTING' || job['status'] == 'REASSIGNING';
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: isDark ? Colors.white : Colors.black87, size: 20),
-          onPressed: () => Navigator.maybePop(context),
-        ),
-        title: Text(
-          "New Opportunity",
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          automaticallyImplyLeading: false, // Disables automatic back button
+          title: Text(
+            "New Opportunity",
           style: GoogleFonts.outfit(
             fontWeight: FontWeight.w900,
             color: isDark ? Colors.white : Colors.black87,
@@ -538,13 +552,13 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                     ],
                   ),
                 ),
-              ),
             ],
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildBadge(String text, Color bgColor, Color textColor) {
     return Container(

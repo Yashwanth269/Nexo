@@ -166,6 +166,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       await Permission.notification.request();
     }
 
+    // Request other critical permissions to align with Zomato delivery requirements
+    if (await Permission.activityRecognition.isDenied) {
+      await Permission.activityRecognition.request();
+    }
+    if (await Permission.camera.isDenied) {
+      await Permission.camera.request();
+    }
+    if (await Permission.microphone.isDenied) {
+      await Permission.microphone.request();
+    }
+    if (await Permission.phone.isDenied) {
+      await Permission.phone.request();
+    }
+    if (await Permission.systemAlertWindow.isDenied) {
+      await Permission.systemAlertWindow.request();
+    }
+
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
