@@ -367,23 +367,29 @@ io.on('connection', (socket) => {
         
         if (socket.role === 'WORKER' && socket.phoneNumber) {
             try {
-                await db.query("UPDATE workers SET is_online = false WHERE phone_number = $1", [socket.phoneNumber]);
-                const { invalidateAllHomeServicesCaches } = require('./routes/home.routes');
-                await invalidateAllHomeServicesCaches().catch(() => {});
-                
-                // IMMEDIATE Redis GEO cleanup (don't wait for 2-minute timer)
-                if (socket.workerId) {
-                    const redis = require('./config/redis');
-                    const geohash = await redis.get(`worker:${socket.workerId}:geohash`);
-                    if (geohash) {
-                        await redis.zrem(`workers:geo:${geohash}`, socket.workerId);
+                // Check if there are other active socket connections for this worker's phone
+                const activeSockets = io.sockets.adapter.rooms.get(`worker:${socket.phoneNumber}`);
+                if (!activeSockets || activeSockets.size === 0) {
+                    await db.query("UPDATE workers SET is_online = false WHERE phone_number = $1", [socket.phoneNumber]);
+                    const { invalidateAllHomeServicesCaches } = require('./routes/home.routes');
+                    await invalidateAllHomeServicesCaches().catch(() => {});
+                    
+                    // IMMEDIATE Redis GEO cleanup (don't wait for 2-minute timer)
+                    if (socket.workerId) {
+                        const redis = require('./config/redis');
+                        const geohash = await redis.get(`worker:${socket.workerId}:geohash`);
+                        if (geohash) {
+                            await redis.zrem(`workers:geo:${geohash}`, socket.workerId);
+                        }
+                        await redis.del(`worker:${socket.workerId}:geohash`);
+                        await redis.del(`worker:${socket.workerId}:last_seen`);
+                        await redis.srem('workers:active_set', socket.workerId);
                     }
-                    await redis.del(`worker:${socket.workerId}:geohash`);
-                    await redis.del(`worker:${socket.workerId}:last_seen`);
-                    await redis.srem('workers:active_set', socket.workerId);
+                    
+                    console.log(`👷 [WORKER] ${socket.phoneNumber} marked offline & removed from GEO index.`);
+                } else {
+                    console.log(`👷 [WORKER] ${socket.phoneNumber} socket disconnected, but remains online via ${activeSockets.size} other active socket(s).`);
                 }
-                
-                console.log(`👷 [WORKER] ${socket.phoneNumber} marked offline & removed from GEO index.`);
             } catch (e) {
                 console.error("⚠️ [DB-SYNC] Failed to set worker offline:", e.message);
             }

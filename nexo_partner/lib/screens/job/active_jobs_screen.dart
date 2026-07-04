@@ -682,12 +682,13 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
                       : (isCancelled ? const Color(0xFFFEE2E2) : const Color(0xFFEFF6FF)),
                   shape: BoxShape.circle,
                 ),
-                child: Image.asset(
-                  ImageUtils.getCategoryAsset(job['category']),
+                child: ImageUtils.buildServiceImage(
+                  null,
+                  taskName: job['category'],
                   width: 28,
                   height: 28,
                   fit: BoxFit.cover,
-                  errorBuilder: (c, e, s) => Icon(Icons.handyman, color: statusTextCol, size: 24),
+                  fallback: Icon(Icons.handyman, color: statusTextCol, size: 24),
                 ),
               ),
               const SizedBox(width: 14),

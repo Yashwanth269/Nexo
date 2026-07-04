@@ -1000,12 +1000,13 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(14),
-                            child: Image.asset(
+                            child: ImageUtils.buildServiceImage(
                               image, 
+                              taskName: job['category'],
                               width: 58, 
                               height: 58, 
                               fit: BoxFit.cover, 
-                              errorBuilder: (c, e, s) => Container(width: 58, height: 58, color: Colors.white10, child: const Icon(Icons.construction, color: Colors.orange)),
+                              fallback: Container(width: 58, height: 58, color: Colors.white10, child: const Icon(Icons.construction, color: Colors.orange)),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -1175,12 +1176,13 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(14),
-                            child: Image.asset(
+                            child: ImageUtils.buildServiceImage(
                               image, 
+                              taskName: job['category'],
                               width: 60, 
                               height: 60, 
                               fit: BoxFit.cover,
-                              errorBuilder: (c, e, s) => Container(width: 60, height: 60, color: Colors.white10),
+                              fallback: Container(width: 60, height: 60, color: Colors.white10),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -1364,12 +1366,13 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(14),
-                            child: Image.asset(
+                            child: ImageUtils.buildServiceImage(
                               image, 
+                              taskName: job['category'],
                               width: 58, 
                               height: 58, 
                               fit: BoxFit.cover,
-                              errorBuilder: (c, e, s) => Container(width: 58, height: 58, color: Colors.white10),
+                              fallback: Container(width: 58, height: 58, color: Colors.white10),
                             ),
                           ),
                           const SizedBox(width: 14),

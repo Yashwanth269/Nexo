@@ -1808,12 +1808,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 color: const Color(0xFFEFF6FF),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Image.asset(
-                ImageUtils.getCategoryAsset(job['category']),
+              child: ImageUtils.buildServiceImage(
+                null,
+                taskName: job['category'],
                 width: 28,
                 height: 28,
                 fit: BoxFit.cover,
-                errorBuilder: (c, e, s) => const Icon(Icons.handyman, color: Color(0xFF2563EB), size: 24),
+                fallback: const Icon(Icons.handyman, color: Color(0xFF2563EB), size: 24),
               ),
             ),
             const SizedBox(width: 14),
