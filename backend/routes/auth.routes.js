@@ -44,13 +44,13 @@ router.post('/verify-otp', async (req, res) => {
         if (result.rowCount > 0) {
             userId = result.rows[0].id;
         } else {
-            // Create new user in DB
-            isNewUser = true;
-            const insertResult = await db.query(
-                "INSERT INTO users (phone_number) VALUES ($1) RETURNING id",
-                [phoneNumber]
-            );
-            userId = insertResult.rows[0].id;
+             // Create new user in DB
+             isNewUser = true;
+             const insertResult = await db.query(
+                 "INSERT INTO users (phone_number, full_name) VALUES ($1, $2) RETURNING id",
+                 [phoneNumber, `User ${phoneNumber.slice(-4)}`]
+             );
+             userId = insertResult.rows[0].id;
             console.log(`🆕 [AUTH] Created new user: ${userId} for ${phoneNumber}`);
         }
 
