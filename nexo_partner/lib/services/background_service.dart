@@ -58,6 +58,15 @@ class BackgroundTracker {
     service.invoke("setJobId", {"jobId": jobId});
   }
 
+  static Future<void> startOnlineService() async {
+    final service = FlutterBackgroundService();
+    final isRunning = await service.isRunning();
+    if (!isRunning) {
+      await service.startService();
+    }
+    service.invoke("setJobId", {"jobId": null});
+  }
+
   static Future<void> stopTracking() async {
     final service = FlutterBackgroundService();
     service.invoke("stopService");
@@ -90,8 +99,8 @@ void onStart(ServiceInstance service) async {
 
   String? currentJobId;
   service.on('setJobId').listen((event) {
-    if (event != null && event['jobId'] != null) {
-      currentJobId = event['jobId'].toString();
+    if (event != null) {
+      currentJobId = event['jobId']?.toString();
     }
   });
 
@@ -105,34 +114,64 @@ void onStart(ServiceInstance service) async {
 
   positionStream = Geolocator.getPositionStream(locationSettings: locationSettings).listen(
     (Position position) async {
-      if (currentJobId == null) return;
-      
-      if (service is AndroidServiceInstance) {
-        service.setForegroundNotificationInfo(
-          title: "On The Way",
-          content: "Location updating... (${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)})",
-        );
-      }
-      
-      // Sync with backend via HTTP (since sockets might drop in pure background execution)
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final token = prefs.getString('workerToken');
+      final prefs = await SharedPreferences.getInstance();
+      final isOnline = prefs.getBool('isOnline') ?? false;
+      final workerPhone = prefs.getString('workerPhone') ?? prefs.getString('worker_phone');
+      final token = prefs.getString('worker_token') ?? prefs.getString('workerToken');
+
+      if (currentJobId != null) {
+        if (service is AndroidServiceInstance) {
+          service.setForegroundNotificationInfo(
+            title: "On The Way",
+            content: "Location updating... (${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)})",
+          );
+        }
         
-        await http.post(
-          Uri.parse('${NetworkHelper.baseUrl}/api/jobs/location/sync'),
-          headers: {
-            'Content-Type': 'application/json',
-            if (token != null) 'Authorization': 'Bearer $token',
-          },
-          body: jsonEncode({
-            'jobId': currentJobId, 
-            'lat': position.latitude, 
-            'lng': position.longitude
-          }),
-        );
-      } catch (e) {
-        debugPrint("Background Sync Failed: $e");
+        // Sync with backend via HTTP (since sockets might drop in pure background execution)
+        try {
+          await http.post(
+            Uri.parse('${NetworkHelper.baseUrl}/api/jobs/location/sync'),
+            headers: {
+              'Content-Type': 'application/json',
+              if (token != null) 'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({
+              'jobId': currentJobId, 
+              'lat': position.latitude, 
+              'lng': position.longitude
+            }),
+          );
+        } catch (e) {
+          debugPrint("Background Sync Failed: $e");
+        }
+      } else if (isOnline && workerPhone != null) {
+        if (service is AndroidServiceInstance) {
+          service.setForegroundNotificationInfo(
+            title: "Available & Online",
+            content: "Waiting for nearby jobs... (${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)})",
+          );
+        }
+        
+        // Sync worker location
+        try {
+          await http.post(
+            Uri.parse('${NetworkHelper.baseUrl}/api/workers/location'),
+            headers: {
+              'Content-Type': 'application/json',
+              if (token != null) 'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({
+              'workerId': workerPhone, 
+              'lat': position.latitude, 
+              'lng': position.longitude
+            }),
+          );
+        } catch (e) {
+          debugPrint("Background Online Location Sync Failed: $e");
+        }
+      } else {
+        // If not online and no job, we can stop the service to save battery
+        service.stopSelf();
       }
     }
   );

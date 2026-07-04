@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import '../utils/network_helper.dart';
+import 'notification_service.dart';
 
 class SocketService {
   static final SocketService _instance = SocketService._internal();
@@ -56,6 +57,20 @@ class SocketService {
       if (data is Map && data['offerId'] != null) {
         socket!.emit('new_job_request_ack', {'offerId': data['offerId']});
       }
+      
+      // Trigger background / local notifications
+      try {
+        final title = (data is Map) ? (data['category'] ?? "New Job Request") : "New Job Request";
+        final price = (data is Map) ? (data['price'] ?? data['earnings'] ?? "0") : "0";
+        final distance = (data is Map) ? (data['distance'] ?? "Nearby") : "Nearby";
+        LocalNotificationService.showNewJobNotification(
+          "New Gig Request: $title",
+          "Earnings: ₹$price | Distance: $distance. Tap to open!",
+        );
+      } catch (e) {
+        debugPrint("⚠️ [SOCKET] Failed to show local notification: $e");
+      }
+
       onJobRequest(data);
     });
 

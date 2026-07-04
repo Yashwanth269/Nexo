@@ -122,11 +122,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
+    final savedOnline = prefs.getBool('isOnline') ?? false;
     setState(() {
       _workerName = prefs.getString('workerName') ?? "Expert";
       _phoneNumber = prefs.getString('workerPhone') ?? prefs.getString('worker_phone') ?? "Worker";
       _profilePhoto = prefs.getString('workerPhoto');
       _token = prefs.getString('worker_token');
+      _isOnline = savedOnline;
     });
 
     // Migration: If we found legacy key but not new key, save it
@@ -144,6 +146,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _fetchNearbyJobs();
       _fetchEarningsSummary();
       _preloadData();
+
+      if (savedOnline) {
+        _toggleOnline(true);
+      }
     }
   }
 
@@ -152,6 +158,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!serviceEnabled) {
       setState(() => _currentArea = "GPS Disabled");
       return;
+    }
+
+    // Request notification permission for Android 13+
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
     }
 
     LocationPermission permission = await Geolocator.checkPermission();
@@ -166,6 +177,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (permission == LocationPermission.deniedForever) {
       setState(() => _currentArea = "Location Blocked");
       return;
+    }
+
+    // Prompt user to enable "Allow all the time" for continuous background updates
+    if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+      final bgStatus = await Permission.locationAlways.status;
+      if (bgStatus.isDenied) {
+        await Permission.locationAlways.request();
+      }
     }
 
     // Start continuous updates immediately
@@ -431,7 +450,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   double _searchRadius = 10.0;
   bool _isPaused = false;
 
-  void _toggleOnline(bool value) {
+  void _toggleOnline(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isOnline', value);
+
+    if (!mounted) return;
     setState(() {
       _isOnline = value;
       _isSearching = value;
@@ -442,6 +465,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _fetchNearbyJobs();
       
       _socketService.connect((job) => _onNewJobSocket(job));
+      BackgroundTracker.startOnlineService();
       
       // LISTEN: Active Job Updates (Status changes from backend/other devices)
       _socketService.socket?.on('active_job_updated', (data) {
@@ -503,6 +527,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       });
     } else {
       _socketService.disconnect();
+      BackgroundTracker.stopTracking();
       setState(() => _jobRequests.clear());
     }
   }

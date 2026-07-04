@@ -7,10 +7,12 @@ import 'screens/profile/profile_setup_screen.dart';
 
 import 'package:nexo_partner/services/cache_service.dart';
 import 'package:nexo_partner/services/background_service.dart';
+import 'package:nexo_partner/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await BackgroundTracker.initializeService();
+  await LocalNotificationService.initialize();
   await CacheService.init();
   final prefs = await SharedPreferences.getInstance();
   final String? token = prefs.getString('worker_token');

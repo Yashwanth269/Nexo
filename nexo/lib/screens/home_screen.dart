@@ -869,12 +869,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
           setState(() {
             _activeJobs = data['jobs'] ?? [];
             _ongoingJob = data['job'];
+            if (_currentCarouselPage >= _activeJobs.length) {
+              _currentCarouselPage = 0;
+            }
           });
+          if (_activeJobs.isNotEmpty && _activeJobsController.hasClients) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_activeJobsController.hasClients) {
+                _activeJobsController.jumpToPage(_currentCarouselPage);
+              }
+            });
+          }
           _startCarouselTimer(); 
         } else {
           setState(() {
             _activeJobs = [];
             _ongoingJob = null;
+            _currentCarouselPage = 0;
           });
         }
       }
@@ -1887,7 +1898,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
   /// Wraps carousel in either full-view or floating bubble, with randomised animations
   Widget _buildActiveGigWidget() {
     final screenSize = MediaQuery.of(context).size;
-    const cardHeight = 172.0;      // slightly shorter popup
+    const cardHeight = 190.0;      // adjusted to prevent vertical overflow
     const cardHMargin = 16.0;
     const bubbleSize = 52.0;
 
@@ -2007,10 +2018,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                             controller: _activeJobsController,
                             itemCount: _activeJobs.length,
                             onPageChanged: (i) => setState(() => _currentCarouselPage = i),
-                            itemBuilder: (ctx, i) => Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              child: _buildActiveJobCard(_activeJobs[i]),
-                            ),
+                            itemBuilder: (ctx, i) {
+                              if (i >= _activeJobs.length) return const SizedBox();
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                child: _buildActiveJobCard(_activeJobs[i]),
+                              );
+                            },
                           ),
                         ),
                         // Dots
@@ -2160,7 +2174,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
           children: [
             // ── Top section ──────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2247,7 +2261,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
 
             // ── Bottom action bar ─────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+              padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
               child: Row(
                 children: [
                   // Spinner icon
