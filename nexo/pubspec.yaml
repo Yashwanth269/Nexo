@@ -85,41 +85,6 @@ flutter:
   assets:
     - assets/images/logo/
     - assets/images/
-    - assets/images/Agriculture/
-    - assets/images/Agriculture/Animal and farm support/
-    - assets/images/Agriculture/Equipment Rental/
-    - assets/images/Agriculture/Field Work and Labour/
-    - assets/images/Agriculture/Irrigation and water/
-    - assets/images/construction/
-    - assets/images/construction/core work/
-    - assets/images/construction/finishing work/
-    - assets/images/construction/helper/
-    - assets/images/construction/specialised/
-    - assets/images/delivery/
-    - assets/images/delivery/errands/
-    - assets/images/events/
-    - assets/images/events/event staff/
-    - assets/images/home services/
-    - assets/images/home services/appliance repair/
-    - assets/images/home services/cleaning/
-    - assets/images/home services/electrical/
-    - assets/images/home services/plumbing/
-    - assets/images/household/
-    - assets/images/household/care and help/
-    - assets/images/mechanic/
-    - assets/images/mechanic/general repair/
-    - assets/images/mechanic/vehicle repair/
-    - assets/images/shops/
-    - assets/images/shops/business help/
-    - assets/images/skilled/
-    - assets/images/skilled/trades/
-    - assets/images/smart tech/
-    - assets/images/smart tech/installation/
-    - assets/images/transport/
-    - assets/images/transport/drivers/
-    - assets/images/transport/moving/
-    - assets/images/transport/support/
-    - assets/images/transport/vehicles/
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

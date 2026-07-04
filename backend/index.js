@@ -85,6 +85,15 @@ app.use('/uploads', express.static(uploadsDir, {
     }
 }));
 
+// Serve public folder statically (for web checkout pages and static category assets)
+const publicDir = path.join(__dirname, 'public');
+if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
+app.use('/public', express.static(publicDir, {
+    setHeaders: (res) => {
+        res.set('X-Content-Type-Options', 'nosniff');
+    }
+}));
+
 const upload = multer({ 
     storage: multer.diskStorage({
         destination: (req, file, cb) => cb(null, uploadsDir),

@@ -78,16 +78,36 @@ class ImageUtils {
     // If resolvedPath starts with assets/ (or contains assets/images/ directly), treat it as a local asset
     if (resolvedPath.startsWith('assets/') || resolvedPath.contains('assets/images/')) {
       final localPath = resolvedPath.startsWith('assets/') ? resolvedPath : 'assets/images/${resolvedPath.split('assets/images/')[1]}';
-      return Image.asset(
-        localPath,
-        width: width,
-        height: height,
-        fit: fit,
-        errorBuilder: (context, error, stackTrace) {
-          print('❌ [ASSET_LOAD_ERROR] Failed to load local asset: $localPath');
-          return fallback ?? Icon(Icons.broken_image, size: width ?? 24, color: Colors.grey);
-        },
-      );
+      
+      if (localPath.contains('logo/') || 
+          localPath.contains('placeholder') || 
+          localPath.contains('worker_auth') || 
+          localPath.contains('refer_banner')) {
+        return Image.asset(
+          localPath,
+          width: width,
+          height: height,
+          fit: fit,
+          errorBuilder: (context, error, stackTrace) {
+            print('❌ [ASSET_LOAD_ERROR] Failed to load local asset: $localPath');
+            return fallback ?? Icon(Icons.broken_image, size: width ?? 24, color: Colors.grey);
+          },
+        );
+      } else {
+        // Load category image from network backend
+        String finalUrl = '${NetworkHelper.baseUrl}/public/$localPath';
+        finalUrl = Uri.encodeFull(finalUrl);
+        return Image.network(
+          finalUrl,
+          width: width,
+          height: height,
+          fit: fit,
+          errorBuilder: (context, error, stackTrace) {
+            print('❌ [ASSET_LOAD_ERROR] Failed to load from backend: $finalUrl');
+            return fallback ?? Icon(Icons.broken_image, size: width ?? 24, color: Colors.grey);
+          },
+        );
+      }
     }
 
     String finalUrl = resolvedPath;
