@@ -440,6 +440,21 @@ class JobService {
 
         userTrustService.recordEvent(userId, 'JOB_POSTED').catch(() => {});
 
+        // Notify the user's home screen in real-time so the active card appears immediately
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            if (io) {
+                io.to(`user:${userId}`).emit('job_posted', {
+                    jobId: job.id,
+                    category,
+                    status: 'OPEN',
+                    job
+                });
+            }
+        } catch (socketErr) {
+            console.log('[JOB_SERVICE] Socket notify skipped:', socketErr.message);
+        }
         
         return job;
     }

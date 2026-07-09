@@ -44,6 +44,10 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
   bool _isLoading = true;
   String? _userPhoto;
 
+  // Cached credentials — loaded once in initState to avoid repeated SharedPrefs disk reads
+  String? _cachedUserId;
+  String? _cachedToken;
+
   String _formatDateTime(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return "";
     try {
@@ -74,13 +78,23 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
         setState(() {});
       }
     });
-    _fetchJobs();
-    _loadProfile();
+    _initAll();
+  }
+
+  /// Load credentials once, then kick off all parallel async work
+  Future<void> _initAll() async {
+    _cachedUserId = await SharedPrefsHelper.getUserId();
+    _cachedToken = await SharedPrefsHelper.getToken();
+    // Run fetch + profile + socket in parallel now that credentials are cached
+    await Future.wait([
+      _fetchJobs(),
+      _loadProfile(),
+    ]);
     _initSocket();
   }
 
-  void _initSocket() async {
-    final userId = await SharedPrefsHelper.getUserId();
+  void _initSocket() {
+    final userId = _cachedUserId;
     if (userId != null) {
       final socketService = SocketService();
       socketService.connect(userId);
@@ -101,14 +115,13 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
   }
 
   Future<void> _loadProfile() async {
-    final userId = await SharedPrefsHelper.getUserId();
+    final userId = _cachedUserId;
     if (userId == null) return;
     try {
-      final token = await SharedPrefsHelper.getToken();
       final response = await http.get(
         Uri.parse('${NetworkHelper.baseUrl}/api/user/profile/$userId'),
         headers: {
-          if (token != null) 'Authorization': 'Bearer $token',
+          if (_cachedToken != null) 'Authorization': 'Bearer $_cachedToken',
         },
       );
       if (response.statusCode == 200) {
@@ -126,12 +139,14 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
 
   Future<void> _fetchJobs() async {
     try {
-      final userId = await SharedPrefsHelper.getUserId();
+      // Use cached credentials; fallback to SharedPrefs if cache is empty (e.g. first pull-to-refresh)
+      final userId = _cachedUserId ?? await SharedPrefsHelper.getUserId();
+      final token = _cachedToken ?? await SharedPrefsHelper.getToken();
+
       if (userId == null) {
         if (mounted) setState(() => _isLoading = false);
         return;
       }
-      final token = await SharedPrefsHelper.getToken();
       final response = await http.get(
         Uri.parse('${NetworkHelper.baseUrl}/api/jobs/history/$userId'),
         headers: {
@@ -969,33 +984,16 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
       child: GlassContainer(
         blur: 20,
         padding: EdgeInsets.zero, // Remove padding from GlassContainer for left accent bar
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Beautiful left accent status bar
-              Container(
-                width: 5,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: isCancelled 
-                        ? [const Color(0xFFEF4444), const Color(0xFFB91C1C)] 
-                        : [const Color(0xFF3B82F6), const Color(0xFF1D4ED8)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    bottomLeft: Radius.circular(20),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+        child: Stack(
+          children: [
+            // Content area with left padding to make room for accent bar
+            Padding(
+              padding: const EdgeInsets.only(left: 5),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                       Row(
                         children: [
                           ClipRRect(
@@ -1111,8 +1109,30 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+            // Beautiful left accent status bar — overlaid on the left edge
+            Positioned(
+              top: 0,
+              bottom: 0,
+              left: 0,
+              child: Container(
+                width: 5,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: isCancelled 
+                        ? [const Color(0xFFEF4444), const Color(0xFFB91C1C)] 
+                        : [const Color(0xFF3B82F6), const Color(0xFF1D4ED8)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    bottomLeft: Radius.circular(20),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1147,31 +1167,16 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
       child: GlassContainer(
         blur: 20,
         padding: EdgeInsets.zero, // Remove padding from GlassContainer
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Beautiful left accent status bar
-              Container(
-                width: 5,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    bottomLeft: Radius.circular(20),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+        child: Stack(
+          children: [
+            // Content area with left padding to make room for accent bar
+            Padding(
+              padding: const EdgeInsets.only(left: 5),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                       Row(
                         children: [
                           ClipRRect(
@@ -1316,8 +1321,28 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+            // Beautiful left accent status bar — overlaid on the left edge
+            Positioned(
+              top: 0,
+              bottom: 0,
+              left: 0,
+              child: Container(
+                width: 5,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    bottomLeft: Radius.circular(20),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1337,31 +1362,16 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
       child: GlassContainer(
         blur: 20,
         padding: EdgeInsets.zero, // Remove padding from GlassContainer
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Beautiful left accent status bar
-              Container(
-                width: 5,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF10B981), Color(0xFF059669)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    bottomLeft: Radius.circular(20),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+        child: Stack(
+          children: [
+            // Content area with left padding to make room for accent bar
+            Padding(
+              padding: const EdgeInsets.only(left: 5),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                       Row(
                         children: [
                           ClipRRect(

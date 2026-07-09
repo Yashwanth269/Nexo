@@ -310,6 +310,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
       final socketService = SocketService();
       socketService.connect(userId);
 
+      // Lightweight callback: only refresh the ongoing-job card (fast, no GPS wait)
+      final jobCardCallback = (data) {
+        if (mounted) {
+          debugPrint("⚡ [SOCKET] Job event received! Refreshing active job card...");
+          _fetchOngoingJob();
+        }
+      };
+
+      // Full refresh callback for status-critical events
       final refreshCallback = (data) {
         if (mounted) {
           debugPrint("⚡ [SOCKET] Live Event received! Auto-refreshing all home screen lists...");
@@ -327,8 +336,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
           _refreshAllData();
         }
       });
-      socketService.socket?.on('JOB_ACCEPTED', refreshCallback);
-      socketService.socket?.on('job_accepted', refreshCallback);
+      // New job posted — show active card immediately without GPS round-trip
+      socketService.socket?.on('job_posted', jobCardCallback);
+      socketService.socket?.on('JOB_ACCEPTED', jobCardCallback);
+      socketService.socket?.on('job_accepted', jobCardCallback);
       socketService.socket?.on('job_cancelled_by_user', refreshCallback);
       socketService.socket?.on('WORKER_CANCELLED_JOB', refreshCallback);
     }
