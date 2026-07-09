@@ -79,7 +79,7 @@ class LocationService {
     try {
       Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.balanced, // More reliable than high indoors
+          accuracy: LocationAccuracy.medium, // More reliable than high indoors
           timeLimit: Duration(seconds: 8),
         ),
       );
@@ -113,7 +113,7 @@ class LocationService {
   static Stream<Map<String, dynamic>> getLocationStream() {
     return Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.balanced,
+        accuracy: LocationAccuracy.medium,
         distanceFilter: 100,
       ),
     ).asyncMap((position) async {
