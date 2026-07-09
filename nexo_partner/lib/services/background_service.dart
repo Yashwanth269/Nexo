@@ -193,8 +193,27 @@ void onStart(ServiceInstance service) async {
       'auth': {'token': token}
     });
 
-    socket.onConnect((_) {
-      socket.emit('worker_online', {'phoneNumber': workerPhone});
+    socket.onConnect((_) async {
+      Position? position;
+      try {
+        position = await Geolocator.getLastKnownPosition();
+        position ??= await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.low,
+            timeLimit: Duration(seconds: 3),
+          ),
+        );
+      } catch (e) {
+        debugPrint("Background socket startup location fetch failed: $e");
+      }
+
+      socket.emit('worker_online', {
+        'phoneNumber': workerPhone,
+        if (position != null) 'location': {
+          'lat': position.latitude,
+          'lng': position.longitude,
+        }
+      });
     });
 
     socket.on('new_job_request', (data) async {
