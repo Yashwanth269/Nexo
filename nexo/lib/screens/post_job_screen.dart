@@ -650,6 +650,7 @@ class _PostJobScreenState extends State<PostJobScreen> {
                   size: 18,
                 ),
               ],
+            ),
           ),
         ),
         const SizedBox(height: 20),
