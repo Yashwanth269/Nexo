@@ -13,6 +13,7 @@ import 'package:nexo/utils/network_helper.dart';
 import 'package:nexo/screens/searching_workers_screen.dart';
 import 'package:nexo/screens/map_location_picker_screen.dart';
 import 'package:nexo/components/glass_components.dart';
+import 'package:nexo/screens/auth_screen.dart';
 
 class PostJobScreen extends StatefulWidget {
   final String? initialTask;
@@ -217,7 +218,21 @@ class _PostJobScreenState extends State<PostJobScreen> {
         }
       } else {
         final errorData = json.decode(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed: ${errorData['error'] ?? 'Unknown error'}")));
+        final errorMsg = errorData['error'] ?? 'Unknown error';
+        if (errorMsg == 'TOKEN_EXPIRED') {
+          await SharedPrefsHelper.clearUserData();
+          if (mounted) {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const AuthScreen()),
+              (route) => false,
+            );
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Session expired. Please log in again.")),
+            );
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed: $errorMsg")));
+        }
       }
     } catch (e) {
       Navigator.pop(context);
