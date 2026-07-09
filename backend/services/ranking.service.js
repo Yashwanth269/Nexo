@@ -332,7 +332,7 @@ class RankingService {
                 return response.scores[0].score;
             }
         } catch (e) {
-            console.warn('[ML-FALLBACK] ML service unavailable, using lightweight fallback');
+            console.log('ℹ️ [ML-FALLBACK] ML service offline, using lightweight fallback.');
         }
 
         return this.lightweightFallbackScore(features);
@@ -414,7 +414,7 @@ class RankingService {
                 return this.applyAcceptanceThreshold(response.acceptance_probability, worker);
             }
         } catch (e) {
-            console.warn('[ACCEPTANCE-FALLBACK] ML service unavailable, using heuristic');
+            console.log('ℹ️ [ML-FALLBACK] ML service offline, using heuristic.');
         }
 
         const pAccept = this.heuristicAcceptance(features);

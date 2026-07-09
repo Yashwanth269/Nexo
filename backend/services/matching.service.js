@@ -143,6 +143,13 @@ class MatchingService {
             for (const job of nearbyJobs) {
                 if (!isSkillMatch(worker.skills, worker.tasks, job.category)) continue;
 
+                // Never dispatch a gig to multiple workers at the same time: skip if another worker has a pending offer
+                const activeOfferCheck = await db.query(
+                    "SELECT id FROM job_offers WHERE job_id = $1 AND status = 'PENDING' AND expires_at > NOW()",
+                    [job.id]
+                );
+                if (activeOfferCheck.rowCount > 0) continue;
+
                 const exclusionCheck = await db.query(
                     `SELECT id FROM job_offers
                      WHERE job_id = $1 AND worker_id = $2
@@ -172,7 +179,7 @@ class MatchingService {
             const offerTtl = customTtl || (isRedispatched ? 90 : 120);
 
             const lockAcquired = await redis.set(dedupKey, '1', 'NX', 'EX', offerTtl);
-            if (!lockAcquired) return;
+            if (!lockAcquired) return null;
 
             const expiresAt = new Date(Date.now() + offerTtl * 1000);
             const formattedDistance = distance < 1
@@ -203,9 +210,12 @@ class MatchingService {
                     workerService.updateFatigueScore(worker.id, 'JOB_TIMEOUT');
                 }
             });
+
+            return offerId;
         } catch (error) {
             console.error("[OFFER-CREATE] Failed:", error.message);
             await redis.del(`offer_lock:${job.id}:${worker.id}`).catch(() => {});
+            return null;
         }
     }
 
@@ -308,54 +318,53 @@ class MatchingService {
                 }
             }
 
-            // Step 8: Reserve Backup Workers
-            const backups = candidates.slice(Math.max(0, candidates.length - 2));
-            await redis.set(`job:${jobId}:backups`, JSON.stringify(backups.map(b => b.id)), 'EX', 600);
-
-            const activeCandidates = candidates.filter(c => !backups.some(b => b.id === c.id));
-            if (activeCandidates.length === 0 && backups.length > 0) {
-                activeCandidates.push(backups.pop());
-            }
-
-            // Step 6: Group Workers into Tiers
-            const tierA = activeCandidates.filter(c => c.score >= 0.85);
-            const tierB = activeCandidates.filter(c => c.score >= 0.75 && c.score < 0.85);
-            const tierC = activeCandidates.filter(c => c.score >= 0.65 && c.score < 0.75);
-            const tierD = activeCandidates.filter(c => c.score >= 0.55 && c.score < 0.65);
-
-            // Step 7: Staged Notification Loop
+            // Exclusive One-by-One Dispatch Loop
             let hasAccepted = false;
+            for (const candidate of candidates) {
+                // Re-verify job status is still valid before sending
+                const checkRes = await db.query("SELECT status FROM jobs WHERE id = $1", [jobId]);
+                if (checkRes.rowCount === 0 || !['OPEN', 'REDISTRIBUTING', 'REASSIGNING'].includes(checkRes.rows[0].status)) {
+                    hasAccepted = true;
+                    break;
+                }
 
-            // Stage 1: Top 3 Tier A workers
-            if (tierA.length > 0) {
-                const notifyA1 = tierA.slice(0, 3);
-                await this.notifyWorkersForJob(job, notifyA1);
-                hasAccepted = await this.waitForAcceptance(jobId, 20);
-                if (hasAccepted) break;
-            }
+                // Double check no active pending offer exists (to be completely safe)
+                const activeOfferCheck = await db.query(
+                    "SELECT id FROM job_offers WHERE job_id = $1 AND status = 'PENDING' AND expires_at > NOW()",
+                    [jobId]
+                );
+                if (activeOfferCheck.rowCount > 0) {
+                    // Wait for the existing offer to resolve
+                    const existingOffer = activeOfferCheck.rows[0];
+                    const resultState = await this.waitForAcceptanceOrRejection(jobId, existingOffer.id, 20);
+                    if (resultState === 'ACCEPTED') {
+                        hasAccepted = true;
+                        break;
+                    }
+                    continue; // Proceed to next candidate
+                }
 
-            // Stage 2: Next 5 Tier A workers
-            if (tierA.length > 3) {
-                const notifyA2 = tierA.slice(3, 8);
-                await this.notifyWorkersForJob(job, notifyA2);
-                hasAccepted = await this.waitForAcceptance(jobId, 20);
-                if (hasAccepted) break;
-            }
+                console.log(`[DISPATCH-EXCLUSIVE] Offering Job ${jobId} to Worker ${candidate.phone_number} (${candidate.full_name}) exclusively`);
+                
+                // Emit dynamic progress status to user
+                this.io.to(`user:${job.user_id}`).emit('searching_status', {
+                    status: 'WORKERS_REVIEWING',
+                    message: `Waiting for response from closest expert...`,
+                    reviewingCount: 1
+                });
 
-            // Stage 3: Top Tier B workers
-            if (tierB.length > 0) {
-                const notifyB = tierB.slice(0, 5);
-                await this.notifyWorkersForJob(job, notifyB);
-                hasAccepted = await this.waitForAcceptance(jobId, 20);
-                if (hasAccepted) break;
-            }
-
-            // Try Tier C before radius expansion
-            if (tierC.length > 0) {
-                const notifyC = tierC.slice(0, 5);
-                await this.notifyWorkersForJob(job, notifyC);
-                hasAccepted = await this.waitForAcceptance(jobId, 20);
-                if (hasAccepted) break;
+                // Create the exclusive offer (20 seconds TTL)
+                const offerTtl = 20;
+                const offerId = await this.createOffer(job, candidate, candidate.distance, candidate.pAccept, offerTtl);
+                
+                if (offerId) {
+                    // Wait for this specific worker to accept, reject or timeout
+                    const resultState = await this.waitForAcceptanceOrRejection(jobId, offerId, offerTtl);
+                    if (resultState === 'ACCEPTED') {
+                        hasAccepted = true;
+                        break;
+                    }
+                }
             }
 
             // Expand radius if still not accepted
@@ -538,6 +547,25 @@ class MatchingService {
             }
         }
         return false;
+    }
+
+    async waitForAcceptanceOrRejection(jobId, offerId, seconds) {
+        for (let i = 0; i < seconds; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            
+            // Check if job was accepted (either by this worker or via offer validation)
+            const jobRes = await db.query("SELECT status FROM jobs WHERE id = $1", [jobId]);
+            if (jobRes.rowCount > 0 && jobRes.rows[0].status === 'ACCEPTED') {
+                return 'ACCEPTED';
+            }
+
+            // Check if the specific offer was rejected or expired
+            const offerRes = await db.query("SELECT status FROM job_offers WHERE id = $1", [offerId]);
+            if (offerRes.rowCount > 0 && offerRes.rows[0].status !== 'PENDING') {
+                return offerRes.rows[0].status; // 'REJECTED' or 'EXPIRED'
+            }
+        }
+        return 'TIMEOUT';
     }
 
     async getNearbyRankedWorkers(job, radiusKm, round) {

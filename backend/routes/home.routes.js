@@ -142,7 +142,7 @@ router.get('/services', async (req, res) => {
                 mlMeta = mlResponse.data.meta || {};
             }
         } catch (mlErr) {
-            console.warn('[HOME_SERVICES] ML service call failed, using DB-only fallback:', mlErr.message);
+            console.log('ℹ️ [ML-FALLBACK] ML service offline, using DB-only fallback.');
             mlResults = await computeFallbackMetrics(userLat, userLng, activeCategories);
         }
 
