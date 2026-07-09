@@ -526,6 +526,12 @@ class _PostJobScreenState extends State<PostJobScreen> {
   // ==========================================
 
   Widget _buildStep1Form() {
+    final bool canContinue = _selectedCategory != null &&
+        _lat != null &&
+        _lat != 0.0 &&
+        _location != "Fetching location..." &&
+        _location != "Location unavailable";
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -602,13 +608,7 @@ class _PostJobScreenState extends State<PostJobScreen> {
         _buildLocationCardRedesigned(),
         const SizedBox(height: 28),
 
-        final bool canContinue = _selectedCategory != null &&
-            _lat != null &&
-            _lat != 0.0 &&
-            _location != "Fetching location..." &&
-            _location != "Location unavailable";
-
-        return SizedBox(
+        SizedBox(
           width: double.infinity,
           height: 52,
           child: ElevatedButton(
