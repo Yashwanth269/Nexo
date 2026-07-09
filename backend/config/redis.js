@@ -487,7 +487,7 @@ const clientHolder = { current: createRedisClient() };
 const proxyClient = new Proxy(clientHolder, {
     get(holder, prop, receiver) {
         if (prop === 'isOpen') return isReady || useMockFallback || degradedMode;
-        if (prop === 'isMock') return useMockFallback;
+        if (prop === 'isMock') return useMockFallback || !isReady;
         if (prop === 'isDegraded') return () => degradedMode;
         if (prop === 'startupFailed') return () => startupFailed;
         if (prop === 'forceReconnect') {
@@ -507,7 +507,8 @@ const proxyClient = new Proxy(clientHolder, {
             };
         }
 
-        if (useMockFallback) {
+        // If Redis is not ready/connected yet, route to mock in non-prod to avoid queuing delays
+        if (useMockFallback || (!isReady && NODE_ENV !== 'production')) {
             if (typeof mockRedis[prop] === 'function') {
                 return mockRedis[prop].bind(mockRedis);
             }

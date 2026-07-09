@@ -238,22 +238,32 @@ async function computeFallbackMetrics(userLat, userLng, categories) {
         const totalRes = await db.query("SELECT COUNT(*) as count FROM workers WHERE is_online = true AND is_available = true");
         const totalAvailable = parseInt(totalRes.rows[0]?.count || 1);
 
-        // 2. Fetch all online/available workers within 30km radius once
+        // Compute bounding box coordinates for 30km radius (~0.27 degrees lat)
+        const latRange = 30.0 / 111.0; 
+        const cosLat = Math.cos(userLat * Math.PI / 180.0);
+        const lngRange = 30.0 / (111.0 * (cosLat > 0.01 ? cosLat : 0.01));
+
+        const minLat = userLat - latRange;
+        const maxLat = userLat + latRange;
+        const minLng = userLng - lngRange;
+        const maxLng = userLng + lngRange;
+
+        // 2. Fetch all online/available workers within 30km bounding box once
         const workersRes = await db.query(`
             SELECT skills, rating FROM workers
             WHERE is_online = true AND is_available = true
-              AND current_lat IS NOT NULL AND current_lng IS NOT NULL
-              AND earth_distance(ll_to_earth($1, $2), ll_to_earth(current_lat, current_lng)) / 1000.0 <= 30
-        `, [userLat, userLng]);
+              AND current_lat >= $1 AND current_lat <= $2
+              AND current_lng >= $3 AND current_lng <= $4
+        `, [minLat, maxLat, minLng, maxLng]);
         const localWorkers = workersRes.rows || [];
 
-        // 3. Fetch all jobs in the last 24h within 30km radius once
+        // 3. Fetch all jobs in the last 24h within 30km bounding box once
         const jobsRes = await db.query(`
             SELECT category, created_at FROM jobs
             WHERE created_at >= NOW() - INTERVAL '24 hours'
-              AND location_lat IS NOT NULL AND location_lng IS NOT NULL
-              AND earth_distance(ll_to_earth($1, $2), ll_to_earth(location_lat, location_lng)) / 1000.0 <= 30
-        `, [userLat, userLng]);
+              AND location_lat >= $1 AND location_lat <= $2
+              AND location_lng >= $3 AND location_lng <= $4
+        `, [minLat, maxLat, minLng, maxLng]);
         const localJobs = jobsRes.rows || [];
 
         const now = Date.now();
