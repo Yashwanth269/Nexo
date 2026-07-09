@@ -171,7 +171,10 @@ class _PostJobScreenState extends State<PostJobScreen> {
         print("Requesting workers for userId: $userId");
         if (userId == null) {
           Navigator.pop(context); // Close loading
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("User session expired. Please log in again.")));
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const AuthScreen()),
+            (route) => false,
+          );
           return;
         }
 
@@ -225,9 +228,6 @@ class _PostJobScreenState extends State<PostJobScreen> {
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (context) => const AuthScreen()),
               (route) => false,
-            );
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Session expired. Please log in again.")),
             );
           }
         } else {
