@@ -403,9 +403,8 @@ CREATE TABLE IF NOT EXISTS commission_config (
     UNIQUE(category)
 );
 
-
-
-
+CREATE INDEX IF NOT EXISTS idx_workers_location_cube ON workers USING GIST (location_cube);
+CREATE INDEX IF NOT EXISTS idx_jobs_location_cube ON jobs USING GIST (location_cube);
 `;
 
 async function main() {
