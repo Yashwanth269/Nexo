@@ -602,7 +602,13 @@ class _PostJobScreenState extends State<PostJobScreen> {
         _buildLocationCardRedesigned(),
         const SizedBox(height: 28),
 
-        SizedBox(
+        final bool canContinue = _selectedCategory != null &&
+            _lat != null &&
+            _lat != 0.0 &&
+            _location != "Fetching location..." &&
+            _location != "Location unavailable";
+
+        return SizedBox(
           width: double.infinity,
           height: 52,
           child: ElevatedButton(
@@ -613,10 +619,16 @@ class _PostJobScreenState extends State<PostJobScreen> {
                 );
                 return;
               }
+              if (_lat == null || _lat == 0.0 || _location == "Fetching location...") {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Please wait for your location to load, or tap to edit manually")),
+                );
+                return;
+              }
               setState(() => _currentWizardStep = 1);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF6A00),
+              backgroundColor: canContinue ? const Color(0xFFFF6A00) : Colors.grey[300],
               elevation: 0,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
             ),
@@ -625,14 +637,22 @@ class _PostJobScreenState extends State<PostJobScreen> {
               children: [
                 Text(
                   "Continue",
-                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.bold, 
+                    fontSize: 16, 
+                    color: canContinue ? Colors.white : Colors.grey[600],
+                  ),
                 ),
                 const SizedBox(width: 8),
-                const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
+                Icon(
+                  Icons.arrow_forward_rounded, 
+                  color: canContinue ? Colors.white : Colors.grey[600], 
+                  size: 18,
+                ),
               ],
             ),
           ),
-        ),
+        );
         const SizedBox(height: 20),
       ],
     );
