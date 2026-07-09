@@ -59,7 +59,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
     [Color(0xFFFAF5FF), Color(0xFFF3E8FF)], // Sophisticated soft lavender rose
     [Color(0xFFFDF2F8), Color(0xFFFCE7F3)], // Breathtaking light pastel blossom pink
   ];
-  bool _isLoading = true;
+  bool _isLoading = false;
   String _location = "Fetching location...";
   String _userName = "User";
   String? _photoUrl;
@@ -87,13 +87,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
   final String baseUrl = NetworkHelper.baseUrl;
   StreamSubscription? _locationSubscription;
   // Trending / Popular Near You
-  bool _isLoadingPopular = false;
+  bool _isLoadingPopular = true;
   StreamSubscription<List<Map<String, dynamic>>>? _trendingSubscription;
   final _trending = TrendingService.instance;
   double _lastLat = 0.0;
   double _lastLng = 0.0;
   bool _isLoadingRecs = false;
-  bool _isLoadingWorkers = false;
+  bool _isLoadingWorkers = true;
   Timer? _autoRefreshTimer;
   double _walletBalance = 0.0;
   int _unreadCount = 0;
@@ -111,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
   final _homeServices = HomeServicesService.instance;
 
   // Recently Completed Social Feed
-  bool _isLoadingFeed = false;
+  bool _isLoadingFeed = true;
   List<Map<String, dynamic>> _recentlyCompleted = [];
   StreamSubscription<List<Map<String, dynamic>>>? _feedSubscription;
   final _feedService = FeedService.instance;
@@ -902,6 +902,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
   }
 
   Future<void> _fetchTopRatedWorkers(double lat, double lng) async {
+    if (mounted) {
+      setState(() => _isLoadingWorkers = true);
+    }
     try {
       final url = Uri.parse('$baseUrl/api/workers/top-rated?lat=$lat&lng=$lng');
       final response = await http.get(url);
@@ -910,11 +913,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
         if (mounted && data['success'] == true) {
           setState(() {
             _topRatedWorkers = data['workers'] ?? [];
+            _isLoadingWorkers = false;
           });
         }
+      } else {
+        if (mounted) setState(() => _isLoadingWorkers = false);
       }
     } catch (e) {
       debugPrint("❌ Error fetching top-rated workers: $e");
+      if (mounted) setState(() => _isLoadingWorkers = false);
     }
   }
 
