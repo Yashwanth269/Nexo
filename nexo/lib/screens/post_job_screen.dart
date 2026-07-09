@@ -59,8 +59,11 @@ class _PostJobScreenState extends State<PostJobScreen> {
     _selectedImage = widget.initialImage;
     _selectedIcon = widget.initialIcon;
     
-    if (_selectedCategory != null && _selectedIcon == null) {
-      _resolveInitialTask(_selectedCategory);
+    if (_selectedCategory != null) {
+      _showPopularGrid = false;
+      if (_selectedIcon == null) {
+        _resolveInitialTask(_selectedCategory);
+      }
     }
     
     _descriptionController.addListener(() {
@@ -811,7 +814,7 @@ class _PostJobScreenState extends State<PostJobScreen> {
         children: [
           TextField(
             controller: _descriptionController,
-            maxLines: 4,
+            maxLines: 2,
             maxLength: 200,
             style: GoogleFonts.inter(
               color: const Color(0xFF0F172A),
