@@ -44,7 +44,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
   bool _isLoading = true;
   String? _userPhoto;
 
-  // Cached credentials — loaded once in initState to avoid repeated SharedPrefs disk reads
+  // Cached credentials â€” loaded once in initState to avoid repeated SharedPrefs disk reads
   String? _cachedUserId;
   String? _cachedToken;
 
@@ -101,7 +101,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
       
       final refreshCallback = (_) {
         if (mounted) {
-          debugPrint("🔄 [MyJobsScreen] Real-time event received, refreshing jobs...");
+          debugPrint("ðŸ”„ [MyJobsScreen] Real-time event received, refreshing jobs...");
           _fetchJobs();
         }
       };
@@ -238,7 +238,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                     )
                   ),
                   const SizedBox(height: 24),
-                  _buildEditField("Budget (₹)", budgetController, Icons.currency_rupee_rounded, keyboardType: TextInputType.number),
+                  _buildEditField("Budget (â‚¹)", budgetController, Icons.currency_rupee_rounded, keyboardType: TextInputType.number),
                   const SizedBox(height: 24),
                   
                   // Day Selector
@@ -849,7 +849,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          "Safety Guarantee: Always pay within Nexo to be covered under our ₹10k protection policy.",
+                          "Safety Guarantee: Always pay within Nexo to be covered under our â‚¹10k protection policy.",
                           style: GoogleFonts.inter(
                             fontSize: 10,
                             color: const Color(0xFF1E3A8A),
@@ -974,8 +974,6 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
   Widget _buildNewOrCancelledGigCard(Map<String, dynamic> job, String image, bool isCancelled) {
     final formattedId = "TASK-${(job['id'] ?? "000000").toString().substring(0, 6).toUpperCase()}";
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    // Resolve theme-aware popping text colors
     final cardTextPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
     final cardTextSecondary = isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
 
@@ -983,10 +981,9 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
       onTap: () => _showJobDetails(job),
       child: GlassContainer(
         blur: 20,
-        padding: EdgeInsets.zero, // Remove padding from GlassContainer for left accent bar
+        padding: EdgeInsets.zero,
         child: Stack(
           children: [
-            // Content area with left padding to make room for accent bar
             Padding(
               padding: const EdgeInsets.only(left: 5),
               child: Padding(
@@ -994,123 +991,120 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                      Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
-                            child: ImageUtils.buildServiceImage(
-                              image, 
-                              taskName: job['category'],
-                              width: 58, 
-                              height: 58, 
-                              fit: BoxFit.cover, 
-                              fallback: Container(width: 58, height: 58, color: Colors.white10, child: const Icon(Icons.construction, color: Colors.orange)),
-                            ),
+                    Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: ImageUtils.buildServiceImage(
+                            image,
+                            taskName: job['category'],
+                            width: 58,
+                            height: 58,
+                            fit: BoxFit.cover,
+                            fallback: Container(width: 58, height: 58, color: Colors.white10, child: const Icon(Icons.construction, color: Colors.orange)),
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      formattedId,
-                                      style: GoogleFonts.inter(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 10),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    formattedId,
+                                    style: GoogleFonts.inter(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 10),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: isCancelled ? Colors.redAccent.withOpacity(0.12) : Colors.blueAccent.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: isCancelled ? Colors.redAccent.withOpacity(0.2) : Colors.blueAccent.withOpacity(0.2)),
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: isCancelled ? Colors.redAccent.withOpacity(0.12) : Colors.blueAccent.withOpacity(0.12),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: isCancelled ? Colors.redAccent.withOpacity(0.2) : Colors.blueAccent.withOpacity(0.2)),
+                                    child: Text(
+                                      isCancelled ? "CANCELLED" : "DISPATCHING",
+                                      style: GoogleFonts.inter(
+                                        color: isCancelled ? Colors.redAccent : Colors.blueAccent,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 9,
                                       ),
-                                      child: Text(
-                                        isCancelled ? "CANCELLED" : "DISPATCHING", 
-                                        style: GoogleFonts.inter(
-                                          color: isCancelled ? Colors.redAccent : Colors.blueAccent, 
-                                          fontWeight: FontWeight.w900, 
-                                          fontSize: 9
-                                        )
-                                      ),
                                     ),
-                                  ],
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  job['category'] ?? "General Job", 
-                                  style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 18, color: cardTextPrimary, letterSpacing: 0.1),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 5),
-                                Row(
-                                  children: [
-                                    Text(
-                                      job['price'] != null ? "₹${job['price']}" : "TBD", 
-                                      style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 16, color: primaryColor)
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                job['category'] ?? "General Job",
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 18, color: cardTextPrimary, letterSpacing: 0.1),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 5),
+                              Row(
+                                children: [
+                                  Text(
+                                    job['price'] != null ? "â‚¹${job['price']}" : "TBD",
+                                    style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 16, color: primaryColor),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(width: 3, height: 3, decoration: BoxDecoration(color: cardTextSecondary.withOpacity(0.5), shape: BoxShape.circle)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      isCancelled
+                                          ? "Cancelled: ${_formatDateTime(job['cancelled_at'])}"
+                                          : "Scheduled: ${job['scheduled_at'] ?? 'Today'} (Created: ${_formatDateTime(job['created_at'])})",
+                                      style: GoogleFonts.inter(color: cardTextSecondary, fontSize: 11, fontWeight: FontWeight.w500),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    const SizedBox(width: 8),
-                                    Container(width: 3, height: 3, decoration: BoxDecoration(color: cardTextSecondary.withOpacity(0.5), shape: BoxShape.circle)),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        isCancelled 
-                                            ? "Cancelled: ${_formatDateTime(job['cancelled_at'])}"
-                                            : "Scheduled: ${job['scheduled_at'] ?? 'Today'} (Created: ${_formatDateTime(job['created_at'])})", 
-                                        style: GoogleFonts.inter(color: cardTextSecondary, fontSize: 11, fontWeight: FontWeight.w500), 
-                                        overflow: TextOverflow.ellipsis
-                                      )
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Render Description as custom task name if present
-                      if (job['description'] != null && job['description'].toString().isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          job['description'].toString(),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.inter(
-                            color: cardTextSecondary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            height: 1.3,
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       ],
-                      if (!isCancelled) ...[
-                        const SizedBox(height: 16),
-                        const Divider(color: Colors.white12, height: 1),
-                        const SizedBox(height: 14),
-                        Column(
-                          children: [
-                            _buildWideGradientButton(
-                              text: "EDIT GIG DETAILS",
-                              icon: Icons.edit_rounded,
-                              onPressed: () => _editJob(job),
-                            ),
-                            const SizedBox(height: 10),
-                            _buildWideGlassButton(
-                              text: "CANCEL REQUEST",
-                              icon: Icons.cancel_outlined,
-                              onPressed: () => _cancelJob(job['id']),
-                              isDark: isDark,
-                            ),
-                          ],
+                    ),
+                    if (job['description'] != null && job['description'].toString().isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        job['description'].toString(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          color: cardTextSecondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          height: 1.3,
                         ),
-                      ]
+                      ),
                     ],
-                  ),
+                    if (!isCancelled) ...[
+                      const SizedBox(height: 16),
+                      const Divider(color: Colors.white12, height: 1),
+                      const SizedBox(height: 14),
+                      Column(
+                        children: [
+                          _buildWideGradientButton(
+                            text: "EDIT GIG DETAILS",
+                            icon: Icons.edit_rounded,
+                            onPressed: () => _editJob(job),
+                          ),
+                          const SizedBox(height: 10),
+                          _buildWideGlassButton(
+                            text: "CANCEL REQUEST",
+                            icon: Icons.cancel_outlined,
+                            onPressed: () => _cancelJob(job['id']),
+                            isDark: isDark,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
-            // Beautiful left accent status bar — overlaid on the left edge
             Positioned(
               top: 0,
               bottom: 0,
@@ -1119,8 +1113,8 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                 width: 5,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: isCancelled 
-                        ? [const Color(0xFFEF4444), const Color(0xFFB91C1C)] 
+                    colors: isCancelled
+                        ? [const Color(0xFFEF4444), const Color(0xFFB91C1C)]
                         : [const Color(0xFF3B82F6), const Color(0xFF1D4ED8)],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
@@ -1143,12 +1137,9 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
     final formattedId = "TASK-${(job['id'] ?? "000000").toString().substring(0, 6).toUpperCase()}";
     final status = job['status'] ?? "ACCEPTED";
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    // Resolve theme-aware popping text colors
     final cardTextPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
     final cardTextSecondary = isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
 
-    // Compute progress step (0: ACCEPTED, 1: ON_THE_WAY, 2: ARRIVED, 3: WORK_IN_PROGRESS)
     int currentStep = 0;
     Color statusColor = Colors.amber;
     if (status == 'ON_THE_WAY') {
@@ -1166,10 +1157,9 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
       onTap: () => _showJobDetails(job),
       child: GlassContainer(
         blur: 20,
-        padding: EdgeInsets.zero, // Remove padding from GlassContainer
+        padding: EdgeInsets.zero,
         child: Stack(
           children: [
-            // Content area with left padding to make room for accent bar
             Padding(
               padding: const EdgeInsets.only(left: 5),
               child: Padding(
@@ -1177,152 +1167,147 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                      Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
-                            child: ImageUtils.buildServiceImage(
-                              image, 
-                              taskName: job['category'],
-                              width: 60, 
-                              height: 60, 
-                              fit: BoxFit.cover,
-                              fallback: Container(width: 60, height: 60, color: Colors.white10),
-                            ),
+                    Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: ImageUtils.buildServiceImage(
+                            image,
+                            taskName: job['category'],
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                            fallback: Container(width: 60, height: 60, color: Colors.white10),
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      formattedId,
-                                      style: GoogleFonts.inter(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 10),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    formattedId,
+                                    style: GoogleFonts.inter(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 10),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: statusColor.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: statusColor.withOpacity(0.2)),
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: statusColor.withOpacity(0.12),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: statusColor.withOpacity(0.2)),
+                                    child: Text(
+                                      status.replaceAll('_', ' '),
+                                      style: GoogleFonts.inter(
+                                        color: statusColor,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 9,
                                       ),
-                                      child: Text(
-                                        status.replaceAll('_', ' '), 
-                                        style: GoogleFonts.inter(
-                                          color: statusColor, 
-                                          fontWeight: FontWeight.w900, 
-                                          fontSize: 9
-                                        )
-                                      ),
                                     ),
-                                  ],
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  job['category'] ?? "General Job", 
-                                  style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 18, color: cardTextPrimary, letterSpacing: 0.1),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 5),
-                                Row(
-                                  children: [
-                                    Text(
-                                      "₹${job['price'] ?? '500'}", 
-                                      style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 16, color: primaryColor)
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                job['category'] ?? "General Job",
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 18, color: cardTextPrimary, letterSpacing: 0.1),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 5),
+                              Row(
+                                children: [
+                                  Text(
+                                    "â‚¹${job['price'] ?? '500'}",
+                                    style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 16, color: primaryColor),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(width: 3, height: 3, decoration: BoxDecoration(color: cardTextSecondary.withOpacity(0.5), shape: BoxShape.circle)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      job['workerName'] ?? "Expert Technician",
+                                      style: GoogleFonts.inter(color: cardTextSecondary, fontSize: 12, fontWeight: FontWeight.bold),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    const SizedBox(width: 8),
-                                    Container(width: 3, height: 3, decoration: BoxDecoration(color: cardTextSecondary.withOpacity(0.5), shape: BoxShape.circle)),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        job['workerName'] ?? "Expert Technician", 
-                                        style: GoogleFonts.inter(color: cardTextSecondary, fontSize: 12, fontWeight: FontWeight.bold), 
-                                        overflow: TextOverflow.ellipsis
-                                      )
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Render Description as custom task name if present
-                      if (job['description'] != null && job['description'].toString().isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          job['description'].toString(),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.inter(
-                            color: cardTextSecondary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            height: 1.3,
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       ],
-                      const SizedBox(height: 18),
-                      
-                      // Stepper layout
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          return Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              _buildActiveStep("Accepted", currentStep >= 0, isDark, timestamp: _formatTimeOnly(job['accepted_at'])),
-                              _buildActiveLine(currentStep >= 1, isDark),
-                              _buildActiveStep("On Way", currentStep >= 1, isDark, timestamp: _formatTimeOnly(job['on_the_way_at'])),
-                              _buildActiveLine(currentStep >= 2, isDark),
-                              _buildActiveStep("Arrived", currentStep >= 2, isDark, timestamp: _formatTimeOnly(job['arrived_at'])),
-                              _buildActiveLine(currentStep >= 3, isDark),
-                              _buildActiveStep("Working", currentStep >= 3, isDark, timestamp: _formatTimeOnly(job['started_at'])),
-                            ],
-                          );
-                        }
-                      ),
-                      const SizedBox(height: 18),
-                      const Divider(color: Colors.white12, height: 1),
-                      const SizedBox(height: 14),
-                      Column(
-                        children: [
-                          _buildWideGradientButton(
-                            text: "VIEW EXPERT PROFILE",
-                            icon: Icons.badge_rounded,
-                            onPressed: () => _showWorkerDetails(job),
-                          ),
-                          const SizedBox(height: 10),
-                          _buildWideGlassButton(
-                            text: "CHAT WITH EXPERT",
-                            icon: Icons.chat_bubble_outline_rounded,
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ChatDetailScreen(
-                                    jobId: job['id']?.toString() ?? '',
-                                    name: job['workerName'] ?? 'Expert',
-                                    image: job['workerPhoto'] != null && job['workerPhoto'].toString().isNotEmpty
-                                        ? (job['workerPhoto'].toString().startsWith('http') ? job['workerPhoto'] : '${NetworkHelper.baseUrl}${job['workerPhoto']}')
-                                        : "assets/images/skilled/trades/ac technician.jpg",
-                                    service: (job['workerSkills'] as List?)?.first ?? 'Technician',
-                                  ),
-                                ),
-                              );
-                            },
-                            isDark: isDark,
-                          ),
-                        ],
+                    ),
+                    if (job['description'] != null && job['description'].toString().isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        job['description'].toString(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          color: cardTextSecondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          height: 1.3,
+                        ),
                       ),
                     ],
-                  ),
+                    const SizedBox(height: 18),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildActiveStep("Accepted", currentStep >= 0, isDark, timestamp: _formatTimeOnly(job['accepted_at'])),
+                            _buildActiveLine(currentStep >= 1, isDark),
+                            _buildActiveStep("On Way", currentStep >= 1, isDark, timestamp: _formatTimeOnly(job['on_the_way_at'])),
+                            _buildActiveLine(currentStep >= 2, isDark),
+                            _buildActiveStep("Arrived", currentStep >= 2, isDark, timestamp: _formatTimeOnly(job['arrived_at'])),
+                            _buildActiveLine(currentStep >= 3, isDark),
+                            _buildActiveStep("Working", currentStep >= 3, isDark, timestamp: _formatTimeOnly(job['started_at'])),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                    const Divider(color: Colors.white12, height: 1),
+                    const SizedBox(height: 14),
+                    Column(
+                      children: [
+                        _buildWideGradientButton(
+                          text: "VIEW EXPERT PROFILE",
+                          icon: Icons.badge_rounded,
+                          onPressed: () => _showWorkerDetails(job),
+                        ),
+                        const SizedBox(height: 10),
+                        _buildWideGlassButton(
+                          text: "CHAT WITH EXPERT",
+                          icon: Icons.chat_bubble_outline_rounded,
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChatDetailScreen(
+                                  jobId: job['id']?.toString() ?? '',
+                                  name: job['workerName'] ?? 'Expert',
+                                  image: job['workerPhoto'] != null && job['workerPhoto'].toString().isNotEmpty
+                                      ? (job['workerPhoto'].toString().startsWith('http') ? job['workerPhoto'] : '${NetworkHelper.baseUrl}${job['workerPhoto']}')
+                                      : "assets/images/skilled/trades/ac technician.jpg",
+                                  service: (job['workerSkills'] as List?)?.first ?? 'Technician',
+                                ),
+                              ),
+                            );
+                          },
+                          isDark: isDark,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
-            // Beautiful left accent status bar — overlaid on the left edge
             Positioned(
               top: 0,
               bottom: 0,
@@ -1352,8 +1337,6 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
   Widget _buildCompletedGigCard(Map<String, dynamic> job, String image) {
     final formattedId = "TASK-${(job['id'] ?? "000000").toString().substring(0, 6).toUpperCase()}";
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    // Resolve theme-aware popping text colors
     final cardTextPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
     final cardTextSecondary = isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
 
@@ -1361,10 +1344,9 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
       onTap: () => _showJobDetails(job),
       child: GlassContainer(
         blur: 20,
-        padding: EdgeInsets.zero, // Remove padding from GlassContainer
+        padding: EdgeInsets.zero,
         child: Stack(
           children: [
-            // Content area with left padding to make room for accent bar
             Padding(
               padding: const EdgeInsets.only(left: 5),
               child: Padding(
@@ -1372,134 +1354,151 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                      Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
-                            child: ImageUtils.buildServiceImage(
-                              image, 
-                              taskName: job['category'],
-                              width: 58, 
-                              height: 58, 
-                              fit: BoxFit.cover,
-                              fallback: Container(width: 58, height: 58, color: Colors.white10),
-                            ),
+                    Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: ImageUtils.buildServiceImage(
+                            image,
+                            taskName: job['category'],
+                            width: 58,
+                            height: 58,
+                            fit: BoxFit.cover,
+                            fallback: Container(width: 58, height: 58, color: Colors.white10),
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      formattedId,
-                                      style: GoogleFonts.inter(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 10),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    formattedId,
+                                    style: GoogleFonts.inter(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 10),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.greenAccent.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.greenAccent.withOpacity(0.2)),
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: Colors.greenAccent.withOpacity(0.12),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.greenAccent.withOpacity(0.2)),
+                                    child: Text(
+                                      "GIG SUCCESS",
+                                      style: GoogleFonts.inter(
+                                        color: Colors.greenAccent,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 9,
+                                        letterSpacing: 0.5,
                                       ),
-                                      child: Text(
-                                        "GIG SUCCESS", 
-                                        style: GoogleFonts.inter(
-                                          color: Colors.greenAccent, 
-                                          fontWeight: FontWeight.w900, 
-                                          fontSize: 9,
-                                          letterSpacing: 0.5,
-                                        )
-                                      ),
                                     ),
-                                  ],
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  job['category'] ?? "General Job", 
-                                  style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 18, color: cardTextPrimary, letterSpacing: 0.1),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 5),
-                                Row(
-                                  children: [
-                                    Text(
-                                      "₹${job['price'] ?? '500'}", 
-                                      style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 16, color: primaryColor)
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                job['category'] ?? "General Job",
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 18, color: cardTextPrimary, letterSpacing: 0.1),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 5),
+                              Row(
+                                children: [
+                                  Text(
+                                    "â‚¹${job['price'] ?? '500'}",
+                                    style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 16, color: primaryColor),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(width: 3, height: 3, decoration: BoxDecoration(color: cardTextSecondary.withOpacity(0.5), shape: BoxShape.circle)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      "${job['workerName'] ?? 'Expert'} â€¢ Completed ${_formatDateTime(job['completed_at'] ?? job['complete_at'])}",
+                                      style: GoogleFonts.inter(color: cardTextSecondary, fontSize: 11, fontWeight: FontWeight.w500),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    const SizedBox(width: 8),
-                                    Container(width: 3, height: 3, decoration: BoxDecoration(color: cardTextSecondary.withOpacity(0.5), shape: BoxShape.circle)),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        "${job['workerName'] ?? 'Expert'} • Completed ${_formatDateTime(job['completed_at'] ?? job['complete_at'])}", 
-                                        style: GoogleFonts.inter(color: cardTextSecondary, fontSize: 11, fontWeight: FontWeight.w500), 
-                                        overflow: TextOverflow.ellipsis
-                                      )
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Render Description as custom task name if present
-                      if (job['description'] != null && job['description'].toString().isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          job['description'].toString(),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.inter(
-                            color: cardTextSecondary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            height: 1.3,
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       ],
-                      const SizedBox(height: 16),
-                      const Divider(color: Colors.white12, height: 1),
-                      const SizedBox(height: 14),
-                      Column(
-                        children: [
-                          _buildWideGradientButton(
-                            text: "RATE EXPERT",
-                            icon: Icons.star_rounded,
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => RatingScreen(job: {
-                                    ...job,
-                                    'worker': {
-                                      'id': job['worker_id'],
-                                      'name': job['workerName'] ?? 'Expert',
-                                      'photoUrl': job['workerPhoto'] ?? '',
-                                      'category': job['category'] ?? 'Technician',
-                                    }
-                                  }),
-                                ),
-                              ).then((_) => _fetchJobs());
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          _buildWideGlassButton(
-                            text: "VIEW DETAILS",
-                            onPressed: () => _showJobDetails(job),
-                            isDark: isDark,
-                          ),
-                        ],
+                    ),
+                    if (job['description'] != null && job['description'].toString().isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        job['description'].toString(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          color: cardTextSecondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          height: 1.3,
+                        ),
                       ),
                     ],
+                    const SizedBox(height: 16),
+                    const Divider(color: Colors.white12, height: 1),
+                    const SizedBox(height: 14),
+                    Column(
+                      children: [
+                        _buildWideGradientButton(
+                          text: "RATE EXPERT",
+                          icon: Icons.star_rounded,
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => RatingScreen(job: {
+                                  ...job,
+                                  'worker': {
+                                    'id': job['worker_id'],
+                                    'name': job['workerName'] ?? 'Expert',
+                                    'photoUrl': job['workerPhoto'] ?? '',
+                                    'category': job['category'] ?? 'Technician',
+                                  }
+                                }),
+                              ),
+                            ).then((_) => _fetchJobs());
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                        _buildWideGlassButton(
+                          text: "VIEW DETAILS",
+                          onPressed: () => _showJobDetails(job),
+                          isDark: isDark,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              top: 0,
+              bottom: 0,
+              left: 0,
+              child: Container(
+                width: 5,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF10B981), Color(0xFF059669)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    bottomLeft: Radius.circular(20),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

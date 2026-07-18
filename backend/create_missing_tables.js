@@ -405,6 +405,18 @@ CREATE TABLE IF NOT EXISTS commission_config (
 
 CREATE INDEX IF NOT EXISTS idx_workers_location_cube ON workers USING GIST (location_cube);
 CREATE INDEX IF NOT EXISTS idx_jobs_location_cube ON jobs USING GIST (location_cube);
+
+-- Adjust advanced_fatigue_scores table to match fatigue.service.js expectation
+ALTER TABLE advanced_fatigue_scores ADD COLUMN IF NOT EXISTS acceptance_load_24h INTEGER DEFAULT 0;
+ALTER TABLE advanced_fatigue_scores ADD COLUMN IF NOT EXISTS active_jobs_current INTEGER DEFAULT 0;
+ALTER TABLE advanced_fatigue_scores ADD COLUMN IF NOT EXISTS stress_events_24h INTEGER DEFAULT 0;
+ALTER TABLE advanced_fatigue_scores ADD COLUMN IF NOT EXISTS fatigue_score DECIMAL DEFAULT 0.0;
+ALTER TABLE advanced_fatigue_scores ADD COLUMN IF NOT EXISTS fatigue_band VARCHAR(50) DEFAULT 'NONE';
+ALTER TABLE advanced_fatigue_scores ADD COLUMN IF NOT EXISTS calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+-- Replace table-level uniqueness on job_offers (which blocks multiple EXPIRED/REJECTED offers) with a partial unique index on PENDING status
+ALTER TABLE job_offers DROP CONSTRAINT IF EXISTS job_offers_job_id_worker_id_status_key;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_job_offers_pending_unique ON job_offers(job_id, worker_id) WHERE status = 'PENDING';
 `;
 
 async function main() {

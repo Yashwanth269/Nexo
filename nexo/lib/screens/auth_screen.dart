@@ -12,6 +12,7 @@ import 'package:nexo/utils/network_helper.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'home_screen.dart';
+import 'map_location_picker_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -306,7 +307,9 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
             ),
           );
-          _nextPage();
+          if (_currentStep == 0) {
+            _nextPage();
+          }
         }
       } else {
         if (mounted) {
@@ -1118,7 +1121,27 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(height: 20),
           _buildTextField("FULL NAME", _nameController, Icons.person_rounded),
           const SizedBox(height: 16),
-          _buildTextField("CITY / CURRENT LOCATION", _cityController, Icons.location_on_rounded),
+          _buildTextField(
+            "CITY / CURRENT LOCATION",
+            _cityController,
+            Icons.location_on_rounded,
+            readOnly: true,
+            onTap: () async {
+              final selectedAddress = await Navigator.push<String>(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => MapLocationPickerScreen(
+                    initialAddress: _cityController.text,
+                  ),
+                ),
+              );
+              if (selectedAddress != null && selectedAddress.isNotEmpty) {
+                setState(() {
+                  _cityController.text = selectedAddress;
+                });
+              }
+            },
+          ),
           const SizedBox(height: 24),
           Container(
             width: double.infinity,
@@ -1205,7 +1228,7 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController controller, IconData icon) {
+  Widget _buildTextField(String label, TextEditingController controller, IconData icon, {VoidCallback? onTap, bool readOnly = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1238,10 +1261,18 @@ class _AuthScreenState extends State<AuthScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
                 child: TextField(
                   controller: controller,
+                  readOnly: readOnly,
+                  onTap: onTap,
                   style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, color: const Color(0xFF0F172A), fontSize: 15),
                   decoration: InputDecoration(
                     border: InputBorder.none,
                     icon: Icon(icon, size: 20, color: isFocused ? const Color(0xFF3B82F6) : const Color(0xFF64748B)),
+                    suffixIcon: onTap != null
+                        ? IconButton(
+                            icon: const Icon(Icons.map_rounded, color: primaryColor),
+                            onPressed: onTap,
+                          )
+                        : null,
                     hintText: "Enter your ${label.toLowerCase()}",
                     hintStyle: GoogleFonts.plusJakartaSans(color: const Color(0xFF94A3B8), fontSize: 14),
                   ),
