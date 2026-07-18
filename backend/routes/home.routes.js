@@ -370,6 +370,112 @@ async function invalidateAllHomeServicesCaches() {
     }
 }
 
+const { optionalAuth } = require('../utils/auth.middleware');
+const rankingService = require('../services/ranking.service');
+const walletService = require('../services/wallet.service');
+const feedService = require('../services/feed.service');
+const marketService = require('../services/market.service');
+
+router.get('/dashboard', optionalAuth, async (req, res) => {
+    const startTime = Date.now();
+    try {
+        const { lat, lng } = req.query;
+        if (!lat || !lng) {
+            return res.status(400).json({ success: false, error: 'Coordinates required (lat, lng)' });
+        }
+
+        const userLat = parseFloat(lat);
+        const userLng = parseFloat(lng);
+        const userId = req.user?.userId || req.user?.workerId || req.query.userId || null;
+        const role = req.user?.role || req.query.role || 'USER';
+
+        // Cache Key
+        const cacheKey = `dashboard:${userId || 'anon'}:${userLat.toFixed(4)}:${userLng.toFixed(4)}`;
+        try {
+            const cached = await redis.get(cacheKey);
+            if (cached) {
+                return res.json(JSON.parse(cached));
+            }
+        } catch (e) {
+            console.warn('[DASHBOARD] Redis read error:', e.message);
+        }
+
+        // Parallel execution
+        const [
+            servicesData,
+            trendingCategories,
+            recommendations,
+            walletData,
+            recentJobs,
+            topWorkers,
+            feedData
+        ] = await Promise.all([
+            // 1. Home services
+            computeFallbackMetrics(userLat, userLng, ALL_CATEGORIES).catch(() => []),
+            // 2. Trending categories
+            marketService.getTrendingCategories?.(userLat, userLng).catch(() => []),
+            // 3. User recommendations
+            (async () => {
+                if (!userId) return ALL_CATEGORIES.slice(0, 3);
+                const prev = await db.query(
+                    "SELECT category, COUNT(*) as count FROM jobs WHERE user_id = $1 GROUP BY category ORDER BY count DESC LIMIT 3",
+                    [userId]
+                );
+                if (prev.rowCount > 0) return prev.rows.map(r => r.category);
+                return ALL_CATEGORIES.slice(0, 3);
+            })().catch(() => ALL_CATEGORIES.slice(0, 3)),
+            // 4. Wallet balance
+            (async () => {
+                if (!userId) return { balance: 0.0, cashHeld: 0.0 };
+                return walletService.getBalance(userId, role);
+            })().catch(() => ({ balance: 0.0, cashHeld: 0.0 })),
+            // 5. Recent jobs history
+            (async () => {
+                if (!userId) return [];
+                const hist = await db.query(
+                    "SELECT * FROM jobs WHERE user_id = $1 OR worker_id = $1 ORDER BY created_at DESC LIMIT 5",
+                    [userId]
+                );
+                return hist.rows;
+            })().catch(() => []),
+            // 6. Top rated workers nearby
+            rankingService.getTopRatedWorkers(userLat, userLng, userId, null).catch(() => []),
+            // 7. Feed posts
+            feedService.getFeedNearby(userLat, userLng, userId).catch(() => [])
+        ]);
+
+        const payload = {
+            success: true,
+            dashboard: {
+                services: servicesData,
+                trending: trendingCategories,
+                recommendations: recommendations,
+                wallet: walletData,
+                history: recentJobs,
+                topWorkers: topWorkers,
+                feed: feedData
+            },
+            meta: {
+                generatedAt: new Date().toISOString(),
+                responseTimeMs: Date.now() - startTime
+            }
+        };
+
+        // Cache in Redis (TTL = 30 seconds)
+        try {
+            await redis.set(cacheKey, JSON.stringify(payload), 'EX', 30);
+        } catch (e) {
+            console.warn('[DASHBOARD] Redis cache write error:', e.message);
+        }
+
+        res.json(payload);
+
+    } catch (err) {
+        console.error('[DASHBOARD] Fetch error:', err);
+        res.status(500).json({ success: false, error: 'Internal Server Error' });
+    }
+});
+
 module.exports = {
     router,
     invalidateServiceCache,

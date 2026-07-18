@@ -16,7 +16,8 @@ class RankingService {
         let radius = 5;
         let candidates = [];
 
-        const maxRadius = process.env.NODE_ENV === 'development' ? 500 : 25;
+        const searchRadiusService = require('./search_radius.service');
+        const maxRadius = process.env.NODE_ENV === 'development' ? 500 : searchRadiusService.getRankingRadius(category);
         while (radius <= maxRadius) {
             candidates = await this.fetchGeoCandidates(lat, lng, radius, category, userId);
             if (candidates.length >= 3 || radius === maxRadius) break;
@@ -537,47 +538,9 @@ class RankingService {
     }
 
     postRequest(endpoint, body) {
-        if (Date.now() < mlServiceOfflineUntil) {
-            return Promise.reject(new Error('ML service is currently offline (Circuit Breaker active)'));
-        }
-        return new Promise((resolve, reject) => {
-            const urlObj = new URL(ML_SERVICE_URL + endpoint);
-            const options = {
-                hostname: urlObj.hostname,
-                port: urlObj.port,
-                path: urlObj.pathname,
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                timeout: 1000
-            };
-            const req = http.request(options, (res) => {
-                let data = '';
-                res.on('data', (chunk) => data += chunk);
-                res.on('end', () => {
-                    try {
-                        if (res.statusCode >= 200 && res.statusCode < 300) {
-                            resolve(JSON.parse(data));
-                        } else {
-                            mlServiceOfflineUntil = Date.now() + 30000; // Mark offline for 30 seconds
-                            reject(new Error(`Status ${res.statusCode}`));
-                        }
-                    } catch (e) {
-                        reject(e);
-                    }
-                });
-            });
-            req.on('error', (err) => {
-                mlServiceOfflineUntil = Date.now() + 30000; // Mark offline for 30 seconds
-                reject(err);
-            });
-            req.on('timeout', () => { 
-                req.destroy(); 
-                mlServiceOfflineUntil = Date.now() + 30000; // Mark offline for 30 seconds
-                reject(new Error('Timeout')); 
-            });
-            req.write(JSON.stringify(body));
-            req.end();
-        });
+        const mlHealth = require('./ml_health.service');
+        const modelName = endpoint.includes('ranking') ? 'ranking_model' : 'acceptance_model';
+        return mlHealth.callML(modelName, endpoint, body);
     }
 }
 

@@ -184,6 +184,9 @@ class ExecutionService {
                     const { invalidateAllHomeServicesCaches } = require('../routes/home.routes');
                     await invalidateAllHomeServicesCaches().catch(() => {});
                     
+                    const feedService = require('./feed.service');
+                    await feedService.invalidateFeedCache(jobResult.rows[0].location_lat, jobResult.rows[0].location_lng).catch(() => {});
+                    
                     const eventStream = require('../utils/event_stream');
                     await eventStream.publish('job_completed', {
                         jobId,
@@ -193,6 +196,18 @@ class ExecutionService {
                         category: jobResult.rows[0].category,
                         userId: jobResult.rows[0].user_id
                     });
+
+                    // Log completed dispatch event and worker response for analytics
+                    const matchingService = require('./matching.service');
+                    matchingService.logDispatchEvent(jobId, 'job_completed', { workerId: worker.id }).catch(() => {});
+
+                    // Update search analytics to mark is_completed
+                    try {
+                        await db.query(
+                            "UPDATE search_analytics_logs SET is_completed = true WHERE job_id = $1",
+                            [jobId]
+                        );
+                    } catch (_) {}
                 } catch (streamErr) {
                     console.error("⚠️ [EXECUTION_SERVICE] Failed to publish job_completed event:", streamErr.message);
                 }

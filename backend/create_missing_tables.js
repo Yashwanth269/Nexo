@@ -417,6 +417,115 @@ ALTER TABLE advanced_fatigue_scores ADD COLUMN IF NOT EXISTS calculated_at TIMES
 -- Replace table-level uniqueness on job_offers (which blocks multiple EXPIRED/REJECTED offers) with a partial unique index on PENDING status
 ALTER TABLE job_offers DROP CONSTRAINT IF EXISTS job_offers_job_id_worker_id_status_key;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_job_offers_pending_unique ON job_offers(job_id, worker_id) WHERE status = 'PENDING';
+
+-- Adjust disputes table to match dispute.service.js expectation
+ALTER TABLE disputes ADD COLUMN IF NOT EXISTS evidence JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE disputes ADD COLUMN IF NOT EXISTS sla_deadline TIMESTAMP;
+
+-- New Hardening & Audit Tables
+CREATE TABLE IF NOT EXISTS dispatch_rejection_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+    job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    dispatch_score DECIMAL DEFAULT 0.0,
+    reject_reason VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_dispatch_rejections_job ON dispatch_rejection_logs(job_id);
+
+CREATE TABLE IF NOT EXISTS worker_response_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+    job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    response_type VARCHAR(50) NOT NULL,
+    reason VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_worker_responses_worker ON worker_response_logs(worker_id);
+CREATE INDEX IF NOT EXISTS idx_worker_responses_job ON worker_response_logs(job_id);
+
+CREATE TABLE IF NOT EXISTS search_analytics_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    initial_radius_km DECIMAL,
+    expansion_count INTEGER,
+    workers_found INTEGER,
+    workers_ranked INTEGER,
+    notifications_sent INTEGER,
+    acceptance_time_seconds INTEGER,
+    average_eta_minutes DECIMAL,
+    dispatch_time_seconds INTEGER,
+    is_cancelled BOOLEAN DEFAULT FALSE,
+    is_completed BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_search_analytics_job ON search_analytics_logs(job_id);
+
+CREATE TABLE IF NOT EXISTS dispatch_ranking_breakdowns (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+    final_score DECIMAL NOT NULL,
+    skill_score DECIMAL DEFAULT 0.0,
+    distance_score DECIMAL DEFAULT 0.0,
+    acceptance_probability DECIMAL DEFAULT 0.0,
+    trust_score DECIMAL DEFAULT 0.0,
+    availability_score DECIMAL DEFAULT 0.0,
+    eta_score DECIMAL DEFAULT 0.0,
+    fatigue_penalty DECIMAL DEFAULT 0.0,
+    fraud_penalty DECIMAL DEFAULT 0.0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_ranking_breakdown_job ON dispatch_ranking_breakdowns(job_id);
+
+CREATE TABLE IF NOT EXISTS ml_model_monitoring (
+    model_name VARCHAR(100) PRIMARY KEY,
+    version VARCHAR(50) DEFAULT '1.0.0',
+    avg_latency_ms DECIMAL DEFAULT 0.0,
+    accuracy DECIMAL DEFAULT 0.0,
+    last_trained_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) DEFAULT 'ACTIVE',
+    prediction_count INTEGER DEFAULT 0,
+    failure_count INTEGER DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ml_training_data (
+    id BIGSERIAL PRIMARY KEY,
+    model_type VARCHAR(100) NOT NULL,
+    entity_id UUID NOT NULL,
+    features JSONB NOT NULL,
+    prediction DECIMAL NOT NULL,
+    confidence DECIMAL,
+    actual_outcome DECIMAL,
+    outcome_label VARCHAR(100),
+    logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    outcome_recorded_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS model_maturity (
+    model_name VARCHAR(100) PRIMARY KEY,
+    total_predictions INTEGER DEFAULT 0,
+    recorded_outcomes INTEGER DEFAULT 0,
+    precision DECIMAL,
+    recall DECIMAL,
+    f1_score DECIMAL,
+    auc_roc DECIMAL,
+    calibration_error DECIMAL,
+    min_samples_required INTEGER DEFAULT 5000,
+    is_production_ready BOOLEAN DEFAULT FALSE,
+    calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    role VARCHAR(50) NOT NULL,
+    token_hash VARCHAR(64) NOT NULL,
+    revoked BOOLEAN DEFAULT FALSE,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 `;
 
 async function main() {

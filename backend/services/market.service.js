@@ -592,6 +592,67 @@ const computeRegionTrends = async (userLat, userLng, userId, userHistory = {}) =
     return results;
 };
 
+async function computeTrendingFallback(userLat, userLng, limit) {
+    const list = new Set();
+    
+    // 1. Try 7-day regional
+    try {
+        const res7d = await db.query(`
+            SELECT category, COUNT(*) as count 
+            FROM jobs 
+            WHERE created_at >= NOW() - INTERVAL '7 days'
+              AND earth_distance(ll_to_earth($1, $2), location_cube) / 1000.0 <= 30.0
+            GROUP BY category
+            ORDER BY count DESC LIMIT $3
+        `, [userLat, userLng, limit]);
+        res7d.rows.forEach(r => list.add(r.category));
+    } catch (e) {
+        console.warn('[TRENDING-FALLBACK-7D]', e.message);
+    }
+    
+    // 2. Try 30-day regional
+    if (list.size < limit) {
+        try {
+            const res30d = await db.query(`
+                SELECT category, COUNT(*) as count 
+                FROM jobs 
+                WHERE created_at >= NOW() - INTERVAL '30 days'
+                  AND earth_distance(ll_to_earth($1, $2), location_cube) / 1000.0 <= 30.0
+                GROUP BY category
+                ORDER BY count DESC LIMIT $3
+            `, [userLat, userLng, limit]);
+            res30d.rows.forEach(r => list.add(r.category));
+        } catch (e) {
+            console.warn('[TRENDING-FALLBACK-30D]', e.message);
+        }
+    }
+    
+    // 3. Try 30-day platform-wide
+    if (list.size < limit) {
+        try {
+            const resPlat = await db.query(`
+                SELECT category, COUNT(*) as count 
+                FROM jobs 
+                WHERE created_at >= NOW() - INTERVAL '30 days'
+                GROUP BY category
+                ORDER BY count DESC LIMIT $1
+            `, [limit]);
+            resPlat.rows.forEach(r => list.add(r.category));
+        } catch (e) {
+            console.warn('[TRENDING-FALLBACK-PLATFORM]', e.message);
+        }
+    }
+    
+    // 4. Static platform defaults
+    const defaults = ['Home Services', 'Labour', 'Electrical', 'Transport', 'Delivery', 'Plumbing', 'Cleaning'];
+    for (const d of defaults) {
+        if (list.size >= limit) break;
+        list.add(d);
+    }
+    
+    return Array.from(list);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  PUBLIC API: getTrendingCategories
 // ─────────────────────────────────────────────────────────────────────────────
@@ -638,9 +699,36 @@ const getTrendingCategories = async (userLat, userLng, userId = null, options = 
     let allResults = await computeRegionTrends(userLat, userLng, userId, userHistory);
     const areaType = allResults[0]?.areaType || 'mixed';
 
-    if (allResults.length === 0) {
-        console.log(`[POPULAR_CATEGORIES] No trending data available for segment=${segment}, area=${areaType}`);
-        // Return empty results — no synthetic data
+    // Implement trending fallback hierarchy if results are below limit
+    if (allResults.length < limit) {
+        console.log(`[POPULAR_CATEGORIES] Regional trends count (${allResults.length}) below limit (${limit}). Executing fallback hierarchy.`);
+        const fallbackCats = await computeTrendingFallback(userLat, userLng, limit);
+        
+        const existingCats = new Set(allResults.map(r => r.category));
+        for (const cat of fallbackCats) {
+            if (allResults.length >= limit) break;
+            if (!existingCats.has(cat)) {
+                allResults.push({
+                    category: cat,
+                    trendScore: 0.1,
+                    freshnessScore: 0.1,
+                    growthPct: 0,
+                    activeWorkers: 0,
+                    reqCount1h: 0,
+                    reqCount24h: 0,
+                    reqCount15m: 0,
+                    supplyPressure: 0,
+                    confidence: 0.5,
+                    isHotZone: false,
+                    completionRate: 85,
+                    avgResponseMinutes: 10,
+                    areaType: areaType,
+                    segment: segment,
+                    isFallback: true
+                });
+                existingCats.add(cat);
+            }
+        }
     }
 
     const topResults  = allResults.slice(0, Math.ceil(limit * (1 - EXPLORATION_INJECT_PCT)));

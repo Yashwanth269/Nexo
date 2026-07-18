@@ -4,6 +4,18 @@ const matchingService = require('./matching.service');
 const userTrustService = require('./user_trust.service');
 const backupWorkerService = require('./backup_worker.service');
 
+async function logWorkerResponse(workerId, jobId, responseType, reason = null) {
+    try {
+        await db.query(`
+            INSERT INTO worker_response_logs (worker_id, job_id, response_type, reason)
+            VALUES ($1, $2, $3, $4)
+        `, [workerId, jobId, responseType, reason]);
+        console.log(`[WORKER-RESPONSE] Worker ${workerId} → ${responseType} for Job ${jobId}`);
+    } catch (e) {
+        console.error('[WORKER-RESPONSE-LOG-ERROR]', e.message);
+    }
+}
+
 class JobService {
     async acceptJob(jobId, workerId) {
         const { getIO } = require('../config/socket');
@@ -98,6 +110,13 @@ class JobService {
             await redis.del(lockKey);
             const { invalidateAllHomeServicesCaches } = require('../routes/home.routes');
             await invalidateAllHomeServicesCaches().catch(() => {});
+
+            const feedService = require('./feed.service');
+            await feedService.invalidateFeedCache(job.location_lat, job.location_lng).catch(() => {});
+
+            // Log worker response for ML training
+            logWorkerResponse(worker.id, jobId, 'ACCEPTED').catch(() => {});
+            matchingService.logDispatchEvent(jobId, 'worker_accepted', { workerId: worker.id }).catch(() => {});
 
             // 7.5 Auto-reserve backup workers
             backupWorkerService.autoReserveOnAcceptance(jobId, worker.id).catch(e => {
@@ -284,6 +303,13 @@ class JobService {
             await redis.srem('jobs:active_set', job.id);
             const { invalidateAllHomeServicesCaches } = require('../routes/home.routes');
             await invalidateAllHomeServicesCaches().catch(() => {});
+
+            const feedService = require('./feed.service');
+            await feedService.invalidateFeedCache(job.location_lat, job.location_lng).catch(() => {});
+
+            // Log worker response for ML training
+            logWorkerResponse(offer.worker_id, job.id, 'ACCEPTED', 'via_offer').catch(() => {});
+            matchingService.logDispatchEvent(job.id, 'worker_accepted', { workerId: offer.worker_id, via: 'offer' }).catch(() => {});
 
             // Broadcast
             const matchingService = require('./matching.service');
@@ -597,6 +623,10 @@ class JobService {
             [jobId, resolvedWorkerId]
         );
 
+        // Log worker response for ML training
+        logWorkerResponse(resolvedWorkerId, jobId, 'DECLINED').catch(() => {});
+        matchingService.logDispatchEvent(jobId, 'worker_declined', { workerId: resolvedWorkerId }).catch(() => {});
+
         return { success: true };
     }
 
@@ -682,6 +712,13 @@ class JobService {
             await redis.set(`job:${jobId}:status`, 'REDISTRIBUTING');
             const { invalidateAllHomeServicesCaches } = require('../routes/home.routes');
             await invalidateAllHomeServicesCaches().catch(() => {});
+
+            const feedService = require('./feed.service');
+            await feedService.invalidateFeedCache(job.location_lat, job.location_lng).catch(() => {});
+
+            // Log worker response for ML training
+            logWorkerResponse(worker.id, jobId, 'CANCELLED', reason).catch(() => {});
+            matchingService.logDispatchEvent(jobId, 'worker_cancelled', { workerId: worker.id, reason }).catch(() => {});
             
             // Re-sync to Redis active jobs GEO index so nearby workers can search/see it
             const geoHashService = require('./geo_hash.service');

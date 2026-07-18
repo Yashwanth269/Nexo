@@ -9,6 +9,14 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
+// Strict production check for socket bypass config
+if (process.env.NODE_ENV === 'production') {
+    if (process.env.ALLOW_SOCKET_BYPASS === 'true' || process.env.BYPASS_SOCKET_AUTH === 'true') {
+        console.error("❌ [FATAL] Security bypass configuration 'ALLOW_SOCKET_BYPASS' or 'BYPASS_SOCKET_AUTH' is enabled in a PRODUCTION environment. Refusing to start the server for security reasons.");
+        process.exit(1);
+    }
+}
+
 const db = require('./config/db');
 const { globalRateLimiter, securityMiddleware } = require('./middleware/security.middleware');
 const { SECRET_KEY } = require('./utils/auth.middleware');
@@ -135,6 +143,26 @@ app.get('/health', (req, res) => {
     });
 });
 
+app.get('/api/ml/health', (req, res) => {
+    const mlHealth = require('./services/ml_health.service');
+    res.json(mlHealth.getStatus());
+});
+
+app.get('/api/ml/status', (req, res) => {
+    const mlHealth = require('./services/ml_health.service');
+    res.json(mlHealth.getStatus());
+});
+
+app.get('/api/admin/migration-status', (req, res) => {
+    const dbValidator = require('./services/db_validator.service');
+    res.json(dbValidator.getStatus());
+});
+
+app.get('/api/migration/status', (req, res) => {
+    const dbValidator = require('./services/db_validator.service');
+    res.json(dbValidator.getStatus());
+});
+
 app.get('/ready', async (req, res) => {
     const redis = require('./config/redis');
     const isProduction = process.env.NODE_ENV === 'production';
@@ -198,6 +226,7 @@ app.use('/api/admin', authenticateToken, require('./routes/admin.routes'));
 app.use('/api/backup-worker', authenticateToken, require('./routes/backup_worker.routes'));
 app.use('/api/trust', authenticateToken, require('./routes/trust.routes'));
 app.use('/api/fatigue', authenticateToken, require('./routes/fatigue.routes'));
+app.use('/api/metrics', authenticateToken, require('./routes/metrics.routes'));
 
 // Shared Photo Upload (requires auth)
 app.post('/api/user/upload-photo', authenticateToken, upload.single('photo'), (req, res) => {
@@ -226,9 +255,10 @@ app.use((req, res) => {
 // =============================================================
 io.use((socket, next) => {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    const isProduction = process.env.NODE_ENV === 'production';
     
     if (!token) {
-        if (process.env.NODE_ENV === 'development') {
+        if (!isProduction) {
             console.log(`⚠️ [SOCKET-AUTH-BYPASS] No token provided for socket ${socket.id}. Mocking credentials in dev.`);
             const queryRole = socket.handshake.query?.role || 'WORKER';
             const phone = socket.handshake.query?.phoneNumber || socket.handshake.query?.phone || '9731016442';
@@ -248,7 +278,7 @@ io.use((socket, next) => {
         socket.user = decoded;
         next();
     } catch (err) {
-        if (process.env.NODE_ENV === 'development') {
+        if (!isProduction) {
             console.log(`⚠️ [SOCKET-AUTH-BYPASS] Invalid/Expired token for socket ${socket.id}. Mocking credentials in dev. Error: ${err.message}`);
             const queryRole = socket.handshake.query?.role || 'WORKER';
             const phone = socket.handshake.query?.phoneNumber || socket.handshake.query?.phone || '9731016442';
@@ -318,6 +348,10 @@ io.on('connection', (socket) => {
 
             // Invalidate home services cache for this area
             await invalidateServiceCache(location.lat, location.lng).catch(() => {});
+
+            // Invalidate regional feed cache for this area
+            const feedService = require('./services/feed.service');
+            await feedService.invalidateFeedCache(location.lat, location.lng).catch(() => {});
         }
     });
 
@@ -360,9 +394,11 @@ io.on('connection', (socket) => {
     socket.on('disconnect', async () => {
         console.log(`❌ [SOCKET] Client Disconnected: ${socket.id}`);
 
-        // Invalidate service cache when a worker disconnects
+        // Invalidate service cache when a client disconnects
         if (socket.user?.location) {
             await invalidateServiceCache(socket.user.location.lat, socket.user.location.lng).catch(() => {});
+            const feedService = require('./services/feed.service');
+            await feedService.invalidateFeedCache(socket.user.location.lat, socket.user.location.lng).catch(() => {});
         }
         
         if (socket.role === 'WORKER' && socket.phoneNumber) {
@@ -384,6 +420,13 @@ io.on('connection', (socket) => {
                         await redis.del(`worker:${socket.workerId}:geohash`);
                         await redis.del(`worker:${socket.workerId}:last_seen`);
                         await redis.srem('workers:active_set', socket.workerId);
+
+                        // Invalidate regional feed cache
+                        const coordsRes = await db.query("SELECT current_lat, current_lng FROM workers WHERE id = $1", [socket.workerId]);
+                        if (coordsRes.rowCount > 0 && coordsRes.rows[0].current_lat) {
+                            const feedService = require('./services/feed.service');
+                            await feedService.invalidateFeedCache(coordsRes.rows[0].current_lat, coordsRes.rows[0].current_lng).catch(() => {});
+                        }
                     }
                     
                     console.log(`👷 [WORKER] ${socket.phoneNumber} marked offline & removed from GEO index.`);
@@ -408,9 +451,17 @@ server.listen(PORT, () => {
     console.log(`--------------------------------------------\n`);
 });
 
-// Start Payment Cron Service
-const cronService = require('./services/cron.service');
-cronService.start();
+// Run Database Validation & Start Payment Cron Service
+const dbValidator = require('./services/db_validator.service');
+dbValidator.validateSchema().then(() => {
+    console.log(`🔍 [DB-VALIDATION] Schema validation completed. Schema is ${dbValidator.isValid ? 'VALID' : 'INVALID'}`);
+    const cronService = require('./services/cron.service');
+    cronService.start();
+}).catch(err => {
+    console.error("🔍 [DB-VALIDATION-ERROR] Schema validation failed to run:", err.message);
+    const cronService = require('./services/cron.service');
+    cronService.start();
+});
 
 // --- GRACEFUL SHUTDOWN ---
 const gracefulShutdown = (signal) => {

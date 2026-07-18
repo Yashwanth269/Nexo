@@ -10,6 +10,33 @@ const fatigueService = require('./fatigue.service');
 const reputationService = require('./reputation.service');
 const { isSkillMatch } = require('../utils/skill_matcher');
 
+async function logDispatchEvent(jobId, eventType, metadata = {}, workerId = null) {
+    try {
+        const jobRes = await db.query("SELECT created_at, user_id FROM jobs WHERE id = $1", [jobId]);
+        if (jobRes.rowCount === 0) return;
+        const job = jobRes.rows[0];
+        const latencyMs = Date.now() - new Date(job.created_at).getTime();
+        
+        await db.query(`
+            INSERT INTO event_logs (job_id, worker_id, user_id, event_type, metadata)
+            VALUES ($1, $2, $3, $4, $5)
+        `, [
+            jobId,
+            workerId,
+            job.user_id,
+            eventType,
+            JSON.stringify({
+                ...metadata,
+                latencyFromCreationMs: latencyMs,
+                timestamp: new Date().toISOString()
+            })
+        ]);
+        console.log(`[DISPATCH-EVENT] Logged ${eventType} for job ${jobId}`);
+    } catch (e) {
+        console.error('[DISPATCH-EVENT-ERROR]', e.message);
+    }
+}
+
 function parseJobIntent(description, category) {
     const desc = (description || '').toLowerCase();
     let subcategory = category || '';
@@ -42,6 +69,22 @@ function parseJobIntent(description, category) {
     }
 
     return { subcategory, skills, priority };
+}
+
+function getWorkerTier(worker) {
+    const score = worker.rep_overall_score !== null && worker.rep_overall_score !== undefined ? parseFloat(worker.rep_overall_score) : null;
+    const rating = worker.avg_rating !== null && worker.avg_rating !== undefined ? parseFloat(worker.avg_rating) : parseFloat(worker.raw_rating || 4.0);
+    if (score !== null) {
+        if (score >= 80) return 'A';
+        if (score >= 60) return 'B';
+        if (score >= 40) return 'C';
+        return 'D';
+    } else {
+        if (rating >= 4.5) return 'A';
+        if (rating >= 4.0) return 'B';
+        if (rating >= 3.0) return 'C';
+        return 'D';
+    }
 }
 
 class MatchingService {
@@ -262,165 +305,198 @@ class MatchingService {
             return;
         }
 
-        console.log(`🚀 [DISPATCH-PIPELINE] Staged Matching engine running for Job ${jobId}`);
+        const notifiedWorkerIds = new Set();
+        let hasAccepted = false;
+        let analyticsId = null;
+        let totalWorkersFound = 0;
+        let totalWorkersRanked = 0;
+        let totalNotificationsSent = 0;
+        const pipelineStartMs = Date.now();
 
-        let currentRadius = 3;
-        const maxRadius = 25;
-        let radiusExpansionCount = 0;
-
-        while (true) {
+        try {
+            // 1. Fetch current job info and verify active status
             const jobRes = await db.query("SELECT * FROM jobs WHERE id = $1", [jobId]);
-            if (jobRes.rowCount === 0) break;
+            if (jobRes.rowCount === 0) {
+                await redis.del(pipelineLock);
+                return;
+            }
             const job = jobRes.rows[0];
 
             if (!['OPEN', 'REDISTRIBUTING', 'REASSIGNING'].includes(job.status)) {
                 console.log(`[DISPATCH-TERMINATE] Job ${jobId} status is ${job.status}. Terminating staged matching.`);
-                break;
+                await redis.del(pipelineLock);
+                return;
             }
 
-            // Emit dynamic progress: Searching nearby... (Step 9)
-            this.io.to(`user:${job.user_id}`).emit('searching_status', {
-                status: 'SEARCHING_NEARBY',
-                message: `Searching partners within ${currentRadius} km...`,
-                radius: currentRadius,
-                searchState: radiusExpansionCount >= 2 ? 3 : (radiusExpansionCount >= 1 ? 2 : 1)
-            });
+            console.log(`🚀 [DISPATCH-PIPELINE] Staged Matching engine running for Job ${jobId}`);
 
-            // Update database search parameters for home screen ongoing carousel card
-            await db.query(
-                "UPDATE jobs SET search_radius_km = $1, search_state_stage = $2, updated_at = NOW() WHERE id = $3",
-                [currentRadius, radiusExpansionCount + 1, jobId]
-            );
-
-            // Step 1: Parse Description Intent
-            const intent = parseJobIntent(job.description, job.category);
-
-            // Step 2 & 4: Fetch and Filter Candidates
-            const candidates = await this.getStageCandidates(job, intent, currentRadius);
-
-            if (candidates.length === 0) {
-                if (currentRadius < maxRadius) {
-                    currentRadius = currentRadius === 3 ? 5 : (currentRadius === 5 ? 8 : (currentRadius === 8 ? 12 : (currentRadius === 12 ? 20 : maxRadius)));
-                    radiusExpansionCount++;
-                    await new Promise(r => setTimeout(r, 2000));
-                    continue;
+            // Initialize search analytics record
+            try {
+                const existingAnalytics = await db.query("SELECT id FROM search_analytics_logs WHERE job_id = $1", [jobId]);
+                if (existingAnalytics.rowCount === 0) {
+                    const isRural = ['Agriculture', 'Labour', 'Transport', 'Construction'].includes(job.category);
+                    const initRadius = isRural ? 5.0 : 3.0;
+                    const saRes = await db.query(`
+                        INSERT INTO search_analytics_logs (job_id, initial_radius_km, expansion_count, workers_found, workers_ranked, notifications_sent, dispatch_time_seconds)
+                        VALUES ($1, $2, 0, 0, 0, 0, 0) RETURNING id
+                    `, [jobId, initRadius]);
+                    analyticsId = saRes.rows[0].id;
                 } else {
-                    console.log(`[DISPATCH-FAIL] No candidate workers found in maximum radius ${maxRadius}km for Job ${jobId}.`);
-                    await db.query("UPDATE jobs SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [jobId]);
-                    await redis.set(`job:${jobId}:status`, 'FAILED');
-                    
-                    this.io.to(`user:${job.user_id}`).emit('searching_status', {
-                        status: 'FAILED',
-                        message: "No nearby workers available right now."
-                    });
-                    this.io.to(`user:${job.user_id}`).emit('JOB_DISPATCH_FAILED', { jobId });
-                    break;
+                    analyticsId = existingAnalytics.rows[0].id;
                 }
+            } catch (saErr) {
+                console.warn('[SEARCH-ANALYTICS-INIT]', saErr.message);
             }
 
-            // Exclusive One-by-One Dispatch Loop
-            let hasAccepted = false;
-            for (const candidate of candidates) {
-                // Re-verify job status is still valid before sending
-                const checkRes = await db.query("SELECT status FROM jobs WHERE id = $1", [jobId]);
-                if (checkRes.rowCount === 0 || !['OPEN', 'REDISTRIBUTING', 'REASSIGNING'].includes(checkRes.rows[0].status)) {
+            await logDispatchEvent(jobId, 'dispatch_started', { category: job.category, priority: job.priority });
+
+            const searchRadiusService = require('./search_radius.service');
+            const isEmergency = job.category === 'Emergency' || job.priority === 'High' || job.priority === 'Critical';
+            const stages = searchRadiusService.getDispatchStages(job.category, isEmergency);
+
+            for (let stageIdx = 0; stageIdx < stages.length; stageIdx++) {
+                const stage = stages[stageIdx];
+
+                // Refresh job check inside loop
+                const loopJobCheck = await db.query("SELECT status FROM jobs WHERE id = $1", [jobId]);
+                if (loopJobCheck.rowCount === 0 || !['OPEN', 'REDISTRIBUTING', 'REASSIGNING'].includes(loopJobCheck.rows[0].status)) {
                     hasAccepted = true;
                     break;
                 }
 
-                // Double check no active pending offer exists (to be completely safe)
-                const activeOfferCheck = await db.query(
-                    "SELECT id FROM job_offers WHERE job_id = $1 AND status = 'PENDING' AND expires_at > NOW()",
-                    [jobId]
+                const radiusKm = stage.radius;
+
+                console.log(`[DISPATCH-STAGE] Running Stage ${stageIdx + 1} for Job ${jobId} (Radius: ${radiusKm}km, Tiers: ${stage.tiers.join(',')}, Max Notify: ${stage.notifyCount})`);
+
+                // Log radius expansion event
+                await logDispatchEvent(jobId, `radius_expansion_stage_${stageIdx + 1}`, { radiusKm, stageTiers: stage.tiers });
+
+                // Emit dynamic progress status
+                this.io.to(`user:${job.user_id}`).emit('searching_status', {
+                    status: 'SEARCHING_NEARBY',
+                    message: stage.statusMsg,
+                    radius: radiusKm,
+                    searchState: stage.searchState
+                });
+
+                // Update database search parameters for home screen ongoing carousel card
+                await db.query(
+                    "UPDATE jobs SET search_radius_km = $1, search_state_stage = $2, updated_at = NOW() WHERE id = $3",
+                    [radiusKm, stage.searchState, jobId]
                 );
-                if (activeOfferCheck.rowCount > 0) {
-                    // Wait for the existing offer to resolve
-                    const existingOffer = activeOfferCheck.rows[0];
-                    const resultState = await this.waitForAcceptanceOrRejection(jobId, existingOffer.id, 20);
-                    if (resultState === 'ACCEPTED') {
-                        hasAccepted = true;
-                        break;
-                    }
-                    continue; // Proceed to next candidate
+
+                // Parse Description Intent
+                const intent = parseJobIntent(job.description, job.category);
+
+                // Fetch candidates within current radius
+                const candidates = await this.getStageCandidates(job, intent, radiusKm);
+                totalWorkersFound += candidates.length;
+
+                // Filter candidates by stage tiers & exclusion list
+                const stageCandidates = candidates.filter(w => {
+                    const tier = getWorkerTier(w);
+                    return stage.tiers.includes(tier) && !notifiedWorkerIds.has(w.id);
+                });
+                totalWorkersRanked += stageCandidates.length;
+
+                // Select top N candidates
+                const targets = stageCandidates.slice(0, stage.notifyCount);
+
+                if (targets.length > 0) {
+                    console.log(`[DISPATCH-STAGE] Notifying ${targets.length} workers simultaneously in Stage ${stageIdx + 1}`);
+                    
+                    // Mark as notified
+                    targets.forEach(w => notifiedWorkerIds.add(w.id));
+                    totalNotificationsSent += targets.length;
+
+                    // Send offers to selected targets
+                    await this.notifyWorkersForJob(job, targets);
+
+                    // Wait 20 seconds for anyone to accept
+                    hasAccepted = await this.waitForAcceptance(jobId, 20);
+                } else {
+                    console.log(`[DISPATCH-STAGE] No new candidates found in Stage ${stageIdx + 1}. Waiting 20 seconds anyway before expanding.`);
+                    hasAccepted = await this.waitForAcceptance(jobId, 20);
                 }
 
-                console.log(`[DISPATCH-EXCLUSIVE] Offering Job ${jobId} to Worker ${candidate.phone_number} (${candidate.full_name}) exclusively`);
-                
-                // Emit dynamic progress status to user
-                this.io.to(`user:${job.user_id}`).emit('searching_status', {
-                    status: 'WORKERS_REVIEWING',
-                    message: `Waiting for response from closest expert...`,
-                    reviewingCount: 1
-                });
-
-                // Create the exclusive offer (20 seconds TTL)
-                const offerTtl = 20;
-                const offerId = await this.createOffer(job, candidate, candidate.distance, candidate.pAccept, offerTtl);
-                
-                if (offerId) {
-                    // Wait for this specific worker to accept, reject or timeout
-                    const resultState = await this.waitForAcceptanceOrRejection(jobId, offerId, offerTtl);
-                    if (resultState === 'ACCEPTED') {
-                        hasAccepted = true;
-                        break;
-                    }
+                if (hasAccepted) {
+                    // Flush analytics update on acceptance
+                    const dispatchTimeSec = Math.round((Date.now() - pipelineStartMs) / 1000);
+                    try {
+                        if (analyticsId) {
+                            await db.query(`
+                                UPDATE search_analytics_logs
+                                SET expansion_count = $1, workers_found = workers_found + $2,
+                                    workers_ranked = workers_ranked + $3, notifications_sent = notifications_sent + $4,
+                                    dispatch_time_seconds = $5
+                                WHERE id = $6
+                            `, [stageIdx + 1, totalWorkersFound, totalWorkersRanked, totalNotificationsSent, dispatchTimeSec, analyticsId]);
+                        }
+                    } catch (saFlushErr) { console.warn('[ANALYTICS-FLUSH]', saFlushErr.message); }
+                    await logDispatchEvent(jobId, 'worker_accepted', { stage: stageIdx + 1, radiusKm });
+                    break;
                 }
             }
 
-            // Expand radius if still not accepted
-            if (currentRadius < maxRadius) {
-                currentRadius = currentRadius === 3 ? 5 : (currentRadius === 5 ? 8 : (currentRadius === 8 ? 12 : (currentRadius === 12 ? 20 : maxRadius)));
-                radiusExpansionCount++;
-                await new Promise(r => setTimeout(r, 2000));
-            } else {
-                console.log(`[DISPATCH-FAIL] All candidate tiers exhausted at ${maxRadius}km for Job ${jobId}.`);
-                await db.query("UPDATE jobs SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [jobId]);
-                await redis.set(`job:${jobId}:status`, 'FAILED');
-                
-                this.io.to(`user:${job.user_id}`).emit('searching_status', {
-                    status: 'FAILED',
-                    message: "No nearby workers accepted the job request."
-                });
-                this.io.to(`user:${job.user_id}`).emit('JOB_DISPATCH_FAILED', { jobId });
-                break;
+            // 2. Final check after all stages completed
+            if (!hasAccepted) {
+                const finalJobCheck = await db.query("SELECT status, user_id FROM jobs WHERE id = $1", [jobId]);
+                if (finalJobCheck.rowCount > 0 && ['OPEN', 'REDISTRIBUTING', 'REASSIGNING'].includes(finalJobCheck.rows[0].status)) {
+                    console.log(`[DISPATCH-FAIL] No candidate workers accepted the request within 120s for Job ${jobId}.`);
+
+                    // Flush final search analytics
+                    const dispatchTimeSec = Math.round((Date.now() - pipelineStartMs) / 1000);
+                    try {
+                        if (analyticsId) {
+                            await db.query(`
+                                UPDATE search_analytics_logs
+                                SET expansion_count = $1, workers_found = workers_found + $2,
+                                    workers_ranked = workers_ranked + $3, notifications_sent = notifications_sent + $4,
+                                    dispatch_time_seconds = $5
+                                WHERE id = $6
+                            `, [stages.length, totalWorkersFound, totalWorkersRanked, totalNotificationsSent, dispatchTimeSec, analyticsId]);
+                        }
+                    } catch (saFlushErr) { console.warn('[ANALYTICS-FLUSH-FAIL]', saFlushErr.message); }
+
+                    // Log failed_no_worker dispatch event
+                    await logDispatchEvent(jobId, 'failed_no_worker', {
+                        reason: 'No workers accepted across all stages',
+                        stagesRun: stages.length,
+                        workersNotified: totalNotificationsSent
+                    });
+                    
+                    await db.query("UPDATE jobs SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [jobId]);
+                    await redis.set(`job:${jobId}:status`, 'FAILED');
+
+                    const failedJob = finalJobCheck.rows[0];
+                    this.io.to(`user:${failedJob.user_id}`).emit('searching_status', {
+                        status: 'FAILED',
+                        message: "No nearby workers accepted your request."
+                    });
+                    this.io.to(`user:${failedJob.user_id}`).emit('JOB_DISPATCH_FAILED', { jobId });
+                }
             }
+        } catch (err) {
+            console.error(`[DISPATCH-PIPELINE-ERROR] Error on runDispatchPipeline for ${jobId}:`, err.message);
+        } finally {
+            await redis.del(pipelineLock);
         }
-
-        await redis.del(pipelineLock);
     }
 
     async getStageCandidates(job, intent, radiusKm) {
-        let queryText;
-        if (db.isPostgisAvailable()) {
-            queryText = `
-                SELECT w.*,
-                       ST_Distance(
-                           ST_SetSRID(ST_MakePoint(w.current_lng, w.current_lat), 4326)::geography,
-                           ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
-                       ) / 1000.0 AS distance
-                FROM workers w
-                WHERE w.is_online = true
-                  AND w.is_available = true
-                  AND w.verification_status = 'VERIFIED'
-                  AND ST_DWithin(
-                      ST_SetSRID(ST_MakePoint(w.current_lng, w.current_lat), 4326)::geography,
-                      ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
-                      $3 * 1000
-                  )
-                ORDER BY distance ASC`;
-        } else {
-            queryText = `
-                SELECT w.*,
-                       earth_distance(ll_to_earth($1, $2), w.location_cube) / 1000.0 AS distance
-                FROM workers w
-                WHERE w.is_online = true
-                  AND w.is_available = true
-                  AND w.verification_status = 'VERIFIED'
-                  AND earth_distance(ll_to_earth($1, $2), w.location_cube) / 1000.0 <= $3
-                ORDER BY distance ASC`;
-        }
+        // Query ALL workers within a wide 50km radius to allow evaluation & rejection logging
+        let queryText = `
+            SELECT w.id, w.full_name, w.phone_number, w.photo_url, w.skills, w.experience, w.rating as raw_rating,
+                   w.jobs_completed, w.is_online, w.is_available, w.current_lat, w.current_lng, w.verification_status, w.tasks,
+                   r.trust_score as rep_trust_score, r.reliability_score as rep_reliability_score, r.overall_score as rep_overall_score,
+                   earth_distance(ll_to_earth($1, $2), w.location_cube) / 1000.0 AS distance
+            FROM workers w
+            LEFT JOIN worker_reputation_scores r ON w.id = r.worker_id
+            WHERE w.location_cube IS NOT NULL
+              AND earth_distance(ll_to_earth($1, $2), w.location_cube) / 1000.0 <= 50.0
+            ORDER BY distance ASC`;
 
-        const dbWorkers = await db.query(queryText, [job.location_lat, job.location_lng, radiusKm]);
+        const dbWorkers = await db.query(queryText, [job.location_lat, job.location_lng]);
         const workers = dbWorkers.rows.map(w => ({
             ...w,
             distance: parseFloat(w.distance || 0)
@@ -442,30 +518,99 @@ class MatchingService {
         const fatigueService = require('./fatigue.service');
         const reputationService = require('./reputation.service');
 
+        const logRejection = async (workerId, reason, score = 0.0) => {
+            try {
+                const check = await db.query(
+                    "SELECT id FROM dispatch_rejection_logs WHERE job_id = $1 AND worker_id = $2 AND reject_reason = $3",
+                    [job.id, workerId, reason]
+                );
+                if (check.rowCount === 0) {
+                    await db.query(
+                        `INSERT INTO dispatch_rejection_logs (job_id, worker_id, dispatch_score, reject_reason)
+                         VALUES ($1, $2, $3, $4)`,
+                        [job.id, workerId, score, reason]
+                    );
+                }
+            } catch (e) {
+                console.error('[REJECTION-LOG-ERROR]', e.message);
+            }
+        };
+
         for (const worker of workers) {
-            if (excludedIds.has(worker.id)) continue;
+            // Check 1: Distance
+            if (worker.distance > radiusKm) {
+                await logRejection(worker.id, 'Distance');
+                continue;
+            }
+
+            // Check 2: Online
+            if (!worker.is_online) {
+                await logRejection(worker.id, 'Offline');
+                continue;
+            }
+
+            // Check 3: Available
+            if (!worker.is_available) {
+                await logRejection(worker.id, 'Busy');
+                continue;
+            }
+
+            // Check 4: Verification
+            if (worker.verification_status !== 'VERIFIED') {
+                await logRejection(worker.id, 'Unverified');
+                continue;
+            }
+
+            // Check 5: Exclusions
+            if (excludedIds.has(worker.id)) {
+                await logRejection(worker.id, 'Already working');
+                continue;
+            }
             
-            // Skill and category matching (Step 2)
-            if (!isSkillMatch(worker.skills, worker.tasks, job.category)) continue;
+            // Check 6: Skill match
+            if (!isSkillMatch(worker.skills, worker.tasks, job.category)) {
+                await logRejection(worker.id, 'Skill mismatch');
+                continue;
+            }
 
             const rep = await reputationService.getReputation(worker.id).catch(() => ({}));
             const fatigue = await fatigueService.calculateAdvancedFatigue(worker.id).catch(() => ({ score: 0, band: 'NONE' }));
 
-            // Skip critical fatigue (Step 4)
-            if (fatigue.band === 'CRITICAL') continue;
+            // Check 7: Fatigue
+            if (fatigue.band === 'CRITICAL') {
+                await logRejection(worker.id, 'Fatigue');
+                continue;
+            }
 
-            // GPS Spoof / Shadow Ban Check
+            // Check 8: Shadow ban
             const shadowPenalties = await shadowBanService.applyBanPenalties(worker.id, 1.0, 1.0);
-            if (shadowPenalties.dispatch === 0.0) continue;
+            if (shadowPenalties.dispatch === 0.0) {
+                await logRejection(worker.id, 'Shadow banned');
+                continue;
+            }
 
-            // ML scoring components (Step 5)
+            // Check 9: Trust score
+            const trustVal = worker.rep_trust_score !== null ? parseFloat(worker.rep_trust_score) : 50;
+            if (trustVal < 40) {
+                await logRejection(worker.id, 'Trust too low');
+                continue;
+            }
+
+            // Check 10: Reputation
+            const repVal = worker.rep_overall_score !== null ? parseFloat(worker.rep_overall_score) : 50;
+            if (repVal < 40) {
+                await logRejection(worker.id, 'Reputation too low');
+                continue;
+            }
+
+            // Score computation
             let skillConfidence = 0.5;
             try {
                 const sc = await skillConfidenceService.getCategoryConfidence(worker.id, job.category);
                 skillConfidence = (sc.confidence_score || 50) / 100.0;
             } catch (e) {}
 
-            const reputation = parseFloat(rep.overall_score || 50) / 100.0;
+            const reputation = repVal / 100.0;
 
             let pAccept = 0.5;
             try {
@@ -480,32 +625,64 @@ class MatchingService {
             const userPreferenceMatch = 1.0;
             const categoryExperience = Math.min(1.0, (worker.jobs_completed || 0) / 50.0);
 
-            let score = 
-                (0.25 * skillConfidence) +
-                (0.20 * reputation) +
-                (0.15 * pAccept) +
-                (0.15 * distanceScore) +
-                (0.10 * availabilityScore) +
-                (0.05 * etaScore) +
-                (0.05 * userPreferenceMatch) +
-                (0.05 * categoryExperience);
+            // Compute sub-components
+            const compSkill = 0.25 * skillConfidence;
+            const compRep = 0.20 * reputation;
+            const compAccept = 0.15 * pAccept;
+            const compDist = 0.15 * distanceScore;
+            const compAvail = 0.10 * availabilityScore;
+            const compEta = 0.05 * etaScore;
+            const compPref = 0.05 * userPreferenceMatch;
+            const compExp = 0.05 * categoryExperience;
+
+            let score = compSkill + compRep + compAccept + compDist + compAvail + compEta + compPref + compExp;
 
             // Apply Penalties
-            score -= (fatigue.score * 0.15);
+            const fatiguePenalty = fatigue.score * 0.15;
+            score -= fatiguePenalty;
             score *= shadowPenalties.visibility;
 
-            // Step 13: Affinity boost
+            // Affinity boost
+            let affinityBoost = 0.0;
             const prevHired = await db.query(
                 "SELECT COUNT(*) FROM jobs WHERE user_id = $1 AND worker_id = $2 AND status = 'COMPLETED'",
                 [job.user_id, worker.id]
             );
             if (parseInt(prevHired.rows[0]?.count || 0) > 0) {
-                score += 0.10;
+                affinityBoost = 0.10;
+                score += affinityBoost;
+            }
+
+            const finalScore = Math.min(1.0, Math.max(0.0, score));
+
+            // Log detailed ranking breakdown to DB (Point 14)
+            try {
+                await db.query(`
+                    INSERT INTO dispatch_ranking_breakdowns (
+                        job_id, worker_id, final_score, skill_score, distance_score,
+                        acceptance_probability, trust_score, availability_score, eta_score,
+                        fatigue_penalty, fraud_penalty
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                `, [
+                    job.id,
+                    worker.id,
+                    finalScore * 100, // format as out of 100 for display (e.g. 92)
+                    compSkill * 100,
+                    compDist * 100,
+                    compAccept * 100,
+                    trustVal,
+                    compAvail * 100,
+                    compEta * 100,
+                    -fatiguePenalty * 100,
+                    0.0 // fraud penalty placeholder
+                ]);
+            } catch (breakdownErr) {
+                console.error('[RANKING-BREAKDOWN-ERROR]', breakdownErr.message);
             }
 
             candidates.push({
                 ...worker,
-                score: Math.min(1.0, Math.max(0.0, score)),
+                score: finalScore,
                 pAccept,
                 etaMinutes
             });
@@ -677,6 +854,10 @@ class MatchingService {
         } catch (e) {
             console.error("[STALE-WORKER-CLEANUP]", e.message);
         }
+    }
+
+    async logDispatchEvent(jobId, eventType, metadata = {}, workerId = null) {
+        return logDispatchEvent(jobId, eventType, metadata, workerId);
     }
 
     async invalidateJobCaches(jobId, workerId = null) {

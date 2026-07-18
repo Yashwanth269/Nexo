@@ -84,8 +84,8 @@ class FeedService {
             scored.sort((a, b) => b.score - a.score);
             rankedPostIds = scored.map(item => ({ id: item.id, score: item.score }));
             
-            // Store in Redis (TTL = 120s / 2 minutes)
-            await redis.set(cacheKey, JSON.stringify(rankedPostIds), 'EX', 120);
+            // Store in Redis (TTL = 30s)
+            await redis.set(cacheKey, JSON.stringify(rankedPostIds), 'EX', 30);
             console.log(`[FEED_RANKING] Recalculated & cached ${rankedPostIds.length} ranked posts for ${cacheKey}. Latency: ${Date.now() - start}ms`);
         }
         
@@ -639,6 +639,30 @@ class FeedService {
             }
         } catch (err) {
             console.error('❌ [FEED_SERVICE] Error in createOrUpdateCompletedPost:', err.message);
+        }
+    }
+
+    async invalidateFeedCache(lat, lng) {
+        try {
+            if (!lat || !lng) return;
+            const hash = geoHash.encode(parseFloat(lat), parseFloat(lng), 5);
+            const cacheKey = `feed_region:${hash}`;
+            await redis.del(cacheKey);
+            console.log(`[FEED_CACHE] Invalidated feed cache for key ${cacheKey}`);
+        } catch (e) {
+            console.warn('[FEED_CACHE] Invalidation error:', e.message);
+        }
+    }
+
+    async invalidateAllFeedCaches() {
+        try {
+            const keys = await redis.keys('feed_region:*');
+            if (keys.length > 0) {
+                await redis.del(...keys);
+            }
+            console.log(`[FEED_CACHE] Global feed invalidation: deleted ${keys.length} keys`);
+        } catch (e) {
+            console.warn('[FEED_CACHE] Global invalidation error:', e.message);
         }
     }
 }

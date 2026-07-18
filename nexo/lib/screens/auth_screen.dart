@@ -30,7 +30,7 @@ class _AuthScreenState extends State<AuthScreen> {
   static const Color secondaryColor = Color(0xFF1E3A8A); // Blue
 
   // OTP Timer
-  int _resendTimer = 30;
+  int _resendTimer = 60;
   Timer? _timer;
   bool _canResend = false;
 
@@ -373,7 +373,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _startResendTimer() {
-    setState(() { _resendTimer = 30; _canResend = false; });
+    setState(() { _resendTimer = 60; _canResend = false; });
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {
@@ -657,7 +657,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           GestureDetector(
                             onTap: _canResend ? _sendOtp : null,
                             child: Text(
-                              "Resend OTP",
+                              _canResend ? "Resend OTP" : "Resend OTP in ${_resendTimer}s",
                               style: GoogleFonts.plusJakartaSans(
                                 color: _canResend ? const Color(0xFF3B82F6) : const Color(0xFF94A3B8),
                                 fontWeight: FontWeight.bold,
@@ -807,16 +807,6 @@ class _AuthScreenState extends State<AuthScreen> {
             children: List.generate(6, (index) => _buildOtpField(index)),
           ),
           const SizedBox(height: 20),
-          Center(
-            child: Text(
-              _canResend ? "Resend code" : "Resend code in ${_resendTimer}s",
-              style: GoogleFonts.plusJakartaSans(
-                color: _canResend ? const Color(0xFF3B82F6) : const Color(0xFF64748B),
-                fontWeight: _canResend ? FontWeight.bold : FontWeight.w500,
-                fontSize: 14,
-              ),
-            ),
-          ),
           const Spacer(),
           Container(
             width: double.infinity,
