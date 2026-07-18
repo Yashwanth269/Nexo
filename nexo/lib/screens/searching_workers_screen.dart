@@ -9,7 +9,6 @@ import 'package:nexo/screens/ongoing_job_screen.dart';
 import 'package:nexo/utils/network_helper.dart';
 import 'package:nexo/screens/chat_detail_screen.dart';
 import 'package:nexo/screens/job_details_screen.dart';
-import 'package:nexo/screens/no_workers_found_screen.dart';
 import 'package:nexo/services/socket_service.dart';
 import 'package:nexo/utils/image_utils.dart';
 
@@ -99,55 +98,28 @@ class _SearchingWorkersScreenState extends State<SearchingWorkersScreen>
       );
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (mounted && data['success']) {
-          final job = data['job'];
-          setState(() {
-            _searchRadius = job['searchRadius'] ?? 5;
-            _searchState = job['searchState'] ?? 1;
-          });
-          if (['ACCEPTED', 'ON_THE_WAY', 'ARRIVING', 'WORK_STARTED']
-              .contains(job['status'])) {
-            if (!_isAccepted) {
-              setState(() => _isAccepted = true);
-              _timer?.cancel();
-              _showWorkerFoundPopup(job);
+          if (mounted && data['success']) {
+            final job = data['job'];
+            setState(() {
+              _searchRadius = job['searchRadius'] ?? 5;
+              _searchState = job['searchState'] ?? 1;
+            });
+            if (['ACCEPTED', 'ON_THE_WAY', 'ARRIVING', 'WORK_STARTED']
+                .contains(job['status'])) {
+              if (!_isAccepted) {
+                setState(() => _isAccepted = true);
+                _timer?.cancel();
+                _showWorkerFoundPopup(job);
+              }
             }
           }
-        } else {
-          _checkFinalStatus(userId);
+          // No job in ongoing — keep polling, we are still searching
         }
-      }
     } catch (e) {
       debugPrint("Polling error: $e");
     }
   }
 
-  Future<void> _checkFinalStatus(String userId) async {
-    try {
-      final token = await SharedPrefsHelper.getToken();
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/jobs/history/$userId'),
-        headers: {if (token != null) 'Authorization': 'Bearer $token'},
-      );
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List<dynamic> jobs = data['jobs'] ?? [];
-        if (jobs.isNotEmpty) {
-          final lastJob = jobs.last;
-          if (lastJob['status'] == 'FAILED' && mounted) {
-            _timer?.cancel();
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => NoWorkersFoundScreen(job: lastJob)),
-            );
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint("Status check error: $e");
-    }
-  }
 
   void _showWorkerFoundPopup(Map<String, dynamic> data) {
     final worker = data['worker'] ?? data;

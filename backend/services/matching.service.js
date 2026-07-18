@@ -440,9 +440,13 @@ class MatchingService {
 
             // 2. Final check after all stages completed
             if (!hasAccepted) {
-                const finalJobCheck = await db.query("SELECT status, user_id FROM jobs WHERE id = $1", [jobId]);
+                const finalJobCheck = await db.query(
+                    "SELECT status, user_id, created_at FROM jobs WHERE id = $1", [jobId]
+                );
                 if (finalJobCheck.rowCount > 0 && ['OPEN', 'REDISTRIBUTING', 'REASSIGNING'].includes(finalJobCheck.rows[0].status)) {
-                    console.log(`[DISPATCH-FAIL] No candidate workers accepted the request within 120s for Job ${jobId}.`);
+                    const finalJob = finalJobCheck.rows[0];
+                    const ageMs = Date.now() - new Date(finalJob.created_at).getTime();
+                    const MAX_AGE_MS = 72 * 60 * 60 * 1000; // 3 days
 
                     // Flush final search analytics
                     const dispatchTimeSec = Math.round((Date.now() - pipelineStartMs) / 1000);
@@ -458,22 +462,57 @@ class MatchingService {
                         }
                     } catch (saFlushErr) { console.warn('[ANALYTICS-FLUSH-FAIL]', saFlushErr.message); }
 
-                    // Log failed_no_worker dispatch event
-                    await logDispatchEvent(jobId, 'failed_no_worker', {
-                        reason: 'No workers accepted across all stages',
-                        stagesRun: stages.length,
-                        workersNotified: totalNotificationsSent
-                    });
-                    
-                    await db.query("UPDATE jobs SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [jobId]);
-                    await redis.set(`job:${jobId}:status`, 'FAILED');
+                    if (ageMs >= MAX_AGE_MS) {
+                        // Job is older than 3 days — expire it
+                        console.log(`[DISPATCH-EXPIRED] Job ${jobId} has been searching for 3+ days. Marking as EXPIRED.`);
+                        await logDispatchEvent(jobId, 'job_expired', { ageHours: Math.round(ageMs / 3600000) });
+                        await db.query("UPDATE jobs SET status = 'EXPIRED', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [jobId]);
+                        await redis.set(`job:${jobId}:status`, 'EXPIRED');
+                        this.io.to(`user:${finalJob.user_id}`).emit('searching_status', {
+                            status: 'EXPIRED',
+                            message: "We couldn't find a worker after 3 days. Your request has expired."
+                        });
+                    } else {
+                        // Keep searching — re-queue after 3 minutes
+                        const retryMinutes = 3;
+                        const ageHours = (ageMs / 3600000).toFixed(1);
+                        console.log(`[DISPATCH-RETRY] No workers found for Job ${jobId} (age: ${ageHours}h). Re-queuing in ${retryMinutes}m...`);
+                        await logDispatchEvent(jobId, 'dispatch_retry_scheduled', {
+                            retryAfterMs: retryMinutes * 60 * 1000,
+                            ageHours: parseFloat(ageHours),
+                            stagesRun: stages.length,
+                            workersNotified: totalNotificationsSent
+                        });
 
-                    const failedJob = finalJobCheck.rows[0];
-                    this.io.to(`user:${failedJob.user_id}`).emit('searching_status', {
-                        status: 'FAILED',
-                        message: "No nearby workers accepted your request."
-                    });
-                    this.io.to(`user:${failedJob.user_id}`).emit('JOB_DISPATCH_FAILED', { jobId });
+                        // Keep status as REDISTRIBUTING so workers can still see and grab it
+                        await db.query(
+                            "UPDATE jobs SET status = 'REDISTRIBUTING', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+                            [jobId]
+                        );
+                        await redis.set(`job:${jobId}:status`, 'REDISTRIBUTING');
+
+                        // Inform user we are still looking (not a failure)
+                        this.io.to(`user:${finalJob.user_id}`).emit('searching_status', {
+                            status: 'SEARCHING_NEARBY',
+                            message: "Still looking for a partner in a wider area...",
+                            radius: stages[stages.length - 1]?.radius || 25,
+                            searchState: 3
+                        });
+
+                        // Schedule retry in 3 minutes
+                        setTimeout(() => {
+                            db.query("SELECT status FROM jobs WHERE id = $1", [jobId])
+                                .then(res => {
+                                    if (res.rowCount > 0 && ['OPEN', 'REDISTRIBUTING', 'REASSIGNING'].includes(res.rows[0].status)) {
+                                        console.log(`[DISPATCH-RETRY] Retrying dispatch pipeline for Job ${jobId}`);
+                                        this.runDispatchPipeline(jobId).catch(e =>
+                                            console.error(`[DISPATCH-RETRY-ERROR] Job ${jobId}:`, e.message)
+                                        );
+                                    }
+                                })
+                                .catch(() => {});
+                        }, retryMinutes * 60 * 1000);
+                    }
                 }
             }
         } catch (err) {
