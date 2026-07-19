@@ -91,8 +91,8 @@ class MatchingService {
     init(io) {
         this.io = io;
         this.waitForRedisAndHydrate();
+        this.startRedistributeLoop();
         setInterval(() => this.cleanupExpiredJobs(), 5 * 60000);
-        setInterval(() => this.periodicRedispatch(), 3 * 60000);
         setInterval(() => this.cleanupStaleWorkers(), 2 * 60000);
     }
 
@@ -438,7 +438,7 @@ class MatchingService {
                 }
             }
 
-            // 2. Final check after all stages completed
+            // 2. Final check after all initial stages completed (~120s)
             if (!hasAccepted) {
                 const finalJobCheck = await db.query(
                     "SELECT status, user_id, created_at FROM jobs WHERE id = $1", [jobId]
@@ -446,9 +446,9 @@ class MatchingService {
                 if (finalJobCheck.rowCount > 0 && ['OPEN', 'REDISTRIBUTING', 'REASSIGNING'].includes(finalJobCheck.rows[0].status)) {
                     const finalJob = finalJobCheck.rows[0];
                     const ageMs = Date.now() - new Date(finalJob.created_at).getTime();
-                    const MAX_AGE_MS = 72 * 60 * 60 * 1000; // 3 days
+                    const MAX_AGE_MS = 72 * 60 * 60 * 1000; // 72 hours (3 days)
 
-                    // Flush final search analytics
+                    // Flush search analytics
                     const dispatchTimeSec = Math.round((Date.now() - pipelineStartMs) / 1000);
                     try {
                         if (analyticsId) {
@@ -473,45 +473,27 @@ class MatchingService {
                             message: "We couldn't find a worker after 3 days. Your request has expired."
                         });
                     } else {
-                        // Keep searching — re-queue after 3 minutes
-                        const retryMinutes = 3;
-                        const ageHours = (ageMs / 3600000).toFixed(1);
-                        console.log(`[DISPATCH-RETRY] No workers found for Job ${jobId} (age: ${ageHours}h). Re-queuing in ${retryMinutes}m...`);
-                        await logDispatchEvent(jobId, 'dispatch_retry_scheduled', {
-                            retryAfterMs: retryMinutes * 60 * 1000,
-                            ageHours: parseFloat(ageHours),
+                        // Transition to REDISTRIBUTING mode (Continuous queue matching)
+                        console.log(`[DISPATCH-REDISTRIBUTING] Active dispatch completed for Job ${jobId}. Entering continuous redistributing mode.`);
+                        await logDispatchEvent(jobId, 'enter_redistributing_mode', {
+                            ageSeconds: Math.round(ageMs / 1000),
                             stagesRun: stages.length,
                             workersNotified: totalNotificationsSent
                         });
 
-                        // Keep status as REDISTRIBUTING so workers can still see and grab it
                         await db.query(
                             "UPDATE jobs SET status = 'REDISTRIBUTING', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
                             [jobId]
                         );
                         await redis.set(`job:${jobId}:status`, 'REDISTRIBUTING');
 
-                        // Inform user we are still looking (not a failure)
+                        // Inform user job is in active queue
                         this.io.to(`user:${finalJob.user_id}`).emit('searching_status', {
                             status: 'SEARCHING_NEARBY',
-                            message: "Still looking for a partner in a wider area...",
-                            radius: stages[stages.length - 1]?.radius || 25,
+                            message: "Looking for available partners across your area...",
+                            radius: stages[stages.length - 1]?.radius || 30,
                             searchState: 3
                         });
-
-                        // Schedule retry in 3 minutes
-                        setTimeout(() => {
-                            db.query("SELECT status FROM jobs WHERE id = $1", [jobId])
-                                .then(res => {
-                                    if (res.rowCount > 0 && ['OPEN', 'REDISTRIBUTING', 'REASSIGNING'].includes(res.rows[0].status)) {
-                                        console.log(`[DISPATCH-RETRY] Retrying dispatch pipeline for Job ${jobId}`);
-                                        this.runDispatchPipeline(jobId).catch(e =>
-                                            console.error(`[DISPATCH-RETRY-ERROR] Job ${jobId}:`, e.message)
-                                        );
-                                    }
-                                })
-                                .catch(() => {});
-                        }, retryMinutes * 60 * 1000);
                     }
                 }
             }
@@ -519,6 +501,108 @@ class MatchingService {
             console.error(`[DISPATCH-PIPELINE-ERROR] Error on runDispatchPipeline for ${jobId}:`, err.message);
         } finally {
             await redis.del(pipelineLock);
+        }
+    }
+
+    startRedistributeLoop() {
+        if (this._redistributeInterval) return;
+        console.log('🔄 [REDISTRIBUTE-ENGINE] Initializing 30s continuous redistributing loop...');
+        this._redistributeInterval = setInterval(() => {
+            this.processRedistributingJobs().catch(err => {
+                console.error('⚠️ [REDISTRIBUTE-LOOP-ERROR]', err.message);
+            });
+        }, 30000); // Runs every 30 seconds
+    }
+
+    async processRedistributingJobs() {
+        try {
+            // Find all active jobs in REDISTRIBUTING / OPEN status created > 120s ago
+            const activeJobsRes = await db.query(`
+                SELECT * FROM jobs 
+                WHERE status IN ('OPEN', 'REDISTRIBUTING', 'REASSIGNING')
+                  AND created_at <= NOW() - INTERVAL '120 seconds'
+                ORDER BY created_at ASC
+            `);
+
+            const jobs = activeJobsRes.rows;
+            if (jobs.length === 0) return;
+
+            const now = Date.now();
+            const MAX_AGE_MS = 72 * 60 * 60 * 1000; // 3 days
+
+            for (const job of jobs) {
+                const ageMs = now - new Date(job.created_at).getTime();
+
+                // 1. Expiration Check (3 Days)
+                if (ageMs >= MAX_AGE_MS) {
+                    console.log(`[DISPATCH-EXPIRED] Job ${job.id} searching for 3+ days. Marking as EXPIRED.`);
+                    await db.query("UPDATE jobs SET status = 'EXPIRED', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [job.id]);
+                    await redis.set(`job:${job.id}:status`, 'EXPIRED');
+                    await logDispatchEvent(job.id, 'job_expired', { ageHours: Math.round(ageMs / 3600000) });
+                    if (this.io) {
+                        this.io.to(`user:${job.user_id}`).emit('searching_status', {
+                            status: 'EXPIRED',
+                            message: "We couldn't find a worker after 3 days. Your request has expired."
+                        });
+                    }
+                    continue;
+                }
+
+                // 2. Redis Distributed Lock to prevent duplicate concurrent scans
+                const tickLockKey = `redistribute_tick:${job.id}`;
+                const locked = await redis.set(tickLockKey, '1', 'NX', 'EX', 25);
+                if (!locked) continue;
+
+                try {
+                    // Check if 2-minute full re-evaluation is needed
+                    const lastFullEvalTime = await redis.get(`job:${job.id}:last_full_reeval`);
+                    const isFullReeval = !lastFullEvalTime || (now - parseInt(lastFullEvalTime) >= 120000);
+
+                    const searchRadiusService = require('./search_radius.service');
+                    const maxRadius = searchRadiusService.getMaxRadius(job.category, job.priority === 'High' || job.priority === 'Critical');
+                    const intent = parseJobIntent(job.description, job.category);
+
+                    // Fetch candidates within search radius
+                    const candidates = await this.getStageCandidates(job, intent, maxRadius);
+
+                    // Filter out workers notified in the last 5 minutes or rejected
+                    const recentOffers = await db.query(`
+                        SELECT DISTINCT worker_id FROM job_offers
+                        WHERE job_id = $1
+                          AND (status IN ('PENDING', 'ACCEPTED') OR (status = 'REJECTED' AND created_at > NOW() - INTERVAL '15 minutes') OR created_at > NOW() - INTERVAL '5 minutes')
+                    `, [job.id]);
+                    const recentNotifiedIds = new Set(recentOffers.rows.map(r => r.worker_id));
+
+                    const eligibleCandidates = candidates.filter(w => !recentNotifiedIds.has(w.id));
+
+                    if (eligibleCandidates.length > 0) {
+                        const targetCandidates = eligibleCandidates.slice(0, 3);
+                        console.log(`[REDISTRIBUTE-SCAN] Job ${job.id} (${isFullReeval ? 'Full 2m Re-eval' : 'Incremental 30s Scan'}): Notifying ${targetCandidates.length} newly eligible worker(s).`);
+
+                        await this.notifyWorkersForJob(job, targetCandidates);
+
+                        await logDispatchEvent(job.id, isFullReeval ? 'redistribute_full_reevaluation' : 'redistribute_incremental_notify', {
+                            newWorkersNotified: targetCandidates.length,
+                            maxRadius,
+                            isFullReeval
+                        });
+                    }
+
+                    if (isFullReeval) {
+                        await redis.set(`job:${job.id}:last_full_reeval`, now.toString(), 'EX', 3600);
+                    }
+
+                    // Keep job status REDISTRIBUTING
+                    if (job.status !== 'REDISTRIBUTING') {
+                        await db.query("UPDATE jobs SET status = 'REDISTRIBUTING', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [job.id]);
+                        await redis.set(`job:${job.id}:status`, 'REDISTRIBUTING');
+                    }
+                } catch (tickErr) {
+                    console.error(`[REDISTRIBUTE-TICK-ERROR] Job ${job.id}:`, tickErr.message);
+                }
+            }
+        } catch (err) {
+            console.error('[PROCESS-REDISTRIBUTING-ERROR]', err.message);
         }
     }
 
