@@ -324,11 +324,13 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    "Customer Location",
+                                    address.length > 22 ? "${address.substring(0, 20)}..." : address,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: GoogleFonts.outfit(
                                       color: Colors.white,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 15,
+                                      fontSize: 14,
                                     ),
                                   ),
                                 ],

@@ -415,8 +415,7 @@ class MatchingService {
                     // Wait 20 seconds for anyone to accept
                     hasAccepted = await this.waitForAcceptance(jobId, 20);
                 } else {
-                    console.log(`[DISPATCH-STAGE] No new candidates found in Stage ${stageIdx + 1}. Waiting 20 seconds anyway before expanding.`);
-                    hasAccepted = await this.waitForAcceptance(jobId, 20);
+                    console.log(`[DISPATCH-STAGE] No new candidates found in Stage ${stageIdx + 1} (${radiusKm}km). Expanding immediately to next radius...`);
                 }
 
                 if (hasAccepted) {

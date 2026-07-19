@@ -462,12 +462,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List<dynamic> pending = data['jobs'] ?? [];
+        final Set<String> validPendingIds = pending
+            .map((j) => (j['id']?.toString() ?? j['_id']?.toString()) ?? "")
+            .where((id) => id.isNotEmpty)
+            .toSet();
+
         setState(() {
-          // SEPARATE FEED: Only update available jobs, never touch _activeGigs here
-          _jobRequests.removeWhere((j) => j['isDiscovery'] == true);
+          // Remove items that are no longer in pending or active list
+          _jobRequests.removeWhere((j) {
+            String id = j['id']?.toString() ?? j['_id']?.toString() ?? "";
+            return j['isDiscovery'] == true && !validPendingIds.contains(id);
+          });
           
           for (var job in pending) {
-            // EXCLUDE: Don't show in "Available" if it's already in "Active"
             String currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? "";
             bool isAlreadyActive = _activeGigs.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
             bool isDuplicate = _jobRequests.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
@@ -479,11 +486,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 'isDiscovery': true,
               };
               _jobRequests.add(newJob);
-              // HTTP-fetched jobs go silently into the list.
-              // Only real-time socket events trigger the full-screen alert.
             }
           }
-          debugPrint("✅ [AVAILABLE_JOBS_UPDATED] Feed synced.");
+          debugPrint("✅ [AVAILABLE_JOBS_UPDATED] Feed synced smoothly.");
         });
       }
     } catch (e) {
