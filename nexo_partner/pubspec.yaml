@@ -85,6 +85,10 @@ flutter:
   assets:
     - assets/images/logo/
     - assets/images/
+    - assets/images/home services/cleaning/
+    - assets/images/home services/appliance repair/
+    - assets/images/skilled/trades/
+    - assets/images/Agriculture/Equipment Rental/
     - assets/sounds/new_gigs/
 
   # An image asset can refer to one or more resolution-specific "variants", see
