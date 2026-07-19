@@ -538,6 +538,16 @@ async function main() {
         await db.query("UPDATE workers SET verification_status = 'VERIFIED' WHERE verification_status != 'VERIFIED'");
         console.log("✅ All workers verified successfully.");
 
+        console.log("⚡ Restoring non-user-cancelled FAILED jobs to REDISTRIBUTING...");
+        const restored = await db.query(`
+            UPDATE jobs 
+            SET status = 'REDISTRIBUTING', updated_at = CURRENT_TIMESTAMP 
+            WHERE status = 'FAILED' 
+              AND id NOT IN (SELECT job_id FROM job_cancellations)
+            RETURNING id
+        `);
+        console.log(`✅ Restored ${restored.rowCount} non-cancelled jobs to REDISTRIBUTING state.`);
+
         process.exit(0);
     } catch (e) {
         console.error("❌ Failed to create missing tables:", e.message);

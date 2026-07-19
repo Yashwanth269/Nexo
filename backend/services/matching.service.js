@@ -643,6 +643,16 @@ class MatchingService {
 
         const logRejection = async (workerId, reason, score = 0.0) => {
             try {
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS dispatch_rejection_logs (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                        job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+                        dispatch_score DECIMAL DEFAULT 0.0,
+                        reject_reason VARCHAR(255) NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                `);
                 const check = await db.query(
                     "SELECT id FROM dispatch_rejection_logs WHERE job_id = $1 AND worker_id = $2 AND reject_reason = $3",
                     [job.id, workerId, reason]
@@ -655,7 +665,7 @@ class MatchingService {
                     );
                 }
             } catch (e) {
-                console.error('[REJECTION-LOG-ERROR]', e.message);
+                // Non-critical rejection log write
             }
         };
 

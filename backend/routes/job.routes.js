@@ -63,8 +63,8 @@ router.get('/:userId/ongoing', async (req, res) => {
                 }
 
                 if (['OPEN', 'REQUESTED', 'REDISTRIBUTING', 'REASSIGNING'].includes(job.status)) {
-                    job.searchState = job.search_state_stage || 1;
-                    job.searchRadius = job.search_radius_km || 3;
+                    job.searchState = job.search_state_stage ? parseInt(job.search_state_stage) : 1;
+                    job.searchRadius = job.search_radius_km ? Math.round(parseFloat(job.search_radius_km)) : 3;
                 }
                 return job;
             });

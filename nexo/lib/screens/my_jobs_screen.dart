@@ -238,7 +238,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                     )
                   ),
                   const SizedBox(height: 24),
-                  _buildEditField("Budget (â‚¹)", budgetController, Icons.currency_rupee_rounded, keyboardType: TextInputType.number),
+                  _buildEditField("Budget (\u{20B9})", budgetController, Icons.currency_rupee_rounded, keyboardType: TextInputType.number),
                   const SizedBox(height: 24),
                   
                   // Day Selector
@@ -849,7 +849,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          "Safety Guarantee: Always pay within Nexo to be covered under our â‚¹10k protection policy.",
+                          "Safety Guarantee: Always pay within Nexo to be covered under our \u{20B9}10k protection policy.",
                           style: GoogleFonts.inter(
                             fontSize: 10,
                             color: const Color(0xFF1E3A8A),
@@ -879,9 +879,9 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
     final filteredJobs = _jobs.where((job) {
       final status = job['status'] ?? "OPEN";
       if (tab == "New") return status == "OPEN" || status == "REQUESTED" || status == "REDISTRIBUTING" || status == "REASSIGNING";
-      if (tab == "Active") return status != "COMPLETED" && status != "CANCELLED" && status != "OPEN" && status != "REQUESTED" && status != "REDISTRIBUTING" && status != "REASSIGNING";
+      if (tab == "Active") return ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'FORCE_ARRIVAL_PENDING_CONFIRMATION', 'WORK_IN_PROGRESS', 'WORK_STARTED'].contains(status);
       if (tab == "Completed") return status == "COMPLETED";
-      if (tab == "Cancelled") return status == "CANCELLED";
+      if (tab == "Cancelled") return status == "CANCELLED" || status == "FAILED" || status == "EXPIRED";
       return false;
     }).toList();
 
@@ -1044,7 +1044,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                               Row(
                                 children: [
                                   Text(
-                                    job['price'] != null ? "â‚¹${job['price']}" : "TBD",
+                                    job['price'] != null ? "\u{20B9}${job['price']}" : "TBD",
                                     style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 16, color: primaryColor),
                                   ),
                                   const SizedBox(width: 8),
@@ -1220,7 +1220,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                               Row(
                                 children: [
                                   Text(
-                                    "â‚¹${job['price'] ?? '500'}",
+                                    "\u{20B9}${job['price'] ?? '500'}",
                                     style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 16, color: primaryColor),
                                   ),
                                   const SizedBox(width: 8),
@@ -1408,7 +1408,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
                               Row(
                                 children: [
                                   Text(
-                                    "â‚¹${job['price'] ?? '500'}",
+                                    "\u{20B9}${job['price'] ?? '500'}",
                                     style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 16, color: primaryColor),
                                   ),
                                   const SizedBox(width: 8),

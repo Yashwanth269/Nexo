@@ -134,9 +134,14 @@ class _SearchingWorkersScreenState extends State<SearchingWorkersScreen>
         final data = json.decode(response.body);
           if (mounted && data['success']) {
             final job = data['job'];
+            final rawRadius = job['searchRadius'];
+            final rawState = job['searchState'];
+            final parsedRadius = rawRadius != null ? (double.tryParse(rawRadius.toString())?.round() ?? 3) : 3;
+            final parsedState = rawState != null ? (int.tryParse(rawState.toString()) ?? 1) : 1;
+
             setState(() {
-              _searchRadius = job['searchRadius'] ?? 3;
-              _searchState = job['searchState'] ?? 1;
+              _searchRadius = parsedRadius;
+              _searchState = parsedState;
               int minPercent = 15;
               if (_searchState == 2) minPercent = 40;
               if (_searchState == 3) minPercent = 70;
