@@ -237,7 +237,7 @@ class MatchingService {
 
             console.log(`[OFFER] ${offerId} to Worker ${worker.phone_number} (${formattedDistance}, ${offerTtl}s)`);
 
-            this.io.to(`worker:${worker.phone_number}`).to(`worker:${worker.id}`).emit('new_job_request', {
+            this.io.to(`worker:${worker.phone_number}`).timeout(offerTtl * 1000).emit('new_job_request', {
                 ...job,
                 offerId,
                 distance: formattedDistance,
@@ -245,6 +245,13 @@ class MatchingService {
                 expiresIn: offerTtl,
                 isUrgent: isRedispatched,
                 urgencyText: isRedispatched ? "Urgent Reassignment" : null
+            }, (err) => {
+                if (err) {
+                    console.warn(`[SOCKET-ACK-TIMEOUT] Worker ${worker.phone_number} offer ${offerId}`);
+                    db.query("UPDATE job_offers SET status = 'EXPIRED' WHERE id = $1", [offerId]).catch(() => {});
+                    const workerService = require('./worker.service');
+                    workerService.updateFatigueScore(worker.id, 'JOB_TIMEOUT');
+                }
             });
 
             return offerId;
@@ -836,7 +843,7 @@ class MatchingService {
         });
 
         for (const worker of workers) {
-            await this.createOffer(job, worker, worker.distance, worker.pAccept, 20);
+            await this.createOffer(job, worker, worker.distance, worker.pAccept, 90);
         }
     }
 

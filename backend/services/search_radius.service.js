@@ -21,31 +21,31 @@ class SearchRadiusService {
         let baseStages;
         if (isEmergency) {
             baseStages = [
-                { elapsed: 0,   radius: 8,  tiers: ['A'],                notifyCount: 5,  statusMsg: "Emergency dispatch: closest responders...", searchState: 1 },
-                { elapsed: 20,  radius: 15, tiers: ['A'],                notifyCount: 8,  statusMsg: "Emergency dispatch: expanding responder circle...", searchState: 2 },
-                { elapsed: 40,  radius: 25, tiers: ['A', 'B'],           notifyCount: 12, statusMsg: "Emergency dispatch: contacting all nearby responders...", searchState: 3 },
-                { elapsed: 60,  radius: 40, tiers: ['A', 'B', 'C'],      notifyCount: 20, statusMsg: "Emergency dispatch: broadcast wider area...", searchState: 4 },
-                { elapsed: 80,  radius: 50, tiers: ['A', 'B', 'C'],      notifyCount: 30, statusMsg: "Emergency dispatch: final expansion...", searchState: 4 },
+                { elapsed: 0,   radius: 8,  tiers: ['A', 'B', 'C', 'D'], notifyCount: 5,  statusMsg: "Emergency dispatch: closest responders...", searchState: 1 },
+                { elapsed: 20,  radius: 15, tiers: ['A', 'B', 'C', 'D'], notifyCount: 8,  statusMsg: "Emergency dispatch: expanding responder circle...", searchState: 2 },
+                { elapsed: 40,  radius: 25, tiers: ['A', 'B', 'C', 'D'], notifyCount: 12, statusMsg: "Emergency dispatch: contacting all nearby responders...", searchState: 3 },
+                { elapsed: 60,  radius: 40, tiers: ['A', 'B', 'C', 'D'], notifyCount: 20, statusMsg: "Emergency dispatch: broadcast wider area...", searchState: 4 },
+                { elapsed: 80,  radius: 50, tiers: ['A', 'B', 'C', 'D'], notifyCount: 30, statusMsg: "Emergency dispatch: final expansion...", searchState: 4 },
                 { elapsed: 100, radius: 60, tiers: ['A', 'B', 'C', 'D'], notifyCount: 50, statusMsg: "Emergency dispatch: seeking any available responder...", searchState: 4 }
             ];
         } else if (isRural) {
             baseStages = [
-                { elapsed: 0,   radius: 5,  tiers: ['A'],                notifyCount: 3,  statusMsg: "Finding the best workers near you...",            searchState: 1 },
-                { elapsed: 20,  radius: 10, tiers: ['A'],                notifyCount: 5,  statusMsg: "Expanding search nearby...",                      searchState: 2 },
-                { elapsed: 40,  radius: 15, tiers: ['A'],                notifyCount: 5,  statusMsg: "Searching more nearby professionals...",          searchState: 2 },
-                { elapsed: 60,  radius: 20, tiers: ['A', 'B'],           notifyCount: 7,  statusMsg: "We're finding more professionals around your area...", searchState: 3 },
-                { elapsed: 80,  radius: 30, tiers: ['A', 'B'],           notifyCount: 7,  statusMsg: "Almost there. Searching in nearby towns.",        searchState: 3 },
-                { elapsed: 100, radius: 40, tiers: ['A', 'B', 'C'],      notifyCount: 10, statusMsg: "Searching across a wider area...",                 searchState: 4 }
+                { elapsed: 0,   radius: 5,  tiers: ['A', 'B', 'C', 'D'], notifyCount: 3,  statusMsg: "Finding the best workers near you...",            searchState: 1 },
+                { elapsed: 20,  radius: 10, tiers: ['A', 'B', 'C', 'D'], notifyCount: 5,  statusMsg: "Expanding search nearby...",                      searchState: 2 },
+                { elapsed: 40,  radius: 15, tiers: ['A', 'B', 'C', 'D'], notifyCount: 5,  statusMsg: "Searching more nearby professionals...",          searchState: 2 },
+                { elapsed: 60,  radius: 20, tiers: ['A', 'B', 'C', 'D'], notifyCount: 7,  statusMsg: "We're finding more professionals around your area...", searchState: 3 },
+                { elapsed: 80,  radius: 30, tiers: ['A', 'B', 'C', 'D'], notifyCount: 7,  statusMsg: "Almost there. Searching in nearby towns.",        searchState: 3 },
+                { elapsed: 100, radius: 40, tiers: ['A', 'B', 'C', 'D'], notifyCount: 10, statusMsg: "Searching across a wider area...",                 searchState: 4 }
             ];
         } else {
             // Urban
             baseStages = [
-                { elapsed: 0,   radius: 3,  tiers: ['A'],                notifyCount: 3,  statusMsg: "Finding the best workers near you...",            searchState: 1 },
-                { elapsed: 20,  radius: 5,  tiers: ['A'],                notifyCount: 5,  statusMsg: "Expanding search nearby...",                      searchState: 2 },
-                { elapsed: 40,  radius: 8,  tiers: ['A'],                notifyCount: 5,  statusMsg: "Searching more nearby professionals...",          searchState: 2 },
-                { elapsed: 60,  radius: 12, tiers: ['A', 'B'],           notifyCount: 7,  statusMsg: "We're finding more professionals around your area...", searchState: 3 },
-                { elapsed: 80,  radius: 20, tiers: ['A', 'B'],           notifyCount: 7,  statusMsg: "Almost there. Searching in nearby towns.",        searchState: 3 },
-                { elapsed: 100, radius: 30, tiers: ['A', 'B', 'C'],      notifyCount: 10, statusMsg: "Searching across a wider area...",                 searchState: 4 }
+                { elapsed: 0,   radius: 3,  tiers: ['A', 'B', 'C', 'D'], notifyCount: 3,  statusMsg: "Finding the best workers near you...",            searchState: 1 },
+                { elapsed: 20,  radius: 5,  tiers: ['A', 'B', 'C', 'D'], notifyCount: 5,  statusMsg: "Expanding search nearby...",                      searchState: 2 },
+                { elapsed: 40,  radius: 8,  tiers: ['A', 'B', 'C', 'D'], notifyCount: 5,  statusMsg: "Searching more nearby professionals...",          searchState: 2 },
+                { elapsed: 60,  radius: 12, tiers: ['A', 'B', 'C', 'D'], notifyCount: 7,  statusMsg: "We're finding more professionals around your area...", searchState: 3 },
+                { elapsed: 80,  radius: 20, tiers: ['A', 'B', 'C', 'D'], notifyCount: 7,  statusMsg: "Almost there. Searching in nearby towns.",        searchState: 3 },
+                { elapsed: 100, radius: 30, tiers: ['A', 'B', 'C', 'D'], notifyCount: 10, statusMsg: "Searching across a wider area...",                 searchState: 4 }
             ];
         }
 
