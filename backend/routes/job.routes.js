@@ -62,9 +62,9 @@ router.get('/:userId/ongoing', async (req, res) => {
                     job.eta = `${Math.round(job.route_duration / 60)} mins`;
                 }
 
-                if (job.status === 'OPEN' || job.status === 'REQUESTED') {
-                    job.searchState = 1;
-                    job.searchRadius = 5;
+                if (['OPEN', 'REQUESTED', 'REDISTRIBUTING', 'REASSIGNING'].includes(job.status)) {
+                    job.searchState = job.search_state_stage || 1;
+                    job.searchRadius = job.search_radius_km || 3;
                 }
                 return job;
             });

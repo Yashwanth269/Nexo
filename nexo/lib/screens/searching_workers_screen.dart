@@ -23,27 +23,60 @@ class SearchingWorkersScreen extends StatefulWidget {
 class _SearchingWorkersScreenState extends State<SearchingWorkersScreen>
     with WidgetsBindingObserver {
   Timer? _timer;
-  int _searchRadius = 5;
-  int _searchState = 1; // 1 = near, 2 = expanding, 3 = wide
+  Timer? _smoothTimer;
+  int _searchRadius = 3;
+  int _searchState = 1; // 1 = near, 2 = expanding, 3 = wide, 4 = redistributing
+  int _smoothPercent = 15;
   bool _isAccepted = false;
   bool _isCancelled = false;
   final String baseUrl = NetworkHelper.baseUrl;
 
-  // ─── Computed from searchState ───────────────────────────────────────────
-  int get _searchPercent => _searchState == 1 ? 30 : _searchState == 2 ? 65 : 90;
-  int get _activeSegments => _searchState == 1 ? 2 : _searchState == 2 ? 4 : 5;
-  String get _message => _searchState == 1
-      ? "Finding partners near you..."
-      : _searchState == 2
-          ? "Looking in nearby areas..."
-          : "Expanding search further...";
+  // ─── Computed Progress & Dynamic Messaging ──────────────────────────
+  int get _searchPercent => _smoothPercent;
+  int get _activeSegments => (_smoothPercent / 20).ceil().clamp(1, 5);
+
+  String get _dynamicTitle {
+    if (_searchRadius <= 3) return "Finding partners near you...";
+    if (_searchRadius <= 5) return "Looking in nearby areas...";
+    if (_searchRadius <= 15) return "Expanding search area...";
+    return "Broadcasting to regional partners...";
+  }
+
+  String get _dynamicBannerText {
+    if (_searchState == 1) {
+      return "Searching for verified professionals within $_searchRadius km...";
+    } else if (_searchState == 2) {
+      return "No workers free within 3 km. Expanding search to $_searchRadius km...";
+    } else if (_searchState == 3) {
+      return "No workers free within 5 km. Expanding search to $_searchRadius km...";
+    } else {
+      return "No workers free nearby. Active in regional queue, continuously matching newly available partners...";
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _initSocket();
     _startPolling();
+    _startSmoothProgress();
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  void _startSmoothProgress() {
+    _smoothTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (_isAccepted || _isCancelled || !mounted) return;
+      int maxTarget = 35;
+      if (_searchState == 2) maxTarget = 65;
+      if (_searchState == 3) maxTarget = 85;
+      if (_searchState >= 4) maxTarget = 98;
+
+      if (_smoothPercent < maxTarget) {
+        setState(() {
+          _smoothPercent++;
+        });
+      }
+    });
   }
 
   void _initSocket() async {
@@ -74,6 +107,7 @@ class _SearchingWorkersScreenState extends State<SearchingWorkersScreen>
   @override
   void dispose() {
     _timer?.cancel();
+    _smoothTimer?.cancel();
     _isCancelled = true;
     final socketService = SocketService();
     socketService.onJobAccepted = null;
@@ -101,8 +135,15 @@ class _SearchingWorkersScreenState extends State<SearchingWorkersScreen>
           if (mounted && data['success']) {
             final job = data['job'];
             setState(() {
-              _searchRadius = job['searchRadius'] ?? 5;
+              _searchRadius = job['searchRadius'] ?? 3;
               _searchState = job['searchState'] ?? 1;
+              int minPercent = 15;
+              if (_searchState == 2) minPercent = 40;
+              if (_searchState == 3) minPercent = 70;
+              if (_searchState >= 4) minPercent = 90;
+              if (_smoothPercent < minPercent) {
+                _smoothPercent = minPercent;
+              }
             });
             if (['ACCEPTED', 'ON_THE_WAY', 'ARRIVING', 'WORK_STARTED']
                 .contains(job['status'])) {
@@ -467,61 +508,77 @@ class _SearchingWorkersScreenState extends State<SearchingWorkersScreen>
               const Center(child: RadarWidget()),
               const Spacer(),
 
-              // Title
-              RichText(
-                textAlign: TextAlign.center,
-                text: TextSpan(
+              // Dynamic Title
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 400),
+                child: Text(
+                  _dynamicTitle,
+                  key: ValueKey(_dynamicTitle),
+                  textAlign: TextAlign.center,
                   style: GoogleFonts.outfit(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: const Color(0xFF0F172A),
                   ),
-                  children: const [
-                    TextSpan(text: "Finding "),
-                    TextSpan(
-                        text: "partners ",
-                        style: TextStyle(color: Color(0xFFFF6A00))),
-                    TextSpan(text: "near you..."),
-                  ],
                 ),
               ),
               const SizedBox(height: 6),
-              Text(
-                "Radius: $_searchRadius km",
-                style: GoogleFonts.inter(
-                  fontSize: 13.5,
-                  color: const Color(0xFF64748B),
-                  fontWeight: FontWeight.bold,
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF7ED),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFFEDD5)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.radar_rounded, size: 14, color: Color(0xFFFF6A00)),
+                    const SizedBox(width: 6),
+                    Text(
+                      "Search Radius: $_searchRadius km",
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: const Color(0xFFC2410C),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 24),
 
-              // Verified banner
-              Container(
+              // Dynamic Expansion & Verified Banner
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 400),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
+                  color: _searchState >= 2 ? const Color(0xFFFEF3C7) : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFF1F5F9)),
+                  border: Border.all(color: _searchState >= 2 ? const Color(0xFFFDE68A) : const Color(0xFFF1F5F9)),
                 ),
                 child: Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(6),
-                      decoration: const BoxDecoration(
-                          color: Color(0xFFDCFCE7), shape: BoxShape.circle),
-                      child: const Icon(Icons.shield_rounded,
-                          color: Color(0xFF16A34A), size: 18),
+                      decoration: BoxDecoration(
+                          color: _searchState >= 2 ? const Color(0xFFF59E0B) : const Color(0xFF16A34A),
+                          shape: BoxShape.circle),
+                      child: Icon(
+                          _searchState >= 2 ? Icons.explore_rounded : Icons.shield_rounded,
+                          color: Colors.white,
+                          size: 18),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        "We're matching you with verified and trusted professionals",
+                        _dynamicBannerText,
                         style: GoogleFonts.inter(
                           fontSize: 12,
-                          color: const Color(0xFF334155),
-                          fontWeight: FontWeight.w500,
+                          color: _searchState >= 2 ? const Color(0xFF78350F) : const Color(0xFF334155),
+                          fontWeight: FontWeight.w600,
                           height: 1.35,
                         ),
                       ),
@@ -733,34 +790,37 @@ class _RadarWidgetState extends State<RadarWidget>
     return SizedBox(
       width: size,
       height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Animated radar sweep
-          AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              return CustomPaint(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              // Animated radar sweep
+              CustomPaint(
                 size: const Size(size - 40, size - 40),
                 painter: RadarPainter(_controller.value * 2 * pi),
-              );
-            },
-          ),
+              ),
 
-          // Avatar stickers on the rings
-          ...profiles.map((p) {
-            final double r = (size - 40) / 2 * (p["r"] as double);
-            final double rad = (p["deg"] as double) * pi / 180;
-            final double dx = center + r * cos(rad) - 19;
-            final double dy = center + r * sin(rad) - 19;
-            final String avatarUrl =
-                "https://api.dicebear.com/7.x/pixel-art/png?seed=${p["seed"]}&size=64";
+              // Avatar stickers orbiting smoothly on the rings
+              ...profiles.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final p = entry.value;
+                final double r = (size - 40) / 2 * (p["r"] as double);
+                final double baseDeg = (p["deg"] as double);
+                // Orbit angle calculation: avatars slowly rotate at different speeds
+                final double orbitOffset = (idx % 2 == 0 ? 0.35 : -0.25) * _controller.value * 2 * pi;
+                final double rad = (baseDeg * pi / 180) + orbitOffset;
+                final double dx = center + r * cos(rad) - 19;
+                final double dy = center + r * sin(rad) - 19;
+                final String avatarUrl =
+                    "https://api.dicebear.com/7.x/pixel-art/png?seed=${p["seed"]}&size=64";
 
-            return Positioned(
-              left: dx,
-              top: dy,
-              child: Container(
-                padding: const EdgeInsets.all(2),
+                return Positioned(
+                  left: dx,
+                  top: dy,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
@@ -777,7 +837,7 @@ class _RadarWidgetState extends State<RadarWidget>
                     width: 34,
                     height: 34,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
+                    errorBuilder: (context, error, stackTrace) => Container(
                       width: 34,
                       height: 34,
                       color: const Color(0xFFFFF7ED),
@@ -814,8 +874,10 @@ class _RadarWidgetState extends State<RadarWidget>
             ),
           ),
         ],
-      ),
-    );
+      );
+    },
+  ),
+);
   }
 }
 
