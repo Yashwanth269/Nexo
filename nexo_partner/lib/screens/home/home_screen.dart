@@ -468,10 +468,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             .toSet();
 
         setState(() {
-          // Remove items that are no longer in pending or active list
+          // Only remove stale PENDING OFFERS (never wipe nearby discovery jobs)
           _jobRequests.removeWhere((j) {
             String id = j['id']?.toString() ?? j['_id']?.toString() ?? "";
-            return j['isDiscovery'] == true && !validPendingIds.contains(id);
+            return j['isPendingOffer'] == true && !validPendingIds.contains(id);
           });
           
           for (var job in pending) {
@@ -480,15 +480,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             bool isDuplicate = _jobRequests.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
             bool isRejected = _rejectedJobIds.contains(currentJobId);
             
-            if (!isAlreadyActive && !isDuplicate && !isRejected) {
-              final newJob = {
-                ...job,
-                'isDiscovery': true,
-              };
-              _jobRequests.add(newJob);
+            if (!isAlreadyActive && !isRejected) {
+              if (!isDuplicate) {
+                final newJob = {
+                  ...job,
+                  'isPendingOffer': true,
+                };
+                _jobRequests.add(newJob);
+                _showJobNotification(newJob); // Trigger popup immediately if fetched via HTTP
+              }
             }
           }
-          debugPrint("✅ [AVAILABLE_JOBS_UPDATED] Feed synced smoothly.");
+          debugPrint("✅ [PENDING_OFFERS_UPDATED] Feed synced smoothly.");
         });
       }
     } catch (e) {
@@ -525,23 +528,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List<dynamic> nearby = data['jobs'] ?? [];
-        
+        final Set<String> validNearbyIds = nearby
+            .map((j) => (j['id']?.toString() ?? j['_id']?.toString()) ?? "")
+            .where((id) => id.isNotEmpty)
+            .toSet();
+
         setState(() {
+          // Remove nearby jobs that are no longer nearby / valid
+          _jobRequests.removeWhere((j) {
+            String id = j['id']?.toString() ?? j['_id']?.toString() ?? "";
+            return j['isNearbyJob'] == true && !validNearbyIds.contains(id);
+          });
+
           for (var job in nearby) {
-            // Filter out if already in active gigs or requests
             String currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? "";
-            bool isDuplicate = _jobRequests.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId) || 
-                               _activeGigs.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
+            bool isAlreadyActive = _activeGigs.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
+            bool isDuplicate = _jobRequests.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
             bool isRejected = _rejectedJobIds.contains(currentJobId);
             
-            if (!isDuplicate && !isRejected) {
+            if (!isAlreadyActive && !isDuplicate && !isRejected) {
               final newJob = {
                 ...job,
-                'isDiscovery': true,
+                'isNearbyJob': true,
               };
               _jobRequests.add(newJob);
-              // HTTP-fetched jobs go silently into the list.
-              // Only real-time socket events trigger the full-screen alert.
             }
           }
         });
@@ -690,35 +700,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       debugPrint("Could not bring app to foreground: $e");
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) {
-        _isShowingIncomingJob = false;
-        return;
-      }
-      
-      final result = await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => IncomingJobScreen(jobData: job),
-          fullscreenDialog: true,
-        ),
-      );
-
+    if (!mounted) {
       _isShowingIncomingJob = false;
+      return;
+    }
+    
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => IncomingJobScreen(jobData: job),
+        fullscreenDialog: true,
+      ),
+    );
 
-      if (result != null && result['accepted'] == true) {
-        _acceptJob(job);
-      } else if (result != null && result['accepted'] == false) {
-        if (currentJobId.isNotEmpty) {
-          setState(() {
-            _rejectedJobIds.add(currentJobId);
-            _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
-          });
-          _persistRejectedJobIds();
-          _rejectJob(currentJobId);
-        }
+    _isShowingIncomingJob = false;
+
+    if (result != null && result['accepted'] == true) {
+      _acceptJob(job);
+    } else if (result != null && result['accepted'] == false) {
+      if (currentJobId.isNotEmpty) {
+        setState(() {
+          _rejectedJobIds.add(currentJobId);
+          _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
+        });
+        _persistRejectedJobIds();
+        _rejectJob(currentJobId);
       }
-    });
+    }
   }
 
   Widget _buildModernJobDialog(dynamic job) {
