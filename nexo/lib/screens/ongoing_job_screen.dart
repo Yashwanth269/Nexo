@@ -318,13 +318,15 @@ class _OngoingJobScreenState extends State<OngoingJobScreen> {
   }
 
   Future<void> _fetchOngoingJob() async {
+    final userId = await SharedPrefsHelper.getUserId();
     final phone = await SharedPrefsHelper.getPhone();
-    if (phone == null) return;
+    final fetchId = userId ?? phone;
+    if (fetchId == null) return;
 
     try {
       final token = await SharedPrefsHelper.getToken();
       final response = await http.get(
-        Uri.parse('${NetworkHelper.baseUrl}/api/jobs/$phone/ongoing'),
+        Uri.parse('${NetworkHelper.baseUrl}/api/jobs/$fetchId/ongoing'),
         headers: {
           if (token != null) 'Authorization': 'Bearer $token',
         },
@@ -959,10 +961,11 @@ class _OngoingJobScreenState extends State<OngoingJobScreen> {
   Future<void> _executeLateCancellation(String reason, String note) async {
     setState(() => _isLoading = true);
     final userId = await SharedPrefsHelper.getUserId();
+    final jobId = _job?['id']?.toString() ?? _job?['job_id']?.toString() ?? widget.initialJob?['id']?.toString() ?? widget.initialJob?['job_id']?.toString() ?? 'active';
     try {
       final token = await SharedPrefsHelper.getToken();
       final response = await http.patch(
-        Uri.parse('${NetworkHelper.baseUrl}/api/jobs/$userId/${_job!['id']}'),
+        Uri.parse('${NetworkHelper.baseUrl}/api/jobs/$userId/$jobId'),
         headers: {
           'Content-Type': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',
@@ -974,11 +977,11 @@ class _OngoingJobScreenState extends State<OngoingJobScreen> {
         }),
       );
       final responseData = json.decode(response.body);
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 && responseData['success'] == true) {
         Navigator.pop(context);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(responseData['message'] ?? "Failed to cancel job.")),
+          SnackBar(content: Text(responseData['message'] ?? responseData['error'] ?? "Failed to cancel job.")),
         );
       }
     } catch (e) {
@@ -1013,10 +1016,11 @@ class _OngoingJobScreenState extends State<OngoingJobScreen> {
 
     if (confirmed == true) {
       final userId = await SharedPrefsHelper.getUserId();
+      final jobId = _job?['id']?.toString() ?? _job?['job_id']?.toString() ?? widget.initialJob?['id']?.toString() ?? widget.initialJob?['job_id']?.toString() ?? 'active';
       final token = await SharedPrefsHelper.getToken();
       try {
         final response = await http.patch(
-          Uri.parse('${NetworkHelper.baseUrl}/api/jobs/$userId/${_job!['id']}'),
+          Uri.parse('${NetworkHelper.baseUrl}/api/jobs/$userId/$jobId'),
           headers: {
             'Content-Type': 'application/json',
             if (token != null) 'Authorization': 'Bearer $token',
@@ -1024,11 +1028,11 @@ class _OngoingJobScreenState extends State<OngoingJobScreen> {
           body: json.encode({'status': 'CANCELLED'}),
         );
         final responseData = json.decode(response.body);
-        if (response.statusCode == 200) {
+        if (response.statusCode == 200 && responseData['success'] == true) {
           Navigator.pop(context);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(responseData['message'] ?? "Failed to cancel job.")),
+            SnackBar(content: Text(responseData['message'] ?? responseData['error'] ?? "Failed to cancel job.")),
           );
         }
       } catch (e) {

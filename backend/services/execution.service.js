@@ -51,10 +51,15 @@ class ExecutionService {
             // Define allowable state transitions
             const allowedTransitions = {
                 'ACCEPTED': ['ON_THE_WAY'],
+                'RESERVED': ['ON_THE_WAY'],
+                'CONFIRMED': ['ON_THE_WAY'],
+                'SCHEDULED': ['ON_THE_WAY'],
+                'READY_TO_START': ['ON_THE_WAY'],
                 'ON_THE_WAY': ['ARRIVED', 'FORCE_ARRIVAL_PENDING_CONFIRMATION'],
                 'FORCE_ARRIVAL_PENDING_CONFIRMATION': ['ARRIVED', 'ON_THE_WAY'],
-                'ARRIVED': ['WORK_IN_PROGRESS'],
+                'ARRIVED': ['WORK_IN_PROGRESS', 'WORK_STARTED'],
                 'WORK_IN_PROGRESS': ['COMPLETED', 'WAITING_FOR_PAYMENT'],
+                'WORK_STARTED': ['COMPLETED', 'WAITING_FOR_PAYMENT'],
                 'WAITING_FOR_PAYMENT': ['COMPLETED']
             };
 

@@ -27,17 +27,28 @@ const createJobSchema = z.object({
 router.get('/:userId/ongoing', async (req, res) => {
     try {
         const { userId } = req.params;
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+        let targetUserId = userId;
+
+        if (!isUUID) {
+            const uRes = await db.query("SELECT id FROM users WHERE phone_number = $1 OR phone = $1", [userId]);
+            if (uRes.rowCount > 0) {
+                targetUserId = uRes.rows[0].id;
+            } else {
+                return res.json({ success: false, message: "User not found", jobs: [] });
+            }
+        }
         
         // Fetch all active jobs for this user with worker details
-        console.log(`🔍 [JOB-FETCH] Fetching ongoing jobs for User: ${userId}`);
+        console.log(`🔍 [JOB-FETCH] Fetching ongoing jobs for User: ${targetUserId}`);
         const result = await db.query(
             `SELECT j.*, w.full_name as "workerName", w.photo_url as "workerPhoto", w.phone_number as "workerPhone", w.rating as "workerRating", w.jobs_completed as "workerJobsCompleted", w.current_lat as "worker_lat", w.current_lng as "worker_lng"
              FROM jobs j
              LEFT JOIN workers w ON j.worker_id = w.id
              WHERE j.user_id = $1::uuid 
-             AND j.status IN ('OPEN', 'REQUESTED', 'ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'FORCE_ARRIVAL_PENDING_CONFIRMATION', 'WORK_IN_PROGRESS', 'WORK_STARTED') 
+             AND j.status IN ('OPEN', 'REQUESTED', 'ACCEPTED', 'RESERVED', 'CONFIRMED', 'ON_THE_WAY', 'ARRIVED', 'FORCE_ARRIVAL_PENDING_CONFIRMATION', 'WORK_IN_PROGRESS', 'WORK_STARTED') 
              ORDER BY j.created_at DESC`,
-            [userId]
+            [targetUserId]
         );
 
         if (result.rowCount > 0) {
@@ -776,8 +787,23 @@ router.get('/:userId/:jobId', async (req, res) => {
 // Update/Cancel Job by User
 router.patch('/:userId/:jobId', async (req, res) => {
     try {
-        const { userId, jobId } = req.params;
+        let { userId, jobId } = req.params;
         const updates = req.body;
+
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId);
+        if (!isUUID || jobId === 'null') {
+            // Auto-resolve active job ID for user
+            const activeRes = await db.query(
+                "SELECT id FROM jobs WHERE user_id = $1::uuid AND status IN ('OPEN', 'REQUESTED', 'ACCEPTED', 'RESERVED', 'CONFIRMED', 'ON_THE_WAY', 'ARRIVED', 'FORCE_ARRIVAL_PENDING_CONFIRMATION') ORDER BY created_at DESC LIMIT 1",
+                [userId]
+            );
+            if (activeRes.rowCount > 0) {
+                jobId = activeRes.rows[0].id;
+                console.log(`[JOB-ID-RESOLVED] Resolved invalid/null jobId to active job ${jobId} for user ${userId}`);
+            } else {
+                return res.status(400).json({ success: false, message: "No active job found to update" });
+            }
+        }
 
         // Validation for user cancellation
         if (updates.status === 'CANCELLED') {

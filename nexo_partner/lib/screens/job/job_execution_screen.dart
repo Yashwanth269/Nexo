@@ -38,13 +38,11 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
   String? _token;
 
   Future<Map<String, String>> _getAuthHeaders() async {
-    if (_token == null) {
-      final prefs = await SharedPreferences.getInstance();
-      _token = prefs.getString('worker_token');
-    }
+    final prefs = await SharedPreferences.getInstance();
+    _token = prefs.getString('worker_token') ?? prefs.getString('workerToken') ?? prefs.getString('token');
     return {
       'Content-Type': 'application/json',
-      if (_token != null) 'Authorization': 'Bearer $_token',
+      if (_token != null && _token!.isNotEmpty) 'Authorization': 'Bearer $_token',
     };
   }
   DateTime? _workStartTime;
@@ -734,7 +732,7 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
     setState(() => _isTransitioning = true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      final phone = prefs.getString('workerPhone') ?? "1";
+      final phone = prefs.getString('workerPhone') ?? prefs.getString('worker_phone') ?? prefs.getString('phone') ?? prefs.getString('worker_id') ?? "1";
       
       Position? pos;
       try {
