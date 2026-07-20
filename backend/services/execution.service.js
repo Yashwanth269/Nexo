@@ -604,6 +604,44 @@ function decodePolyline(str) {
     return coordinates;
 }
 
+    /**
+     * Customer Unreachable Wait Timer (10 minutes)
+     */
+    async startUnreachableTimer(jobId, workerId) {
+        const arrivalKey = `job:${jobId}:arrived_at`;
+        let arrivedAt = await redis.get(arrivalKey).catch(() => null);
+
+        if (!arrivedAt) {
+            const jobRes = await db.query("SELECT arrived_at FROM jobs WHERE id = $1 AND worker_id = $2", [jobId, workerId]);
+            if (jobRes.rowCount === 0 || !jobRes.rows[0].arrived_at) {
+                return { success: false, message: "WORKER_NOT_ARRIVED" };
+            }
+            arrivedAt = new Date(jobRes.rows[0].arrived_at).getTime();
+        } else {
+            arrivedAt = parseInt(arrivedAt, 10);
+        }
+
+        const elapsedMins = (Date.now() - arrivedAt) / 60000.0;
+        const requiredWaitMins = parseInt(process.env.CUSTOMER_UNREACHABLE_WAIT_MIN || '10', 10);
+
+        if (elapsedMins < requiredWaitMins) {
+            const remainingSecs = Math.round((requiredWaitMins * 60) - (elapsedMins * 60));
+            return {
+                success: false,
+                canCancelWithCompensation: false,
+                remainingSeconds: remainingSecs,
+                message: `Please wait ${Math.ceil(remainingSecs / 60)} more minute(s) before cancelling with base fee compensation.`
+            };
+        }
+
+        return {
+            success: true,
+            canCancelWithCompensation: true,
+            elapsedMinutes: Math.round(elapsedMins),
+            message: "10-minute wait threshold reached. You can now cancel with base fee compensation."
+        };
+    }
+
 function detectRouteDeviation(workerLat, workerLng, polylineStr) {
     if (!polylineStr) return false;
     const points = decodePolyline(polylineStr);

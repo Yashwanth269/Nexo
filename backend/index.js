@@ -323,6 +323,20 @@ io.on('connection', (socket) => {
         socket.role = 'WORKER';
         console.log(`👷 [WORKER] ${phoneNumber} joined active room.`);
 
+        // Enforce Single-Device Session Locking
+        const redis = require('./config/redis');
+        const sessionKey = `active_socket:worker:${phoneNumber}`;
+        const previousSocketId = await redis.get(sessionKey).catch(() => null);
+        if (previousSocketId && previousSocketId !== socket.id) {
+            console.log(`🔒 [SESSION-SUPERSEDED] Worker ${phoneNumber} logged in on a new device. Disconnecting older socket ${previousSocketId}.`);
+            io.to(previousSocketId).emit('SESSION_SUPERSEDED', {
+                message: "Logged in from another device. This session has been terminated."
+            });
+            const oldSocket = io.sockets.sockets.get(previousSocketId);
+            if (oldSocket) oldSocket.disconnect(true);
+        }
+        await redis.set(sessionKey, socket.id, 'EX', 86400).catch(() => {});
+
         // Sync with DB
         let workerUuid = null;
         try {

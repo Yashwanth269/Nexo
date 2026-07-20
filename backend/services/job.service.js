@@ -785,6 +785,77 @@ class JobService {
         }
     }
 
+    async cancelJobByUser(jobId, userId, reason = 'CUSTOMER_CANCELLED') {
+        const { getIO } = require('../config/socket');
+        const io = getIO();
+        const client = await db.pool.connect();
+        
+        try {
+            await client.query('BEGIN');
+
+            const jobRes = await client.query("SELECT * FROM jobs WHERE id = $1 AND user_id = $2 FOR UPDATE", [jobId, userId]);
+            if (jobRes.rowCount === 0) {
+                await client.query('ROLLBACK');
+                return { success: false, message: "Job not found or unauthorized" };
+            }
+
+            const job = jobRes.rows[0];
+            const activeStatuses = ['OPEN', 'REDISTRIBUTING', 'REASSIGNING', 'ACCEPTED', 'RESERVED', 'CONFIRMED', 'READY_TO_START', 'ON_THE_WAY'];
+            if (!activeStatuses.includes(job.status)) {
+                await client.query('ROLLBACK');
+                return { success: false, message: `Cannot cancel job in ${job.status} status` };
+            }
+
+            // Update status to CANCELLED
+            const updateRes = await client.query(
+                `UPDATE jobs 
+                 SET status = 'CANCELLED', cancelled_by = 'CUSTOMER', cancellation_reason = $1, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = $2 RETURNING *`,
+                [reason, jobId]
+            );
+
+            // Cancel all pending offers
+            await client.query(
+                "UPDATE job_offers SET status = 'CANCELLED' WHERE job_id = $1 AND status = 'PENDING'",
+                [jobId]
+            );
+
+            await client.query('COMMIT');
+
+            // 1. Immediately break dispatch loop
+            await redis.set(`dispatch_pipeline_running:${jobId}`, '0');
+            await redis.del(`job:${jobId}:searching`);
+            await redis.del(`job:${jobId}:dispatch_queue`);
+
+            // 2. Redis GEO index cleanup
+            const geohash = await redis.get(`job:${jobId}:geohash`);
+            if (geohash) {
+                await redis.zrem(`jobs:geo:${geohash}`, jobId);
+            }
+            await redis.del(`job:${jobId}:geohash`);
+            await redis.srem('jobs:active_set', jobId);
+            await redis.set(`job:${jobId}:status`, 'CANCELLED', 'EX', 3600);
+
+            // 3. Socket notifications
+            if (io) {
+                io.to(`job:${jobId}`).emit('job_cancelled_by_user', { jobId, reason, message: "Customer cancelled the job." });
+                io.to(`user:${userId}`).emit('job_cancelled_by_user', { jobId, reason });
+                if (job.worker_id) {
+                    io.to(`worker:${job.worker_id}`).emit('job_cancelled_by_user', { jobId, reason, message: "The customer cancelled this job." });
+                }
+            }
+
+            console.log(`🛑 [CUSTOMER_CANCELLED] Job ${jobId} cancelled by customer ${userId}. Dispatch halted.`);
+            return { success: true, message: "Job cancelled successfully", job: updateRes.rows[0] };
+        } catch (e) {
+            if (client) await client.query('ROLLBACK');
+            console.error("❌ [CANCEL-BY-USER-ERROR]", e.message);
+            return { success: false, error: e.message };
+        } finally {
+            if (client) client.release();
+        }
+    }
+
     async getEarningsSummary(workerId, customDate = null) {
         const matchingService = require('./matching.service');
         const worker = await matchingService.resolveWorker(workerId);
