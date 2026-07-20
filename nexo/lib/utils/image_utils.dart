@@ -4,17 +4,41 @@ import 'package:nexo/services/service_data.dart';
 
 class ImageUtils {
   static const String placeholderUser = 'assets/images/placeholder_user.png';
-  
-  static String getCategoryAsset(String? category) {
-    print('[JOB_CATEGORY] $category');
+
+  static IconData getCategoryIcon(String? category) {
     final cat = category?.trim().toLowerCase() ?? '';
-    
-    // Dynamic lookup in ServiceData to resolve exact task images
+    if (cat.contains('electric')) return Icons.electric_bolt_rounded;
+    if (cat.contains('ac') || cat.contains('air condition') || cat.contains('appliance')) return Icons.ac_unit_rounded;
+    if (cat.contains('plumb') || cat.contains('pipe') || cat.contains('tap') || cat.contains('leak')) return Icons.plumbing_rounded;
+    if (cat.contains('clean') || cat.contains('house keep')) return Icons.cleaning_services_rounded;
+    if (cat.contains('tractor') || cat.contains('plough') || cat.contains('agri') || cat.contains('farm')) return Icons.agriculture_rounded;
+    if (cat.contains('mason') || cat.contains('brick') || cat.contains('construct')) return Icons.foundation_rounded;
+    if (cat.contains('delivery') || cat.contains('parcel') || cat.contains('errand')) return Icons.local_shipping_rounded;
+    if (cat.contains('mechanic') || cat.contains('bike') || cat.contains('car') || cat.contains('vehicle')) return Icons.two_wheeler_rounded;
+    if (cat.contains('driver') || cat.contains('transport')) return Icons.directions_car_rounded;
+    if (cat.contains('maid') || cat.contains('cook') || cat.contains('house')) return Icons.family_restroom_rounded;
+    if (cat.contains('cctv') || cat.contains('camera') || cat.contains('solar') || cat.contains('tech')) return Icons.solar_power_rounded;
+    if (cat.contains('event') || cat.contains('stage') || cat.contains('sound')) return Icons.festival_rounded;
+    if (cat.contains('paint')) return Icons.format_paint_rounded;
+    if (cat.contains('carpenter') || cat.contains('wood')) return Icons.handyman_rounded;
+    return Icons.home_repair_service_rounded;
+  }
+
+  static String getCategoryAsset(String? category) {
+    final cat = category?.trim().toLowerCase() ?? '';
+
+    // 1. Dynamic exact task matching in ServiceData
     if (category != null && category.trim().isNotEmpty) {
       final nameLower = category.trim().toLowerCase();
       for (var c in ServiceData.categories) {
+        if (c['name']?.toString().toLowerCase() == nameLower && c['image'] != null) {
+          return c['image'].toString();
+        }
         if (c['subcategories'] != null) {
           for (var sub in c['subcategories']) {
+            if (sub['name']?.toString().toLowerCase() == nameLower && sub['image'] != null) {
+              return sub['image'].toString();
+            }
             if (sub['tasks'] != null) {
               for (var t in sub['tasks']) {
                 if (t['name'] != null && t['name'].toString().trim().toLowerCase() == nameLower) {
@@ -29,21 +53,23 @@ class ImageUtils {
         }
       }
     }
-    
-    if (cat.contains('ac') || cat.contains('air condition')) return 'assets/images/home services/appliance repair/ac repair.jpg';
-    if (cat.contains('electrician') || cat.contains('wire') || cat.contains('switch')) return 'assets/images/home services/electrical/wiring.webp';
-    if (cat.contains('plumb') || cat.contains('leak') || cat.contains('pipe')) return 'assets/images/home services/plumbing/tap repair.jpg';
+
+    // 2. Precise keyword matching
+    if (cat.contains('electric')) return 'assets/images/home services/electrical/wiring.webp';
+    if (cat.contains('ac') || cat.contains('air condition') || cat.contains('appliance')) return 'assets/images/home services/appliance repair/ac repair.jpg';
+    if (cat.contains('plumb') || cat.contains('pipe') || cat.contains('tap') || cat.contains('leak')) return 'assets/images/home services/plumbing/tap repair.jpg';
     if (cat.contains('clean') || cat.contains('house keep')) return 'assets/images/home services/cleaning/full house cleaner.jpeg';
-    if (cat.contains('tractor') || cat.contains('plough')) return 'assets/images/Agriculture/Equipment Rental/tractor ploughing.jpg';
-    if (cat.contains('mason') || cat.contains('brick') || cat.contains('construction')) return 'assets/images/construction/core work/mason brick work.webp';
-    if (cat.contains('delivery') || cat.contains('parcel')) return 'assets/images/delivery/errands/parcel delivery.jpg';
-    if (cat.contains('mechanic') || cat.contains('bike') || cat.contains('car')) return 'assets/images/mechanic/vehicle repair/bike repair.webp';
+    if (cat.contains('tractor') || cat.contains('plough') || cat.contains('agri') || cat.contains('farm')) return 'assets/images/Agriculture/Equipment Rental/tractor ploughing.jpg';
+    if (cat.contains('mason') || cat.contains('brick') || cat.contains('construct')) return 'assets/images/construction/core work/mason brick work.webp';
+    if (cat.contains('delivery') || cat.contains('parcel') || cat.contains('errand')) return 'assets/images/delivery/errands/parcel delivery.jpg';
+    if (cat.contains('mechanic') || cat.contains('bike') || cat.contains('car') || cat.contains('vehicle')) return 'assets/images/mechanic/vehicle repair/bike repair.webp';
     if (cat.contains('driver') || cat.contains('transport')) return 'assets/images/transport/vehicles/pickup vehicle.webp';
-    if (cat.contains('maid') || cat.contains('cook') || cat.contains('help')) return 'assets/images/household/care and help/maid.jpg';
-    if (cat.contains('cctv') || cat.contains('camera') || cat.contains('solar')) return 'assets/images/smart tech/installation/solar panel installation.jpg';
+    if (cat.contains('maid') || cat.contains('cook') || cat.contains('house')) return 'assets/images/household/care and help/maid.jpg';
+    if (cat.contains('cctv') || cat.contains('camera') || cat.contains('solar') || cat.contains('tech')) return 'assets/images/smart tech/installation/solar panel installation.jpg';
     if (cat.contains('event') || cat.contains('stage') || cat.contains('sound')) return 'assets/images/events/event staff/sound or light setup.jpg';
-    if (cat.contains('painter')) return 'assets/images/construction/finishing work/painter.jpg';
-    if (cat.contains('carpenter')) return 'assets/images/skilled/trades/carpenter.webp';
+    if (cat.contains('paint')) return 'assets/images/construction/finishing work/painter.jpg';
+    if (cat.contains('carpenter') || cat.contains('wood')) return 'assets/images/skilled/trades/carpenter.webp';
+    if (cat.contains('home repair') || cat.contains('repair')) return 'assets/images/home services/electrical/wiring.webp';
 
     switch (category?.trim()) {
       case 'Agriculture': return 'assets/images/Agriculture/Equipment Rental/tractor ploughing.jpg';
@@ -57,81 +83,98 @@ class ImageUtils {
       case 'Events': return 'assets/images/events/event staff/sound or light setup.jpg';
       case 'Skilled': return 'assets/images/skilled/trades/ac technician.jpg';
       case 'Smart Tech': return 'assets/images/smart tech/installation/solar panel installation.jpg';
-      default: return 'assets/images/skilled/trades/ac technician.jpg';
+      default: return 'assets/images/home services/electrical/wiring.webp';
     }
   }
 
-  static Widget buildServiceImage(String? path, {String? taskName, double? width, double? height, BoxFit fit = BoxFit.cover, Widget? fallback}) {
-    print('[SERVICE_IMAGE_REQUEST] Path: $path, Task: $taskName');
-    
+  static Widget buildFallbackIcon(String? taskName, {double? width, double? height, Color? color}) {
+    final iconData = getCategoryIcon(taskName);
+    return Container(
+      width: width,
+      height: height,
+      color: (color ?? const Color(0xFFFF6A00)).withValues(alpha: 0.1),
+      alignment: Alignment.center,
+      child: Icon(
+        iconData,
+        size: (width != null && height != null) ? (width < height ? width * 0.5 : height * 0.5) : 28,
+        color: color ?? const Color(0xFFFF6A00),
+      ),
+    );
+  }
+
+  static Widget buildServiceImage(
+    String? path, {
+    String? taskName,
+    double? width,
+    double? height,
+    BoxFit fit = BoxFit.cover,
+    Widget? fallback,
+  }) {
     String? resolvedPath = path;
-    
+
     // Fallback to taskName mapping if path is missing or placeholder
     if ((resolvedPath == null || resolvedPath.isEmpty || resolvedPath == 'null') && taskName != null) {
       resolvedPath = getCategoryAsset(taskName);
     }
-    
+
+    final fallbackWidget = fallback ?? buildFallbackIcon(taskName, width: width, height: height);
+
     if (resolvedPath == null || resolvedPath.isEmpty || resolvedPath == 'null') {
-      return fallback ?? Icon(Icons.image, size: width ?? 24, color: Colors.grey);
+      return fallbackWidget;
     }
 
-    // If resolvedPath starts with assets/ (or contains assets/images/ directly), treat it as a local asset
-    if (resolvedPath.startsWith('assets/') || resolvedPath.contains('assets/images/')) {
-      final localPath = resolvedPath.startsWith('assets/') ? resolvedPath : 'assets/images/${resolvedPath.split('assets/images/')[1]}';
-      
-      if (localPath.contains('logo/') || 
-          localPath.contains('placeholder') || 
-          localPath.contains('worker_auth') || 
-          localPath.contains('refer_banner')) {
-        return Image.asset(
-          localPath,
-          width: width,
-          height: height,
-          fit: fit,
-          errorBuilder: (context, error, stackTrace) {
-            print('❌ [ASSET_LOAD_ERROR] Failed to load local asset: $localPath');
-            return fallback ?? Icon(Icons.broken_image, size: width ?? 24, color: Colors.grey);
-          },
-        );
-      } else {
-        // Load category image from network backend
-        String finalUrl = '${NetworkHelper.baseUrl}/public/$localPath';
-        finalUrl = Uri.encodeFull(finalUrl);
-        return Image.network(
-          finalUrl,
-          width: width,
-          height: height,
-          fit: fit,
-          errorBuilder: (context, error, stackTrace) {
-            print('❌ [ASSET_LOAD_ERROR] Failed to load from backend: $finalUrl');
-            return fallback ?? Icon(Icons.broken_image, size: width ?? 24, color: Colors.grey);
-          },
-        );
-      }
+    final safePath = resolvedPath;
+
+    // If path starts with http/https, render network image directly
+    if (safePath.startsWith('http')) {
+      final finalUrl = Uri.encodeFull(safePath);
+      return Image.network(
+        finalUrl,
+        width: width,
+        height: height,
+        fit: fit,
+        errorBuilder: (context, error, stackTrace) => fallbackWidget,
+      );
     }
 
-    String finalUrl = resolvedPath;
-    if (!resolvedPath.startsWith('http')) {
-       finalUrl = '${NetworkHelper.baseUrl}$resolvedPath';
+    // If path is a local asset
+    if (safePath.startsWith('assets/')) {
+      return Image.asset(
+        safePath,
+        width: width,
+        height: height,
+        fit: fit,
+        errorBuilder: (context, error, stackTrace) {
+          // If local asset missing, try backend public endpoint
+          final backendUrl = Uri.encodeFull('${NetworkHelper.baseUrl}/public/$safePath');
+          return Image.network(
+            backendUrl,
+            width: width,
+            height: height,
+            fit: fit,
+            errorBuilder: (c, e, s) => fallbackWidget,
+          );
+        },
+      );
     }
-    
-    finalUrl = Uri.encodeFull(finalUrl);
+
+    // Fallback URL relative path
+    final relativeUrl = Uri.encodeFull(
+      safePath.startsWith('/')
+          ? '${NetworkHelper.baseUrl}$safePath'
+          : '${NetworkHelper.baseUrl}/$safePath',
+    );
 
     return Image.network(
-      finalUrl,
+      relativeUrl,
       width: width,
       height: height,
       fit: fit,
-      errorBuilder: (context, error, stackTrace) {
-        print('❌ [ASSET_LOAD_ERROR] Failed to load: $finalUrl');
-        return fallback ?? Icon(Icons.broken_image, size: width ?? 24, color: Colors.grey);
-      },
+      errorBuilder: (context, error, stackTrace) => fallbackWidget,
     );
   }
 
   static Widget buildProfileImage(String? url, {double radius = 24, String? name}) {
-    print('[PROFILE_IMAGE_SOURCE] ${url ?? "NULL (Showing Placeholder)"}');
-    
     String? resolvedUrl = url;
     if (resolvedUrl != null && !resolvedUrl.startsWith('http') && resolvedUrl.isNotEmpty) {
       if (resolvedUrl.startsWith('/')) {
@@ -162,9 +205,7 @@ class ImageUtils {
       radius: radius,
       backgroundImage: NetworkImage(resolvedUrl),
       backgroundColor: Colors.transparent,
-      onBackgroundImageError: (e, s) {
-        print('❌ [IMAGE_LOAD_ERROR] Failed to load: $resolvedUrl');
-      },
+      onBackgroundImageError: (e, s) {},
     );
   }
 }
