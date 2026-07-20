@@ -139,23 +139,17 @@ class ImageUtils {
 
     // If path is a local asset
     if (safePath.startsWith('assets/')) {
-      return Image.asset(
-        safePath,
-        width: width,
-        height: height,
-        fit: fit,
-        errorBuilder: (context, error, stackTrace) {
-          // If local asset missing, try backend public endpoint
-          final backendUrl = Uri.encodeFull('${NetworkHelper.baseUrl}/public/$safePath');
-          return Image.network(
-            backendUrl,
-            width: width,
-            height: height,
-            fit: fit,
-            errorBuilder: (c, e, s) => fallbackWidget,
-          );
-        },
-      );
+      if (safePath.contains('logo') || safePath.contains('refer_banner') || safePath.contains('worker_auth')) {
+        return Image.asset(
+          safePath,
+          width: width,
+          height: height,
+          fit: fit,
+          errorBuilder: (context, error, stackTrace) => fallbackWidget,
+        );
+      }
+      // Non-existent category asset path - fallback cleanly to category icon
+      return fallbackWidget;
     }
 
     // Fallback URL relative path
