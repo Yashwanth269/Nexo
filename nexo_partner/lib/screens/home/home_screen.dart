@@ -566,6 +566,45 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   double _searchRadius = 10.0;
   bool _isPaused = false;
 
+  void _showOfflineConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.power_settings_new_rounded, color: Colors.redAccent, size: 28),
+            const SizedBox(width: 8),
+            Text("Go Offline?", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          "You will stop receiving new gig requests. Are you sure you want to go offline?",
+          style: GoogleFonts.inter(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Stay Online", style: GoogleFonts.inter(color: Colors.white54, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _toggleOnline(false);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text("Go Offline", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _toggleOnline(bool value) async {
     if (value) {
       final isEligible = await WorkerEligibilityManager.showEligibilitySheet(context);
@@ -1146,7 +1185,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             _buildNewNavItem(1, Icons.work_rounded, "My Gigs"),
             // Center circular button
             GestureDetector(
-              onTap: () => _toggleOnline(!_isOnline),
+              onTap: () {
+                if (_isOnline) {
+                  _showOfflineConfirmation();
+                } else {
+                  _toggleOnline(true);
+                }
+              },
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1154,18 +1199,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     width: 52,
                     height: 52,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2563EB),
+                      color: _isOnline ? Colors.redAccent : const Color(0xFF2563EB),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF2563EB).withOpacity(0.3),
+                          color: (_isOnline ? Colors.redAccent : const Color(0xFF2563EB)).withOpacity(0.3),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         )
                       ],
                     ),
-                    child: const Icon(
-                      Icons.flash_on_rounded,
+                    child: Icon(
+                      _isOnline ? Icons.power_settings_new_rounded : Icons.flash_on_rounded,
                       color: Colors.white,
                       size: 26,
                     ),

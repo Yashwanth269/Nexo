@@ -89,7 +89,7 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
             await db.query("UPDATE workers SET last_login_gps = $1 WHERE id = $2", [JSON.stringify({ lat, lng }), workerId]);
         }
 
-        const token = jwt.sign({ phoneNumber, workerId, role: 'WORKER' }, SECRET_KEY, { expiresIn: '7d' });
+        const token = jwt.sign({ phoneNumber, workerId, role: 'WORKER' }, SECRET_KEY, { expiresIn: '365d' });
         
         // Fetch profile details for session hydration
         const profile = await db.query("SELECT full_name, photo_url FROM workers WHERE id = $1", [workerId]);

@@ -27,7 +27,8 @@ const authenticateToken = async (req, res, next) => {
             return res.status(401).json({ success: false, error: 'TOKEN_REVOKED', message: 'Token has been revoked' });
         }
 
-        const decoded = jwt.verify(token, SECRET_KEY);
+        // Temporarily ignoring expiration to prevent active workers from being locked out mid-job.
+        const decoded = jwt.verify(token, SECRET_KEY, { ignoreExpiration: true });
         req.user = decoded;
         next();
     } catch (err) {

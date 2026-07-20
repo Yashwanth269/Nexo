@@ -167,19 +167,30 @@ class WorkerEligibilityManager {
   }
 
   static Future<bool> showEligibilitySheet(BuildContext context) async {
-    final report = await checkEligibility();
+    EligibilityReport report = await checkEligibility();
     if (report.isFullyEligible) return true;
 
-    if (!context.mounted) return false;
+    // Background fixing: request missing permissions sequentially
+    for (var item in report.missingMandatory) {
+      await item.onFix();
+      // Slight delay to allow system permission dialogs to resolve
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
 
-    return await showModalBottomSheet<bool>(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          barrierColor: Colors.black87,
-          builder: (context) => _EligibilityModal(initialReport: report),
-        ) ??
-        false;
+    // Re-check after attempting to fix
+    report = await checkEligibility();
+    if (!report.isFullyEligible) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Please grant all required permissions to go online."),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+      return false;
+    }
+    return true;
   }
 }
 

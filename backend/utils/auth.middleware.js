@@ -43,7 +43,9 @@ const authenticateToken = async (req, res, next) => {
     }
 
     try {
-        const decoded = jwt.verify(token, SECRET_KEY);
+        // Temporarily ignoring expiration to prevent active workers from being locked out mid-job.
+        // Tokens are now issued with 365d expiry going forward.
+        const decoded = jwt.verify(token, SECRET_KEY, { ignoreExpiration: true });
         
         // Verify user/worker still exists in database
         if (decoded.userId) {
