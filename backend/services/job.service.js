@@ -743,8 +743,8 @@ class JobService {
                 });
             } catch (streamErr) {
                 console.error("⚠️ [JOB_SERVICE] Failed to publish job_cancelled event:", streamErr.message);
-                await workerService.updateFatigueScore(worker.id, 'JOB_CANCELLED');
             }
+            await workerService.updateFatigueScore(worker.id, 'JOB_CANCELLED').catch(() => {});
 
             // Socket notifications
             const payload = { jobId, reason, message: "The assigned worker cancelled this job." };

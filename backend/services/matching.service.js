@@ -412,8 +412,8 @@ class MatchingService {
                     // Send offers to selected targets
                     await this.notifyWorkersForJob(job, targets);
 
-                    // Wait 20 seconds for anyone to accept
-                    hasAccepted = await this.waitForAcceptance(jobId, 20);
+                    // Wait for anyone to accept within offer TTL window
+                    hasAccepted = await this.waitForAcceptance(jobId, dispatchConfig.pools.offerTtlSeconds);
                 } else {
                     console.log(`[DISPATCH-STAGE] No new candidates found in Stage ${stageIdx + 1} (${radiusKm}km). Expanding immediately to next radius...`);
                 }
@@ -610,8 +610,15 @@ class MatchingService {
         let queryText = `
             SELECT w.id, w.full_name, w.phone_number, w.photo_url, w.skills, w.experience, w.rating as raw_rating,
                    w.jobs_completed, w.is_online, w.is_available, w.current_lat, w.current_lng, w.verification_status, w.tasks,
+                   w.updated_at as last_activity_time,
                    r.trust_score as rep_trust_score, r.reliability_score as rep_reliability_score, r.overall_score as rep_overall_score,
-                   earth_distance(ll_to_earth($1, $2), w.location_cube) / 1000.0 AS distance
+                   earth_distance(ll_to_earth($1, $2), w.location_cube) / 1000.0 AS distance,
+                   COALESCE((
+                       SELECT COUNT(*) FROM jobs 
+                       WHERE worker_id = w.id 
+                         AND status = 'COMPLETED' 
+                         AND completed_at >= CURRENT_DATE
+                   ), 0) AS jobs_completed_today
             FROM workers w
             LEFT JOIN worker_reputation_scores r ON w.id = r.worker_id
             WHERE w.location_cube IS NOT NULL
@@ -639,6 +646,7 @@ class MatchingService {
         const shadowBanService = require('./shadow_ban.service');
         const fatigueService = require('./fatigue.service');
         const reputationService = require('./reputation.service');
+        const dispatchConfig = require('../config/dispatch.config');
 
         const logRejection = async (workerId, reason, score = 0.0) => {
             try {
@@ -754,20 +762,26 @@ class MatchingService {
             const availabilityScore = worker.is_available ? 1.0 : 0.5;
             const etaMinutes = worker.distance * 2.5; // approx 2.5 mins per km
             const etaScore = 1.0 / (1.0 + etaMinutes);
-            const userPreferenceMatch = 1.0;
-            const categoryExperience = Math.min(1.0, (worker.jobs_completed || 0) / 50.0);
 
-            // Compute sub-components
-            const compSkill = 0.25 * skillConfidence;
-            const compRep = 0.20 * reputation;
-            const compAccept = 0.15 * pAccept;
-            const compDist = 0.15 * distanceScore;
-            const compAvail = 0.10 * availabilityScore;
-            const compEta = 0.05 * etaScore;
-            const compPref = 0.05 * userPreferenceMatch;
-            const compExp = 0.05 * categoryExperience;
+            // Fairness Sub-Scores (Earnings & Idle Time Anti-Starvation)
+            const jobsCompletedToday = parseInt(worker.jobs_completed_today || 0, 10);
+            const fairnessEarningsScore = Math.max(0.0, 1.0 - (jobsCompletedToday / 5.0));
+            
+            const lastActivityMs = worker.last_activity_time ? new Date(worker.last_activity_time).getTime() : Date.now() - 3600000;
+            const idleHours = Math.min(12.0, (Date.now() - lastActivityMs) / 3600000.0);
+            const fairnessIdleScore = Math.min(1.0, idleHours / 12.0);
 
-            let score = compSkill + compRep + compAccept + compDist + compAvail + compEta + compPref + compExp;
+            // Compute sub-components using centralized weights
+            const compSkill = dispatchConfig.weights.skillConfidence * skillConfidence;
+            const compRep = dispatchConfig.weights.reputation * reputation;
+            const compAccept = dispatchConfig.weights.acceptanceProbability * pAccept;
+            const compDist = dispatchConfig.weights.distance * distanceScore;
+            const compFairnessEarnings = dispatchConfig.weights.fairnessEarnings * fairnessEarningsScore;
+            const compFairnessIdle = dispatchConfig.weights.fairnessIdle * fairnessIdleScore;
+            const compAvail = dispatchConfig.weights.availability * availabilityScore;
+            const compEta = dispatchConfig.weights.eta * etaScore;
+
+            let score = compSkill + compRep + compAccept + compDist + compFairnessEarnings + compFairnessIdle + compAvail + compEta;
 
             // Apply Penalties
             const fatiguePenalty = fatigue.score * 0.15;
@@ -842,8 +856,9 @@ class MatchingService {
             reviewingCount: activeCount
         });
 
+        const dispatchConfig = require('../config/dispatch.config');
         for (const worker of workers) {
-            await this.createOffer(job, worker, worker.distance, worker.pAccept, 90);
+            await this.createOffer(job, worker, worker.distance, worker.pAccept, dispatchConfig.pools.offerTtlSeconds);
         }
     }
 
