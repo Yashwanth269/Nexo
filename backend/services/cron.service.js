@@ -14,6 +14,11 @@ class CronService {
             console.error('⏰ [CRON-ABORT] Database schema validation is currently failing/invalid. Skipping cron scheduling.');
             return;
         }
+        // Run every 2 minutes: Scheduled Job Protection & Pre-Job Health Monitor
+        cron.schedule('*/2 * * * *', async () => {
+            await this._monitorScheduledJobs();
+        });
+
         // Run every 5 minutes: auto-confirm cash payments older than 24h
         cron.schedule('*/5 * * * *', async () => {
             await this._autoConfirmCashPayments();
@@ -106,6 +111,15 @@ class CronService {
         });
 
         console.log('⏰ [CRON] Scheduled tasks registered (auto-confirm, SLA breaches, metrics, ML retraining, fraud, dispute, fatigue, gamification, maturity, heatmap, availability, demand, recommendation)');
+    }
+
+    async _monitorScheduledJobs() {
+        try {
+            const scheduledJobProtectionService = require('./scheduled_job_protection.service');
+            await scheduledJobProtectionService.monitorScheduledJobs();
+        } catch (e) {
+            console.error('⏰ [CRON] Scheduled job protection error:', e.message);
+        }
     }
 
     async _autoConfirmCashPayments() {

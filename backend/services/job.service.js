@@ -55,7 +55,7 @@ class JobService {
 
             // 4. SELECT FOR UPDATE — Row-level lock prevents concurrent updates
             const lockResult = await client.query(
-                `SELECT id, status, user_id FROM jobs WHERE id = $1 FOR UPDATE`,
+                `SELECT id, status, user_id, scheduled_at FROM jobs WHERE id = $1 FOR UPDATE`,
                 [jobId]
             );
 
@@ -71,13 +71,16 @@ class JobService {
                 return { success: false, message: "JOB_ALREADY_TAKEN" };
             }
 
+            const isScheduled = lockResult.rows[0].scheduled_at != null;
+            const assignStatus = isScheduled ? 'RESERVED' : 'ACCEPTED';
+
             // 5. Atomic Assignment
             const result = await client.query(
                 `UPDATE jobs 
-                 SET worker_id = $1, status = 'ACCEPTED', accepted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                 SET worker_id = $1, status = $3, accepted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
                  WHERE id = $2 AND status IN ('OPEN', 'REDISTRIBUTING', 'REASSIGNING') 
                  RETURNING *`,
-                [worker.id, jobId]
+                [worker.id, jobId, assignStatus]
             );
 
             if (result.rowCount === 0) {
