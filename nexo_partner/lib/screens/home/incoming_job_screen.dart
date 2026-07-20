@@ -4,6 +4,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../services/socket_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class IncomingJobScreen extends StatefulWidget {
   final Map<dynamic, dynamic> jobData;
@@ -55,10 +56,21 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
     SocketService().socket?.on('job_cancelled_by_user', _cancelListener!);
     SocketService().socket?.on('USER_CANCELLED_JOB', _cancelListener!);
 
-    _jobTakenListener = (data) {
+    _jobTakenListener = (data) async {
       if (data != null) {
         final String? takenJobId = (data['jobId'] ?? data['job_id'])?.toString();
+        final String? takenWorkerId = (data['workerId'] ?? data['worker_id'])?.toString();
+        final String? takenWorkerPhone = (data['workerPhone'] ?? data['worker_phone'])?.toString();
         final String currentJobId = (widget.jobData['id'] ?? widget.jobData['_id'] ?? widget.jobData['jobId'] ?? widget.jobData['job_id'])?.toString() ?? "";
+
+        final prefs = await SharedPreferences.getInstance();
+        final currentPhone = prefs.getString('workerPhone') ?? prefs.getString('worker_phone');
+        final currentWorkerId = prefs.getString('workerId');
+
+        // Ignore if this event was triggered by THIS worker accepting the job
+        if (takenWorkerId != null && currentWorkerId != null && takenWorkerId == currentWorkerId) return;
+        if (takenWorkerPhone != null && currentPhone != null && takenWorkerPhone == currentPhone) return;
+
         if (takenJobId == currentJobId) {
           debugPrint("🚫 [SOCKET] Current incoming job was accepted by another worker.");
           _audioPlayer.stop();

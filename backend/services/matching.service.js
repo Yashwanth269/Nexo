@@ -8,6 +8,7 @@ const backupWorkerService = require('./backup_worker.service');
 const skillConfidenceService = require('./skill_confidence.service');
 const fatigueService = require('./fatigue.service');
 const reputationService = require('./reputation.service');
+const dispatchConfig = require('../config/dispatch.config');
 const { isSkillMatch } = require('../utils/skill_matcher');
 
 async function logDispatchEvent(jobId, eventType, metadata = {}, workerId = null) {

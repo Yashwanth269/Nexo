@@ -127,7 +127,7 @@ class JobService {
             });
 
             // 8. Realtime Broadcast
-            io.emit('job_taken', { jobId, workerId: worker.id });
+            io.emit('job_taken', { jobId, workerId: worker.id, workerPhone: worker.phone_number });
             
             // Fetch directions dynamically
             const { getDirections } = require('../utils/google_maps');
