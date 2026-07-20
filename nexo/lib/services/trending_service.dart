@@ -6,6 +6,7 @@ import 'package:nexo/utils/network_helper.dart';
 import 'package:nexo/services/socket_service.dart';
 import 'package:nexo/services/shared_prefs_helper.dart';
 import 'package:nexo/services/service_data.dart';
+import 'package:nexo/utils/image_utils.dart';
 
 /// ═══════════════════════════════════════════════════════════════
 ///  TrendingService — Realtime "Popular Near You" Data Provider
@@ -119,12 +120,8 @@ class TrendingService {
     final confidence  = (api['confidence']   as num?)?.toDouble() ?? 0.5;
     final isFallback  = api['isFallback']    as bool? ?? false;
 
-    // Look up the correct image from ServiceData
-    final catData = ServiceData.categories.firstWhere(
-      (c) => c['name'] == name || (c['workers'] as List).contains(name),
-      orElse: () => <String, dynamic>{},
-    );
-    final image = catData.isNotEmpty ? catData['image'] as String? : null;
+    // Look up the exact image for this task or category
+    final image = ImageUtils.getCategoryAsset(name);
 
     // Build tags from API — fallback to badge if no tags
     final rawTags = api['tags'] as List<dynamic>? ?? [];

@@ -2976,8 +2976,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
           final Map<String, dynamic> service = Map<String, dynamic>.from(entry.value);
           final catName = service['name'] as String? ?? 'Service';
 
-          // Use image already resolved by TrendingService (correct per-category)
-          final String? serviceImage = service['image'] as String?;
+          // Resolve exact category asset using ImageUtils
+          final String serviceImage = ImageUtils.getCategoryAsset(catName);
 
           // Fallback color from ServiceData
           final catData = ServiceData.categories.firstWhere(
@@ -3009,7 +3009,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
               Navigator.push(context, MaterialPageRoute(
                 builder: (context) => PostJobScreen(
                   initialTask: catName,
-                  initialImage: catData['image'] as String?,
+                  initialImage: serviceImage,
                   initialIcon: catData['icon'],
                 ),
               )).then((_) => _refreshAllData());
