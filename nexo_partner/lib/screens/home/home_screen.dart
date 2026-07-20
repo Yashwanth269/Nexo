@@ -33,7 +33,7 @@ import '../notifications/notifications_screen.dart';
 import '../support/support_screen.dart';
 import '../job/new_job_offer_screen.dart';
 import '../job/job_execution_screen.dart';
-import '../job/new_job_offer_screen.dart';
+import '../security/selfie_verification_screen.dart';
 import 'dart:ui' as ui;
 
 class HomeScreen extends StatefulWidget {
@@ -646,6 +646,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       };
       _socketService.socket?.on('job_cancelled_by_user', handleUserCancel);
       _socketService.socket?.on('USER_CANCELLED_JOB', handleUserCancel);
+
+      _socketService.socket?.on('SELFIE_VERIFICATION_REQUIRED', (data) async {
+        if (mounted && data != null) {
+          final verificationId = data['verificationId']?.toString() ?? '1';
+          final reason = data['reason']?.toString() ?? 'SECURITY_CHECK';
+          
+          final verified = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SelfieVerificationScreen(
+                verificationId: verificationId,
+                reason: reason,
+              ),
+              fullscreenDialog: true,
+            ),
+          );
+
+          if (verified == true) {
+            _fetchActiveGigs();
+            _fetchPendingOffers();
+          }
+        }
+      });
       
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) setState(() => _isSearching = false);
