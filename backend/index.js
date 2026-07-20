@@ -224,6 +224,7 @@ app.use('/api/emergency', authenticateToken, require('./routes/emergency.routes'
 app.use('/api/gamification', authenticateToken, require('./routes/gamification.routes'));
 app.use('/api/admin', authenticateToken, require('./routes/admin.routes'));
 app.use('/api/admin/dispatch', authenticateToken, require('./routes/admin_dispatch.routes'));
+app.use('/api/admin/incentives', authenticateToken, require('./routes/admin_incentives.routes'));
 app.use('/api/backup-worker', authenticateToken, require('./routes/backup_worker.routes'));
 app.use('/api/trust', authenticateToken, require('./routes/trust.routes'));
 app.use('/api/fatigue', authenticateToken, require('./routes/fatigue.routes'));
