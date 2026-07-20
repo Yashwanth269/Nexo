@@ -122,23 +122,11 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
 
   void _acceptGig() {
     _audioPlayer.stop();
-    
-    final String offerId = widget.jobData['offerId']?.toString() ?? 
-                           widget.jobData['id']?.toString() ?? 
-                           widget.jobData['_id']?.toString() ?? "";
-                           
-    SocketService().socket?.emit('accept_job', {'offerId': offerId});
     Navigator.of(context).pop({'accepted': true});
   }
 
   void _declineGig() {
     _audioPlayer.stop();
-    
-    final String offerId = widget.jobData['offerId']?.toString() ?? 
-                           widget.jobData['id']?.toString() ?? 
-                           widget.jobData['_id']?.toString() ?? "";
-                           
-    SocketService().socket?.emit('decline_job', {'offerId': offerId});
     Navigator.of(context).pop({'accepted': false});
   }
 
@@ -148,286 +136,301 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
     final earnings = widget.jobData['price'] ?? widget.jobData['earnings'] ?? "0";
     final distance = widget.jobData['distance'] ?? "Nearby";
     final address = widget.jobData['address'] ?? "Customer Location";
-
-    // Split category into readable titles
     final pickupName = widget.jobData['customerName'] ?? widget.jobData['userName'] ?? category;
+
+    // Use current location (worker) if available. If not, default to job location with slight offset
+    LatLng workerLocation = _jobLocation ?? const LatLng(0, 0);
+    // In a real app we'd have the worker's exact location. We'll use a mocked offset for demo if worker loc is missing
+    if (_jobLocation != null) {
+      workerLocation = LatLng(_jobLocation!.latitude - 0.005, _jobLocation!.longitude - 0.005);
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF151515),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 20),
-              
-              // 1. Circular Map with countdown border
-              Center(
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Outer pulsing border
-                    ScaleTransition(
-                      scale: Tween<double>(begin: 0.95, end: 1.05).animate(
-                        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-                      ),
-                      child: FadeTransition(
-                        opacity: Tween<double>(begin: 0.4, end: 0.9).animate(
-                          CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-                        ),
-                        child: Container(
-                          width: 172,
-                          height: 172,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: const Color(0xFF3B82F6),
-                              width: 4.0,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Circular Map View
-                    Container(
-                      width: 154,
-                      height: 154,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF252525),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFF151515), width: 4),
-                      ),
-                      child: ClipOval(
-                        child: _jobLocation != null
-                            ? IgnorePointer(
-                                child: GoogleMap(
-                                  initialCameraPosition: CameraPosition(
-                                    target: _jobLocation!,
-                                    zoom: 15.0,
-                                  ),
-                                  myLocationButtonEnabled: false,
-                                  zoomControlsEnabled: false,
-                                  compassEnabled: false,
-                                  mapToolbarEnabled: false,
-                                  circles: {
-                                    Circle(
-                                      circleId: const CircleId("job_location"),
-                                      center: _jobLocation!,
-                                      radius: 100,
-                                      fillColor: const Color(0xFF3B82F6).withOpacity(0.3),
-                                      strokeColor: const Color(0xFF3B82F6),
-                                      strokeWidth: 2,
-                                    ),
-                                  },
-                                  onMapCreated: (controller) => _mapController = controller,
-                                ),
-                              )
-                            : const Center(
-                                child: Icon(
-                                  Icons.location_on,
-                                  color: Color(0xFF3B82F6),
-                                  size: 48,
-                                ),
-                              ),
-                      ),
-                    ),
+      body: Stack(
+        children: [
+          // 1. Full Screen Google Map Background
+          if (_jobLocation != null)
+            Positioned.fill(
+              child: GoogleMap(
+                initialCameraPosition: CameraPosition(
+                  target: _jobLocation!,
+                  zoom: 13.5,
+                ),
+                myLocationButtonEnabled: false,
+                zoomControlsEnabled: false,
+                compassEnabled: false,
+                mapToolbarEnabled: false,
+                markers: {
+                  Marker(
+                    markerId: const MarkerId("job_location"),
+                    position: _jobLocation!,
+                    icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+                  ),
+                  Marker(
+                    markerId: const MarkerId("worker_location"),
+                    position: workerLocation,
+                    icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+                  ),
+                },
+                onMapCreated: (controller) => _mapController = controller,
+              ),
+            )
+          else
+            const Positioned.fill(
+              child: ColoredBox(color: Color(0xFF252525)),
+            ),
+
+          // Gradient Overlay to ensure text readability
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withOpacity(0.6),
+                    Colors.transparent,
+                    Colors.black.withOpacity(0.7),
+                    Colors.black.withOpacity(0.95),
                   ],
+                  stops: const [0.0, 0.3, 0.6, 1.0],
                 ),
               ),
-              
-              const SizedBox(height: 32),
-              
-              // 2. "New order!" Title
-              Text(
-                "New order!",
-                textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              
-              const SizedBox(height: 24),
-              
-              // 3. Expected Earnings Card
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF222222),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            "Expected earning: ",
-                            style: GoogleFonts.outfit(
-                              fontSize: 18,
-                              color: Colors.white70,
-                            ),
-                          ),
-                          Text(
-                            "₹$earnings",
-                            style: GoogleFonts.outfit(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
+            ),
+          ),
+
+          // 2. Top Logo & Header
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // App Logo
+                  Center(
+                    child: Image.asset(
+                      'assets/images/logo/Nexo_partner_logo.png',
+                      height: 48,
+                      errorBuilder: (context, error, stackTrace) => Text(
+                        "NEXO",
+                        style: GoogleFonts.outfit(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          letterSpacing: 2.0,
+                        ),
                       ),
                     ),
-                    
-                    const Divider(color: Colors.white10, height: 1),
-                    
-                    // 4. Pickup and Drop Info
-                    IntrinsicHeight(
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 12.0),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    "Pickup",
-                                    style: GoogleFonts.outfit(color: Colors.white54, fontSize: 13),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    distance,
-                                    style: GoogleFonts.outfit(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const VerticalDivider(color: Colors.white10, width: 1),
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 12.0),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    "Drop",
-                                    style: GoogleFonts.outfit(color: Colors.white54, fontSize: 13),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    address.length > 22 ? "${address.substring(0, 20)}..." : address,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.outfit(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  // "New order!" Title
+                  ScaleTransition(
+                    scale: Tween<double>(begin: 0.95, end: 1.05).animate(
+                      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
                     ),
-                  ],
-                ),
-              ),
-              
-              const SizedBox(height: 20),
-              
-              // 5. Pickup From / Details Box
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF222222),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "JOB DETAILS",
+                    child: Text(
+                      "New Incoming Gig!",
+                      textAlign: TextAlign.center,
                       style: GoogleFonts.outfit(
-                        color: Colors.white54,
-                        fontSize: 12,
+                        fontSize: 28,
                         fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      pickupName,
-                      style: GoogleFonts.outfit(
                         color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                        shadows: [
+                          const Shadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 2))
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      address,
-                      style: GoogleFonts.outfit(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        height: 1.3,
-                      ),
+                  ),
+
+                  const Spacer(),
+                  
+                  // 3. Expected Earnings Card
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E).withOpacity(0.85),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white24),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10, offset: const Offset(0, 4))
+                      ],
                     ),
-                    const SizedBox(height: 12),
-                    Row(
+                    child: Column(
                       children: [
-                        const Icon(Icons.access_time_filled, color: Colors.amber, size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          "Immediate Service Requested",
-                          style: GoogleFonts.outfit(
-                            color: Colors.amber,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                "Expected earning: ",
+                                style: GoogleFonts.outfit(
+                                  fontSize: 18,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                              Text(
+                                "₹$earnings",
+                                style: GoogleFonts.outfit(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.greenAccent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        const Divider(color: Colors.white10, height: 1),
+                        
+                        // 4. Pickup and Drop Info
+                        IntrinsicHeight(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 12.0),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        "Pickup",
+                                        style: GoogleFonts.outfit(color: Colors.white54, fontSize: 13),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        distance,
+                                        style: GoogleFonts.outfit(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const VerticalDivider(color: Colors.white10, width: 1),
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 12.0),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        "Drop",
+                                        style: GoogleFonts.outfit(color: Colors.white54, fontSize: 13),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        address.length > 22 ? "${address.substring(0, 20)}..." : address,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.outfit(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-              
-              const Spacer(),
-              
-              // 6. Slide to Accept Button
-              SlideActionBtn(
-                onSlideSuccess: _acceptGig,
-                text: "Accept order",
-              ),
-              
-              const SizedBox(height: 12),
-              
-              // 7. Decline Button
-              TextButton(
-                onPressed: _declineGig,
-                child: Text(
-                  "DECLINE",
-                  style: GoogleFonts.outfit(
-                    color: Colors.redAccent,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
                   ),
-                ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // 5. Pickup From / Details Box
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E).withOpacity(0.85),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white24),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10, offset: const Offset(0, 4))
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "JOB DETAILS",
+                          style: GoogleFonts.outfit(
+                            color: Colors.white54,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          pickupName,
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          address,
+                          style: GoogleFonts.outfit(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            height: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Icon(Icons.access_time_filled, color: Colors.amber, size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              "Immediate Service Requested",
+                              style: GoogleFonts.outfit(
+                                color: Colors.amber,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // 6. Slide to Accept Button
+                  SlideActionBtn(
+                    onSlideSuccess: _acceptGig,
+                    text: "Accept order",
+                  ),
+                  
+                  const SizedBox(height: 12),
+                  
+                  // 7. Decline Button
+                  TextButton(
+                    onPressed: _declineGig,
+                    child: Text(
+                      "DECLINE",
+                      style: GoogleFonts.outfit(
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

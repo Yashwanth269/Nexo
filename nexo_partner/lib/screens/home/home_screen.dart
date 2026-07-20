@@ -14,6 +14,7 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../../services/socket_service.dart';
 import '../../services/cache_service.dart';
 import '../../services/background_service.dart';
+import '../../services/worker_eligibility_manager.dart';
 import '../../widgets/job_request_modal.dart';
 import '../../widgets/skeleton_loader.dart';
 import '../../utils/network_helper.dart';
@@ -32,6 +33,8 @@ import '../notifications/notifications_screen.dart';
 import '../support/support_screen.dart';
 import '../job/new_job_offer_screen.dart';
 import '../job/job_execution_screen.dart';
+import '../job/new_job_offer_screen.dart';
+import 'dart:ui' as ui;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -487,7 +490,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   'isPendingOffer': true,
                 };
                 _jobRequests.add(newJob);
-                _showJobNotification(newJob); // Trigger popup immediately if fetched via HTTP
               }
             }
           }
@@ -565,6 +567,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isPaused = false;
 
   void _toggleOnline(bool value) async {
+    if (value) {
+      final isEligible = await WorkerEligibilityManager.showEligibilitySheet(context);
+      if (!isEligible) {
+        if (mounted) setState(() => _isOnline = false);
+        return;
+      }
+    }
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isOnline', value);
 
@@ -662,9 +672,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (jobMap == null) return;
     String currentJobId = jobMap['id']?.toString() ?? jobMap['_id']?.toString() ?? "";
     
-    // Skip if already rejected, already shown, or duplicate
+    // Skip if already rejected or already active
     if (_rejectedJobIds.contains(currentJobId)) return;
-    if (_shownJobIds.contains(currentJobId)) return;
     
     bool isAlreadyActive = _activeGigs.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
     bool isDuplicate = _jobRequests.any((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
@@ -682,15 +691,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _showJobNotification(dynamic job) async {
     String currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? "";
     
-    // GUARD 1: Don't show if already showing a banner
+    // GUARD 1: Don't show if already showing an incoming job banner
     if (_isShowingIncomingJob) return;
-    // GUARD 2: Don't show if this job was already shown in this session
-    if (_shownJobIds.contains(currentJobId)) return;
-    // GUARD 3: Don't show if this job was rejected
+    // GUARD 2: Don't show if this job was rejected
     if (_rejectedJobIds.contains(currentJobId)) return;
     
     _isShowingIncomingJob = true;
-    _shownJobIds.add(currentJobId);
 
     // Bring app to foreground using MethodChannel
     const platform = MethodChannel('com.nexo.partner/foreground');
@@ -900,7 +906,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }),
       );
       setState(() {
-        _jobRequests.removeWhere((j) => j['id'] == jobId);
+        _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == jobId.toString());
       });
     } catch (e) {
       debugPrint("Reject error: $e");
@@ -940,7 +946,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       if (response.statusCode == 200 && data['success']) {
         setState(() {
-          _jobRequests.removeWhere((j) => j['id'] == job['id']);
+          _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == (job['id']?.toString() ?? job['_id']?.toString()));
           _activeGigs.add(data['job'] ?? job);
         });
         Navigator.push(context, MaterialPageRoute(builder: (context) => JobExecutionScreen(jobId: job['id'], initialJob: data['job'] ?? job)));
@@ -1848,26 +1854,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     return GestureDetector(
       onTap: canAccept ? () async {
-        final result = await Navigator.push(
+        final currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? '';
+        await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => IncomingJobScreen(jobData: job, playSound: false),
+            builder: (context) => NewJobOfferScreen(
+              job: job,
+              onAccept: () => _acceptJob(job),
+              onDecline: () {
+                if (currentJobId.isNotEmpty) {
+                  setState(() {
+                    _rejectedJobIds.add(currentJobId);
+                    _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
+                  });
+                  _persistRejectedJobIds();
+                  _rejectJob(currentJobId);
+                }
+              },
+              onCounterOffer: (price) {
+                // Implement counter offer logic if needed
+              },
+            ),
             fullscreenDialog: true,
           ),
         );
-        if (result != null && result['accepted'] == true) {
-          _acceptJob(job);
-        } else if (result != null && result['accepted'] == false) {
-          final currentJobId = job['id']?.toString() ?? job['_id']?.toString() ?? '';
-          if (currentJobId.isNotEmpty) {
-            setState(() {
-              _rejectedJobIds.add(currentJobId);
-              _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == currentJobId);
-            });
-            _persistRejectedJobIds();
-            _rejectJob(currentJobId);
-          }
-        }
       } : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),

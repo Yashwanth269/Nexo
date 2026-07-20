@@ -62,6 +62,25 @@ class _OngoingJobScreenState extends State<OngoingJobScreen> {
         }
       });
 
+      socketService.socket?.on('worker_location_update', (data) {
+        if (mounted && data != null && _job != null) {
+          final lat = double.tryParse(data['lat']?.toString() ?? '');
+          final lng = double.tryParse(data['lng']?.toString() ?? '');
+          if (lat != null && lng != null) {
+            setState(() {
+              _job!['worker'] = {
+                ...(_job!['worker'] ?? {}),
+                'lat': lat,
+                'lng': lng,
+                if (data['eta'] != null) 'eta': data['eta'],
+                if (data['distance'] != null) 'distance': data['distance'],
+              };
+            });
+            _updateCamera();
+          }
+        }
+      });
+
       socketService.socket?.on('WORKER_FORCE_MARKED_ARRIVAL', (data) {
         if (mounted && data != null) {
           debugPrint("🚀 [ONGOING_JOB] Worker force marked arrival via socket!");
