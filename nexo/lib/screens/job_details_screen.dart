@@ -86,6 +86,20 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       }
     });
 
+    socketService.socket?.on('WORKER_DECLINED_JOB', (data) {
+      if (mounted) {
+        debugPrint("🚀 [DETAILS] Status updated via socket: WORKER DECLINED JOB");
+        _fetchDetails();
+      }
+    });
+
+    socketService.socket?.on('JOB_REDISTRIBUTED', (data) {
+      if (mounted) {
+        debugPrint("🚀 [DETAILS] Status updated via socket: JOB REDISTRIBUTED");
+        _fetchDetails();
+      }
+    });
+
     socketService.socket?.on('worker_location_update', (data) {
       if (data['jobId']?.toString() == widget.jobId && mounted) {
         setState(() {
@@ -385,6 +399,36 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     // Strict backend chain: ACCEPTED -> ON_THE_WAY -> ARRIVED -> WORK_IN_PROGRESS -> COMPLETED
     final steps = ['ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'WORK_IN_PROGRESS', 'COMPLETED'];
     final currentIdx = steps.indexOf(status);
+
+    if (['OPEN', 'REDISTRIBUTING', 'REASSIGNING'].contains(status)) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7ED), 
+          borderRadius: BorderRadius.circular(20), 
+          border: Border.all(color: const Color(0xFFFFD8A8))
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 24, 
+              height: 24, 
+              child: CircularProgressIndicator(color: Color(0xFFFF6A00), strokeWidth: 2.5)
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Searching Nearby Workers", style: GoogleFonts.outfit(color: const Color(0xFFC2410C), fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text("Finding another partner nearby...", style: GoogleFonts.inter(color: const Color(0xFF9A3412), fontSize: 12)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     if (status == 'CANCELLED') {
       return Container(

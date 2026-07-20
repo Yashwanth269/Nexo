@@ -634,6 +634,43 @@ class JobService {
         logWorkerResponse(resolvedWorkerId, jobId, 'DECLINED').catch(() => {});
         matchingService.logDispatchEvent(jobId, 'worker_declined', { workerId: resolvedWorkerId }).catch(() => {});
 
+        // Fetch current job state and trigger re-dispatch
+        const jobRes = await db.query("SELECT * FROM jobs WHERE id = $1", [jobId]);
+        if (jobRes.rowCount > 0) {
+            const job = jobRes.rows[0];
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+
+            if (job.worker_id === resolvedWorkerId || job.status === 'ACCEPTED') {
+                const updateRes = await db.query(
+                    `UPDATE jobs 
+                     SET status = 'REDISTRIBUTING', worker_id = NULL, accepted_at = NULL,
+                         cancellation_reason = 'Worker declined request', cancelled_by = 'WORKER',
+                         updated_at = CURRENT_TIMESTAMP
+                     WHERE id = $1 RETURNING *`,
+                    [jobId]
+                );
+                const updatedJob = updateRes.rows[0];
+                
+                await redis.set(`job:${jobId}:status`, 'REDISTRIBUTING');
+                
+                const payload = { jobId, message: "Worker declined the job request. Searching for nearby workers..." };
+                if (io) {
+                    io.to(`user:${job.user_id}`).emit('WORKER_DECLINED_JOB', payload);
+                    io.to(`user:${job.user_id}`).emit('WORKER_CANCELLED_JOB', payload);
+                    io.emit('JOB_REDISTRIBUTED', { jobId, status: 'REDISTRIBUTING' });
+                }
+
+                console.log(`🔄 [WORKER_DECLINED] Worker ${resolvedWorkerId} declined Job ${jobId}. Resetting to REDISTRIBUTING & re-dispatching.`);
+                matchingService.broadcastJob(updatedJob);
+            } else {
+                if (io) {
+                    io.to(`user:${job.user_id}`).emit('WORKER_DECLINED_OFFER', { jobId, workerId: resolvedWorkerId });
+                }
+                matchingService.broadcastJob(job);
+            }
+        }
+
         return { success: true };
     }
 
