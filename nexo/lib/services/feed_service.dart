@@ -65,6 +65,11 @@ class FeedService {
     _lastLng = lng;
     _lastUserId = userId ?? _lastUserId;
 
+    if (lat == 0.0 && lng == 0.0) {
+      debugPrint('[FEED_SERVICE] Skipping fetch — location coordinates uninitialized (0.0, 0.0)');
+      return _lastFeedResult;
+    }
+
     _attachSocketListener();
 
     if (clearPage) {

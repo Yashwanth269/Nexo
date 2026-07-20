@@ -3410,7 +3410,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                 child: ElevatedButton(
                   onPressed: () {
                     Navigator.push(context, MaterialPageRoute(
-                      builder: (context) => PostJobScreen(initialTask: role),
+                      builder: (context) => PostJobScreen(
+                        initialTask: role,
+                        isCategoryLocked: true,
+                        directWorkerName: name,
+                        directWorkerId: worker['id']?.toString(),
+                      ),
                     ));
                   },
                   style: ElevatedButton.styleFrom(

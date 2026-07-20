@@ -48,6 +48,11 @@ class HomeServicesService {
     _lastLat = lat;
     _lastLng = lng;
 
+    if (lat == 0.0 && lng == 0.0) {
+      debugPrint('[HOME_SERVICES] Skipping fetch — location coordinates uninitialized (0.0, 0.0)');
+      return _lastResult;
+    }
+
     try {
       String url = '$_baseUrl/api/home/services?lat=$lat&lng=$lng';
       if (userId != null && userId.isNotEmpty) url += '&userId=$userId';

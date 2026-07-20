@@ -62,6 +62,11 @@ class TrendingService {
     _lastLat = lat;
     _lastLng = lng;
 
+    if (lat == 0.0 && lng == 0.0) {
+      debugPrint('[TRENDING_SERVICE] Skipping fetch — location coordinates uninitialized (0.0, 0.0)');
+      return _lastResult;
+    }
+
     await _joinTrendingRoom(lat, lng);
     _attachSocketListener();
 

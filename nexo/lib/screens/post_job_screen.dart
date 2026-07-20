@@ -19,8 +19,19 @@ class PostJobScreen extends StatefulWidget {
   final String? initialTask;
   final String? initialImage;
   final dynamic initialIcon;
+  final bool isCategoryLocked;
+  final String? directWorkerName;
+  final String? directWorkerId;
 
-  const PostJobScreen({super.key, this.initialTask, this.initialImage, this.initialIcon});
+  const PostJobScreen({
+    super.key,
+    this.initialTask,
+    this.initialImage,
+    this.initialIcon,
+    this.isCategoryLocked = false,
+    this.directWorkerName,
+    this.directWorkerId,
+  });
 
   @override
   State<PostJobScreen> createState() => _PostJobScreenState();
@@ -241,6 +252,19 @@ class _PostJobScreenState extends State<PostJobScreen> {
   }
 
   void _showCategorySelection() {
+    if (widget.isCategoryLocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "🔒 Category is locked to ${widget.directWorkerName ?? 'this expert'}'s domain (${_selectedCategory ?? 'Skill'})",
+            style: GoogleFonts.inter(),
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+        ),
+      );
+      return;
+    }
+
     int modalStep = 0; // 0: Category, 1: Subcategory, 2: Task
     Map<String, dynamic>? currentCat;
     Map<String, dynamic>? currentSub;
@@ -535,53 +559,103 @@ class _PostJobScreenState extends State<PostJobScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSearchBar(),
-        const SizedBox(height: 12),
+        if (widget.isCategoryLocked)
+          Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFBFDBFE), width: 1.2),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFDBEAFE),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.lock_rounded, color: Color(0xFF2563EB), size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Direct Booking: ${widget.directWorkerName ?? 'Specialist Expert'}",
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF1E40AF),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        "Category is locked to this expert's domain skill (${_selectedCategory ?? 'Skill'}).",
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: const Color(0xFF1E3A8A),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          _buildSearchBar(),
+          const SizedBox(height: 12),
+        ],
         _buildSelectedCategoryDisplay(),
         const SizedBox(height: 12),
         
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              "POPULAR CATEGORIES",
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF94A3B8),
-                letterSpacing: 1.0,
+        if (!widget.isCategoryLocked) ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "POPULAR CATEGORIES",
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF94A3B8),
+                  letterSpacing: 1.0,
+                ),
               ),
-            ),
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _showPopularGrid = !_showPopularGrid;
-                });
-              },
-              child: Row(
-                children: [
-                  Text(
-                    _showPopularGrid ? "Minimise" : "Maximise",
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFFFF6A00),
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _showPopularGrid = !_showPopularGrid;
+                  });
+                },
+                child: Row(
+                  children: [
+                    Text(
+                      _showPopularGrid ? "Minimise" : "Maximise",
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFFFF6A00),
+                      ),
                     ),
-                  ),
-                  Icon(
-                    _showPopularGrid ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                    color: const Color(0xFFFF6A00),
-                    size: 14,
-                  ),
-                ],
+                    Icon(
+                      _showPopularGrid ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                      color: const Color(0xFFFF6A00),
+                      size: 14,
+                    ),
+                  ],
+                ),
               ),
-            ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_showPopularGrid) ...[
+            _buildCategoryGrid(),
+            const SizedBox(height: 24),
           ],
-        ),
-        const SizedBox(height: 12),
-        if (_showPopularGrid) ...[
-          _buildCategoryGrid(),
-          const SizedBox(height: 24),
         ],
 
         Text(
@@ -702,22 +776,46 @@ class _PostJobScreenState extends State<PostJobScreen> {
               ],
             ),
           ),
-          TextButton(
-            onPressed: _showCategorySelection,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              backgroundColor: const Color(0xFFFF6A00).withOpacity(0.1),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: Text(
-              "Change",
-              style: GoogleFonts.inter(
-                color: const Color(0xFFFF6A00),
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+          if (widget.isCategoryLocked)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.lock_rounded, size: 12, color: Color(0xFF2563EB)),
+                  const SizedBox(width: 4),
+                  Text(
+                    "LOCKED",
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF1E40AF),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            TextButton(
+              onPressed: _showCategorySelection,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                backgroundColor: const Color(0xFFFF6A00).withOpacity(0.1),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: Text(
+                "Change",
+                style: GoogleFonts.inter(
+                  color: const Color(0xFFFF6A00),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
