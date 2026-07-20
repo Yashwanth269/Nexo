@@ -579,35 +579,6 @@ class ExecutionService {
             io.to(`worker:${worker.phone_number}`).emit('worker_location_update', updatePayload);
         }
     }
-}
-
-// Polyline and route deviation helper functions
-function decodePolyline(str) {
-    let index = 0, len = str.length;
-    let lat = 0, lng = 0;
-    let coordinates = [];
-    while (index < len) {
-        let b, shift = 0, result = 0;
-        do {
-            b = str.charCodeAt(index++) - 63;
-            result |= (b & 0x1f) << shift;
-            shift += 5;
-        } while (b >= 0x20);
-        let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
-        lat += dlat;
-        shift = 0;
-        result = 0;
-        do {
-            b = str.charCodeAt(index++) - 63;
-            result |= (b & 0x1f) << shift;
-            shift += 5;
-        } while (b >= 0x20);
-        let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
-        lng += dlng;
-        coordinates.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
-    }
-    return coordinates;
-}
 
     /**
      * Customer Unreachable Wait Timer (10 minutes)
@@ -646,6 +617,35 @@ function decodePolyline(str) {
             message: "10-minute wait threshold reached. You can now cancel with base fee compensation."
         };
     }
+}
+
+// Polyline and route deviation helper functions
+function decodePolyline(str) {
+    let index = 0, len = str.length;
+    let lat = 0, lng = 0;
+    let coordinates = [];
+    while (index < len) {
+        let b, shift = 0, result = 0;
+        do {
+            b = str.charCodeAt(index++) - 63;
+            result |= (b & 0x1f) << shift;
+            shift += 5;
+        } while (b >= 0x20);
+        let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+        lat += dlat;
+        shift = 0;
+        result = 0;
+        do {
+            b = str.charCodeAt(index++) - 63;
+            result |= (b & 0x1f) << shift;
+            shift += 5;
+        } while (b >= 0x20);
+        let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+        lng += dlng;
+        coordinates.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+    }
+    return coordinates;
+}
 
 function detectRouteDeviation(workerLat, workerLng, polylineStr) {
     if (!polylineStr) return false;

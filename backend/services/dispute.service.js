@@ -166,13 +166,19 @@ class DisputeService {
     }
 
     async checkSlaBreaches() {
-        const res = await db.query(
-            `UPDATE disputes
-             SET sla_breached = TRUE, status = 'ESCALATED', updated_at = NOW()
-             WHERE status = 'OPEN' AND sla_deadline < NOW()
-             RETURNING *`
-        );
-        return res.rows;
+        try {
+            await db.query("ALTER TABLE disputes ADD COLUMN IF NOT EXISTS sla_breached BOOLEAN DEFAULT FALSE").catch(() => {});
+            const res = await db.query(
+                `UPDATE disputes
+                 SET sla_breached = TRUE, status = 'ESCALATED', updated_at = NOW()
+                 WHERE status = 'OPEN' AND sla_deadline < NOW()
+                 RETURNING *`
+            );
+            return res.rows;
+        } catch (e) {
+            console.error("⚠️ [DISPUTE] SLA breach check failed:", e.message);
+            return [];
+        }
     }
 
     async getSlaStatus(disputeId) {
