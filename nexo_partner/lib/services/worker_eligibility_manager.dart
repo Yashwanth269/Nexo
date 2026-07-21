@@ -12,6 +12,8 @@ class EligibilityItem {
   final IconData icon;
   final bool isGranted;
   final bool isMandatory;
+  /// Whether tapping FIX opens Android Settings (requires app resume to re-check)
+  final bool requiresSettingsReturn;
   final Future<void> Function() onFix;
 
   EligibilityItem({
@@ -21,6 +23,7 @@ class EligibilityItem {
     required this.icon,
     required this.isGranted,
     this.isMandatory = true,
+    this.requiresSettingsReturn = false,
     required this.onFix,
   });
 }
@@ -41,7 +44,7 @@ class WorkerEligibilityManager {
   static Future<EligibilityReport> checkEligibility() async {
     final List<EligibilityItem> items = [];
 
-    // 1. Location Permission (Foreground)
+    // 1. Location Permission (Foreground) - MANDATORY
     final locStatus = await Permission.location.status;
     final isLocGranted = locStatus.isGranted;
     items.add(EligibilityItem(
@@ -50,26 +53,34 @@ class WorkerEligibilityManager {
       description: 'Required to calculate customer distance & receive nearby jobs',
       icon: Icons.location_on_rounded,
       isGranted: isLocGranted,
+      isMandatory: true,
+      requiresSettingsReturn: locStatus.isPermanentlyDenied,
       onFix: () async {
-        await Permission.location.request();
+        if (locStatus.isPermanentlyDenied) {
+          await openAppSettings();
+        } else {
+          await Permission.location.request();
+        }
       },
     ));
 
-    // 2. Background Location
+    // 2. Background Location - OPTIONAL (Android 11+ requires manual grant in Settings)
     final bgStatus = await Permission.locationAlways.status;
     final isBgGranted = bgStatus.isGranted;
     items.add(EligibilityItem(
       key: 'background_location',
       title: 'Background Location',
-      description: 'Required to track route & dispatch offers while app is closed',
+      description: 'Recommended to dispatch offers while app is closed',
       icon: Icons.my_location_rounded,
       isGranted: isBgGranted,
+      isMandatory: false,
+      requiresSettingsReturn: true,
       onFix: () async {
-        await Permission.locationAlways.request();
+        await openAppSettings();
       },
     ));
 
-    // 3. GPS Hardware Service Enabled
+    // 3. GPS Hardware Service Enabled - MANDATORY
     bool isGpsOn = false;
     try {
       final res = await _platform.invokeMethod<bool>('isGpsEnabled');
@@ -83,6 +94,8 @@ class WorkerEligibilityManager {
       description: 'Device GPS must be enabled for real-time location tracking',
       icon: Icons.gps_fixed_rounded,
       isGranted: isGpsOn,
+      isMandatory: true,
+      requiresSettingsReturn: true,
       onFix: () async {
         try {
           await _platform.invokeMethod('openGpsSettings');
@@ -92,7 +105,7 @@ class WorkerEligibilityManager {
       },
     ));
 
-    // 4. Notification Permission
+    // 4. Notification Permission - MANDATORY
     final notifStatus = await Permission.notification.status;
     final isNotifGranted = notifStatus.isGranted;
     items.add(EligibilityItem(
@@ -101,23 +114,33 @@ class WorkerEligibilityManager {
       description: 'Required to sound loud ringers & popups for incoming orders',
       icon: Icons.notifications_active_rounded,
       isGranted: isNotifGranted,
+      isMandatory: true,
+      requiresSettingsReturn: notifStatus.isPermanentlyDenied,
       onFix: () async {
-        await Permission.notification.request();
+        if (notifStatus.isPermanentlyDenied) {
+          await openAppSettings();
+        } else {
+          await Permission.notification.request();
+        }
       },
     ));
 
-    // 5. Display Over Other Apps (Overlay)
+    // 5. Display Over Other Apps (Overlay) - MANDATORY, always requires Settings
     bool isOverlayGranted = true;
     try {
       final res = await _platform.invokeMethod<bool>('checkOverlayPermission');
       isOverlayGranted = res ?? true;
-    } catch (_) {}
+    } catch (_) {
+      isOverlayGranted = true; // If channel fails, assume granted to avoid blocking
+    }
     items.add(EligibilityItem(
       key: 'overlay',
       title: 'Display Over Apps',
       description: 'Mandatory to display incoming job popup when screen is locked',
       icon: Icons.layers_rounded,
       isGranted: isOverlayGranted,
+      isMandatory: true,
+      requiresSettingsReturn: true,
       onFix: () async {
         try {
           await _platform.invokeMethod('requestOverlayPermission');
@@ -127,7 +150,7 @@ class WorkerEligibilityManager {
       },
     ));
 
-    // 6. Socket Connection
+    // 6. Socket Connection - OPTIONAL
     final isSocketConnected = SocketService().socket?.connected == true;
     items.add(EligibilityItem(
       key: 'socket',
@@ -136,12 +159,13 @@ class WorkerEligibilityManager {
       icon: Icons.wifi_tethering_rounded,
       isGranted: isSocketConnected,
       isMandatory: false,
+      requiresSettingsReturn: false,
       onFix: () async {
         SocketService().connect((_) {});
       },
     ));
 
-    // 7. Battery Optimization (Recommended)
+    // 7. Battery Optimization - OPTIONAL
     bool isBatteryIgnored = true;
     try {
       final res = await _platform.invokeMethod<bool>('isBatteryOptimizationIgnored');
@@ -154,6 +178,7 @@ class WorkerEligibilityManager {
       icon: Icons.battery_charging_full_rounded,
       isGranted: isBatteryIgnored,
       isMandatory: false,
+      requiresSettingsReturn: true,
       onFix: () async {
         try {
           await _platform.invokeMethod('requestIgnoreBatteryOptimization');
@@ -171,11 +196,26 @@ class WorkerEligibilityManager {
     EligibilityReport report = await checkEligibility();
     if (report.isFullyEligible) return true;
 
+    // For inline-grantable permissions (not permanently denied), request first
+    for (final item in report.missingMandatory) {
+      if (!item.requiresSettingsReturn) {
+        await item.onFix();
+        await Future.delayed(const Duration(milliseconds: 400));
+      }
+    }
+
+    // Re-check after inline grants
+    report = await checkEligibility();
+    if (report.isFullyEligible) return true;
+
+    // Still missing some - show bottom sheet for manual fixing
     if (context.mounted) {
       final result = await showModalBottomSheet<bool>(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
+        isDismissible: false,
+        enableDrag: false,
         builder: (context) => _EligibilityModal(initialReport: report),
       );
       return result ?? false;
@@ -184,6 +224,7 @@ class WorkerEligibilityManager {
   }
 }
 
+/// Uses WidgetsBindingObserver to auto-refresh when user returns from Settings
 class _EligibilityModal extends StatefulWidget {
   final EligibilityReport initialReport;
   const _EligibilityModal({required this.initialReport});
@@ -192,18 +233,38 @@ class _EligibilityModal extends StatefulWidget {
   State<_EligibilityModal> createState() => _EligibilityModalState();
 }
 
-class _EligibilityModalState extends State<_EligibilityModal> {
+class _EligibilityModalState extends State<_EligibilityModal> with WidgetsBindingObserver {
   late EligibilityReport _report;
   bool _isChecking = false;
+  bool _awaitingSettingsReturn = false;
 
   @override
   void initState() {
     super.initState();
     _report = widget.initialReport;
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Auto-called when the app comes back to foreground after visiting Settings
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _awaitingSettingsReturn) {
+      _awaitingSettingsReturn = false;
+      _refreshReport();
+    }
   }
 
   Future<void> _refreshReport() async {
+    if (_isChecking) return;
     setState(() => _isChecking = true);
+    // Small delay to let Android settle permission state after returning from Settings
+    await Future.delayed(const Duration(milliseconds: 600));
     final newReport = await WorkerEligibilityManager.checkEligibility();
     if (mounted) {
       setState(() {
@@ -263,13 +324,13 @@ class _EligibilityModalState extends State<_EligibilityModal> {
                     Text(
                       "Go Online Requirements",
                       style: GoogleFonts.outfit(
-                        fontSize: 22,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
                     ),
                     Text(
-                      "All permissions & services must be active",
+                      "Grant the required permissions to go online",
                       style: GoogleFonts.inter(color: Colors.white54, fontSize: 13),
                     ),
                   ],
@@ -290,19 +351,27 @@ class _EligibilityModalState extends State<_EligibilityModal> {
                   decoration: BoxDecoration(
                     color: item.isGranted
                         ? const Color(0xFF1E293B).withOpacity(0.4)
-                        : const Color(0xFF2D1515),
+                        : item.isMandatory
+                            ? const Color(0xFF2D1515)
+                            : const Color(0xFF1E1E2A),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: item.isGranted
                           ? Colors.green.withOpacity(0.3)
-                          : Colors.redAccent.withOpacity(0.4),
+                          : item.isMandatory
+                              ? Colors.redAccent.withOpacity(0.4)
+                              : Colors.white12,
                     ),
                   ),
                   child: Row(
                     children: [
                       Icon(
                         item.icon,
-                        color: item.isGranted ? Colors.greenAccent : Colors.redAccent,
+                        color: item.isGranted
+                            ? Colors.greenAccent
+                            : item.isMandatory
+                                ? Colors.redAccent
+                                : Colors.white38,
                         size: 24,
                       ),
                       const SizedBox(width: 14),
@@ -312,12 +381,14 @@ class _EligibilityModalState extends State<_EligibilityModal> {
                           children: [
                             Row(
                               children: [
-                                Text(
-                                  item.title,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
+                                Flexible(
+                                  child: Text(
+                                    item.title,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ),
                                 if (!item.isMandatory)
@@ -336,7 +407,7 @@ class _EligibilityModalState extends State<_EligibilityModal> {
                               item.description,
                               style: GoogleFonts.inter(
                                 fontSize: 12,
-                                color: Colors.white60,
+                                color: Colors.white54,
                               ),
                             ),
                           ],
@@ -345,24 +416,32 @@ class _EligibilityModalState extends State<_EligibilityModal> {
                       const SizedBox(width: 10),
                       if (item.isGranted)
                         const Icon(Icons.check_circle, color: Colors.greenAccent, size: 22)
+                      else if (!item.isMandatory)
+                        const SizedBox.shrink()
                       else
                         ElevatedButton(
-                          onPressed: () async {
-                            await item.onFix();
-                            await _refreshReport();
-                          },
+                          onPressed: _isChecking
+                              ? null
+                              : () async {
+                                  if (item.requiresSettingsReturn) {
+                                    setState(() => _awaitingSettingsReturn = true);
+                                  }
+                                  await item.onFix();
+                                  if (!item.requiresSettingsReturn) {
+                                    await _refreshReport();
+                                  }
+                                },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.redAccent,
+                            backgroundColor: const Color(0xFFFF6A00),
                             foregroundColor: Colors.white,
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
                             elevation: 0,
                           ),
                           child: Text(
-                            "FIX",
+                            item.requiresSettingsReturn ? "OPEN" : "FIX",
                             style: GoogleFonts.outfit(
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
@@ -375,7 +454,26 @@ class _EligibilityModalState extends State<_EligibilityModal> {
               },
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+          if (_awaitingSettingsReturn)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amber),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    "Waiting for you to return from Settings...",
+                    style: GoogleFonts.inter(fontSize: 12, color: Colors.amber),
+                  ),
+                ],
+              ),
+            ),
           Row(
             children: [
               Expanded(
