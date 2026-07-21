@@ -8,7 +8,7 @@ class ImageUtils {
   static Widget getCategoryIcon(String? category, {double size = 24, Color? color}) {
     final cat = category?.trim().toLowerCase() ?? '';
     IconData iconData = Icons.handyman;
-    Color iconColor = color ?? const Color(0xFF2563EB);
+    Color iconColor = color ?? const Color(0xFFFF6A00);
 
     if (cat.contains('ac') || cat.contains('air condition') || cat.contains('cooling')) {
       iconData = Icons.ac_unit;
@@ -112,7 +112,7 @@ class ImageUtils {
             ? Text(
                 name[0].toUpperCase(),
                 style: TextStyle(
-                  color: const Color(0xFF2563EB),
+                  color: const Color(0xFFFF6A00),
                   fontWeight: FontWeight.bold,
                   fontSize: radius * 0.8,
                 ),

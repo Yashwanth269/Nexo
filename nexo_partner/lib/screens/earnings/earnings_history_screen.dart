@@ -175,7 +175,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Row(
           children: [
-            const Icon(Icons.account_balance_rounded, color: Color(0xFF2563EB)),
+            const Icon(Icons.account_balance_rounded, color: Color(0xFFFF6A00)),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -228,7 +228,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2563EB),
+              backgroundColor: const Color(0xFFFF6A00),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             onPressed: () {
@@ -283,7 +283,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
             child: Text(
               "FLEX",
               style: GoogleFonts.outfit(
-                color: const Color(0xFF2563EB),
+                color: const Color(0xFFFF6A00),
                 fontWeight: FontWeight.w900,
                 fontSize: 12,
               ),
@@ -299,9 +299,9 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
             children: [
               TabBar(
                 controller: _subTabController,
-                indicatorColor: const Color(0xFF2563EB),
+                indicatorColor: const Color(0xFFFF6A00),
                 indicatorSize: TabBarIndicatorSize.tab,
-                labelColor: const Color(0xFF2563EB),
+                labelColor: const Color(0xFFFF6A00),
                 unselectedLabelColor: const Color(0xFF94A3B8),
                 labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
                 unselectedLabelStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14),
@@ -347,10 +347,10 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF2563EB) : Colors.white,
+                color: isSelected ? const Color(0xFFFF6A00) : Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
+                  color: isSelected ? const Color(0xFFFF6A00) : const Color(0xFFE2E8F0),
                 ),
               ),
               child: Text(
@@ -407,14 +407,14 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
               padding: const EdgeInsets.all(22),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+                  colors: [Color(0xFFFF6A00), Color(0xFFEA580C)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF2563EB).withOpacity(0.2),
+                    color: const Color(0xFFFF6A00).withOpacity(0.2),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   )
@@ -485,7 +485,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
                         onPressed: _showWithdrawDialog,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFF2563EB),
+                          foregroundColor: const Color(0xFFFF6A00),
                           elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -523,9 +523,9 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
                   children: [
                     Text(
                       "This Month",
-                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF2563EB)),
+                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00)),
                     ),
-                    const Icon(Icons.arrow_drop_down, color: Color(0xFF2563EB)),
+                    const Icon(Icons.arrow_drop_down, color: Color(0xFFFF6A00)),
                   ],
                 ),
               ],
@@ -576,7 +576,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
                   onPressed: () => _subTabController.animateTo(1),
                   child: Text(
                     "View All",
-                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF2563EB)),
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00)),
                   ),
                 ),
               ],
@@ -668,7 +668,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
                   color: Color(0xFFEFF6FF),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.work_outline_rounded, color: Color(0xFF2563EB), size: 18),
+                child: const Icon(Icons.work_outline_rounded, color: Color(0xFFFF6A00), size: 18),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -747,7 +747,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
                   color: Color(0xFFEFF6FF),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.receipt_long_rounded, color: Color(0xFF2563EB), size: 20),
+                child: const Icon(Icons.receipt_long_rounded, color: Color(0xFFFF6A00), size: 20),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -805,7 +805,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
                     color: Color(0xFFEFF6FF),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.account_balance_rounded, color: Color(0xFF2563EB), size: 24),
+                  child: const Icon(Icons.account_balance_rounded, color: Color(0xFFFF6A00), size: 24),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -940,7 +940,7 @@ class LineChartPainter extends CustomPainter {
     if (dataPoints.isEmpty) return;
     
     final paint = Paint()
-      ..color = const Color(0xFF2563EB)
+      ..color = const Color(0xFFFF6A00)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round;
@@ -977,8 +977,8 @@ class LineChartPainter extends CustomPainter {
     final rect = Rect.fromLTWH(0, 0, size.width, size.height);
     fillPaint.shader = LinearGradient(
       colors: [
-        const Color(0xFF2563EB).withOpacity(0.2),
-        const Color(0xFF2563EB).withOpacity(0.0),
+        const Color(0xFFFF6A00).withOpacity(0.2),
+        const Color(0xFFFF6A00).withOpacity(0.0),
       ],
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
@@ -988,7 +988,7 @@ class LineChartPainter extends CustomPainter {
     canvas.drawPath(path, paint);
 
     final pointPaint = Paint()
-      ..color = const Color(0xFF2563EB)
+      ..color = const Color(0xFFFF6A00)
       ..style = PaintingStyle.fill;
     final borderPaint = Paint()
       ..color = Colors.white

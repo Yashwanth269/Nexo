@@ -135,7 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF2563EB),
+                    color: const Color(0xFFFF6A00),
                     letterSpacing: 1.5,
                   ),
                 ),
@@ -174,7 +174,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         child: const Icon(
                           Icons.work_outline_rounded,
-                          color: Color(0xFF2563EB),
+                          color: Color(0xFFFF6A00),
                           size: 24,
                         ),
                       ),
@@ -236,7 +236,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: const Color(0xFFF8FAFC),
                           borderRadius: BorderRadius.circular(30),
                           border: Border.all(
-                            color: _phoneFocusNode.hasFocus ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
+                            color: _phoneFocusNode.hasFocus ? const Color(0xFFFF6A00) : const Color(0xFFE2E8F0),
                             width: 1.5,
                           ),
                         ),
@@ -358,7 +358,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: const Color(0xFF2563EB),
+                          color: const Color(0xFFFF6A00),
                         ),
                       ),
                     ),
@@ -375,7 +375,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: const Color(0xFF2563EB),
+                          color: const Color(0xFFFF6A00),
                         ),
                       ),
                     ),

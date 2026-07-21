@@ -19,7 +19,7 @@ class ActiveJobsScreen extends StatefulWidget {
 }
 
 class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
-  final Color primaryColor = const Color(0xFF2563EB);
+  final Color primaryColor = const Color(0xFFFF6A00);
   String _selectedStatusFilter = "All";
   String _sortBy = "Latest";
   List<dynamic> _jobs = [];
@@ -138,7 +138,7 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFF2563EB))),
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFFFF6A00))),
     );
 
     try {
@@ -261,7 +261,7 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF2563EB),
+              primary: Color(0xFFFF6A00),
               onPrimary: Colors.white,
               surface: Colors.white,
               onSurface: Color(0xFF0F172A),
@@ -293,7 +293,7 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             title: Row(
               children: [
-                const Icon(Icons.filter_list_rounded, color: Color(0xFF2563EB)),
+                const Icon(Icons.filter_list_rounded, color: Color(0xFFFF6A00)),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text("Filter Gigs", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
@@ -347,7 +347,7 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
+                  backgroundColor: const Color(0xFFFF6A00),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: () {
@@ -451,11 +451,11 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.filter_list_rounded, color: Color(0xFF2563EB)),
+            icon: const Icon(Icons.filter_list_rounded, color: Color(0xFFFF6A00)),
             onPressed: _showCategoryPriceFilter,
           ),
           IconButton(
-            icon: const Icon(Icons.calendar_today_rounded, color: Color(0xFF2563EB)),
+            icon: const Icon(Icons.calendar_today_rounded, color: Color(0xFFFF6A00)),
             onPressed: _showCalendarFilter,
           ),
           const SizedBox(width: 8),
@@ -491,11 +491,11 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
                         Chip(
                           label: Text(
                             "Date: ${DateFormat('dd MMM').format(_selectedFilterDate!)}",
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFFF6A00)),
                           ),
                           backgroundColor: const Color(0xFFEFF6FF),
                           onDeleted: () => setState(() => _selectedFilterDate = null),
-                          deleteIconColor: const Color(0xFF2563EB),
+                          deleteIconColor: const Color(0xFFFF6A00),
                         ),
                       if (_selectedFilterDate != null && (_filterCategory != null && _filterCategory != "All Categories"))
                         const SizedBox(width: 8),
@@ -503,22 +503,22 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
                         Chip(
                           label: Text(
                             "Category: $_filterCategory",
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFFF6A00)),
                           ),
                           backgroundColor: const Color(0xFFEFF6FF),
                           onDeleted: () => setState(() => _filterCategory = null),
-                          deleteIconColor: const Color(0xFF2563EB),
+                          deleteIconColor: const Color(0xFFFF6A00),
                         ),
                       if (_filterMinPrice != null) ...[
                         const SizedBox(width: 8),
                         Chip(
                           label: Text(
                             "Min Price: ₹${_filterMinPrice!.toInt()}",
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFFF6A00)),
                           ),
                           backgroundColor: const Color(0xFFEFF6FF),
                           onDeleted: () => setState(() => _filterMinPrice = null),
-                          deleteIconColor: const Color(0xFF2563EB),
+                          deleteIconColor: const Color(0xFFFF6A00),
                         ),
                       ]
                     ],
@@ -539,7 +539,7 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
                     value: _sortBy,
                     elevation: 1,
                     underline: const SizedBox.shrink(),
-                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF2563EB)),
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00)),
                     items: const [
                       DropdownMenuItem(value: "Latest", child: Text("Latest")),
                       DropdownMenuItem(value: "Price", child: Text("Highest Price")),
@@ -555,7 +555,7 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _fetchJobs,
-                color: const Color(0xFF2563EB),
+                color: const Color(0xFFFF6A00),
                 child: _isLoading && targetGigs.isEmpty
                     ? _buildSkeletonList()
                     : targetGigs.isEmpty
@@ -584,16 +584,16 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
         margin: const EdgeInsets.only(right: 8),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF2563EB) : Colors.white,
+          color: isSelected ? const Color(0xFFFF6A00) : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
+            color: isSelected ? const Color(0xFFFF6A00) : const Color(0xFFE2E8F0),
             width: 1,
           ),
           boxShadow: [
             if (isSelected)
               BoxShadow(
-                color: const Color(0xFF2563EB).withOpacity(0.15),
+                color: const Color(0xFFFF6A00).withOpacity(0.15),
                 blurRadius: 8,
                 offset: const Offset(0, 4),
               )
@@ -635,7 +635,7 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
     // Status text & colors matching mockup
     String statusText = "UPCOMING";
     Color statusBg = const Color(0xFFEFF6FF);
-    Color statusTextCol = const Color(0xFF2563EB);
+    Color statusTextCol = const Color(0xFFFF6A00);
 
     if (isActive) {
       statusText = "IN PROGRESS";
@@ -804,10 +804,10 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () => _openActiveJob(job),
-                    icon: const Icon(Icons.navigation_rounded, size: 16, color: Color(0xFF2563EB)),
+                    icon: const Icon(Icons.navigation_rounded, size: 16, color: Color(0xFFFF6A00)),
                     label: Text(
                       "Navigate",
-                      style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFF2563EB)),
+                      style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00)),
                     ),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -821,7 +821,7 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
                   child: ElevatedButton(
                     onPressed: () => _openActiveJob(job),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
+                      backgroundColor: const Color(0xFFFF6A00),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       elevation: 0,
@@ -867,7 +867,7 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
               color: Color(0xFFEFF6FF),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.work_outline_rounded, size: 48, color: Color(0xFF2563EB)),
+            child: const Icon(Icons.work_outline_rounded, size: 48, color: Color(0xFFFF6A00)),
           ),
           const SizedBox(height: 16),
           Text(
