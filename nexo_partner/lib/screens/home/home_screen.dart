@@ -1178,9 +1178,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _startLocationUpdates() {
+  void _startLocationUpdates() async {
+    // 1. Instantly get last known position to avoid being stuck at "Detecting location..."
+    try {
+      Position? lastPos = await Geolocator.getLastKnownPosition();
+      lastPos ??= await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+        timeLimit: const Duration(seconds: 4),
+      );
+      if (lastPos != null && mounted) {
+        _updateLocationUI(lastPos);
+        if (_isOnline) {
+          _socketService.updateLocation(lastPos.latitude, lastPos.longitude);
+        }
+      }
+    } catch (e) {
+      debugPrint("Initial location fetch failed: $e");
+      if (mounted) {
+        setState(() => _currentArea = "Nearby Area");
+      }
+    }
+
+    // 2. Start continuous updates
+    _positionStream?.cancel();
     _positionStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(distanceFilter: 10, accuracy: LocationAccuracy.high)
+      locationSettings: const LocationSettings(
+        distanceFilter: 10,
+        accuracy: LocationAccuracy.medium, // More reliable than high indoors/on emulators
+      )
     ).listen((Position position) async {
       if (_isOnline) {
         // 1. Real-time Socket Sync (Primary)
@@ -1220,6 +1245,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           }
         } catch (e) {
           debugPrint("Geocoding error: $e");
+          if (mounted) {
+            setState(() => _currentArea = "Nearby Area");
+          }
         }
       }
     });
