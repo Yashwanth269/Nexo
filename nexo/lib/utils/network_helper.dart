@@ -36,13 +36,11 @@ class NetworkHelper {
     } else {
       // Deep check: Try to reach a reliable IP or the backend
       try {
-        // Try looking up a known reliable IP (Google DNS) to avoid DNS issues
-        final lookup = await InternetAddress.lookup('8.8.8.8').timeout(const Duration(seconds: 3));
+        // Try looking up a known reliable hostname to check DNS & internet availability
+        final lookup = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 3));
         _isOffline = lookup.isEmpty || lookup[0].rawAddress.isEmpty;
       } catch (_) {
-        // If lookup fails, we might still have local connectivity to our server
-        // In local dev, sometimes DNS is the only thing broken
-        _isOffline = false; // Fallback to trust connectivity result if deep check fails
+        _isOffline = true; // Resolve failure means we are offline
       }
     }
     

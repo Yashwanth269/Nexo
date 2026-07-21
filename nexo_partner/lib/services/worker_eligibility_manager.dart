@@ -135,6 +135,7 @@ class WorkerEligibilityManager {
       description: 'Must have active live network connection to backend dispatch',
       icon: Icons.wifi_tethering_rounded,
       isGranted: isSocketConnected,
+      isMandatory: false,
       onFix: () async {
         SocketService().connect((_) {});
       },
@@ -170,27 +171,16 @@ class WorkerEligibilityManager {
     EligibilityReport report = await checkEligibility();
     if (report.isFullyEligible) return true;
 
-    // Background fixing: request missing permissions sequentially
-    for (var item in report.missingMandatory) {
-      await item.onFix();
-      // Slight delay to allow system permission dialogs to resolve
-      await Future.delayed(const Duration(milliseconds: 500));
+    if (context.mounted) {
+      final result = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => _EligibilityModal(initialReport: report),
+      );
+      return result ?? false;
     }
-
-    // Re-check after attempting to fix
-    report = await checkEligibility();
-    if (!report.isFullyEligible) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Please grant all required permissions to go online."),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
-      return false;
-    }
-    return true;
+    return false;
   }
 }
 
