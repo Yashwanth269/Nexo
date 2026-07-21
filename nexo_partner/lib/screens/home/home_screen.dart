@@ -71,7 +71,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _hideEarnings = false;
   List<String> _mySkills = [];
   String _currentArea = "Detecting location...";
-  StreamSubscription? _connectivitySubscription;
+  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
   DateTime? _lastGeocodeTime;
   Timer? _refreshTimer;
   
@@ -136,8 +136,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _fetchInitialData() async {
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
-      final result = results.isEmpty ? ConnectivityResult.none : results.first;
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
       setState(() => _isOffline = result == ConnectivityResult.none);
       if (_isOffline) {
         ScaffoldMessenger.of(context).showSnackBar(
