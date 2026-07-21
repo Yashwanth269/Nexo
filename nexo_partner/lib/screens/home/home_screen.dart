@@ -9,6 +9,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:geocoding/geocoding.dart';
+import 'package:intl/intl.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 import '../../services/socket_service.dart';
@@ -71,6 +72,50 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _hideEarnings = false;
   List<String> _mySkills = [];
   String _currentArea = "Detecting location...";
+  int _activeJobsRefreshTrigger = 0;
+
+  void _sortActiveGigs() {
+    _activeGigs.sort((a, b) {
+      final statusA = a['status'] ?? '';
+      final statusB = b['status'] ?? '';
+      
+      int getStatusWeight(String status) {
+        if (['STARTED', 'IN_PROGRESS', 'WORK_IN_PROGRESS'].contains(status)) return 3;
+        if (['ON_THE_WAY', 'ARRIVED', 'FORCE_ARRIVAL_PENDING_CONFIRMATION'].contains(status)) return 2;
+        if (['ACCEPTED', 'RESERVED', 'CONFIRMED'].contains(status)) return 1;
+        return 0;
+      }
+      
+      final weightA = getStatusWeight(statusA);
+      final weightB = getStatusWeight(statusB);
+      
+      if (weightA != weightB) {
+        return weightB.compareTo(weightA);
+      }
+      
+      final isUrgentA = (a['priority'] == 'High' || a['priority'] == 'Critical' || a['category'] == 'Emergency');
+      final isUrgentB = (b['priority'] == 'High' || b['priority'] == 'Critical' || b['category'] == 'Emergency');
+      
+      if (isUrgentA != isUrgentB) {
+        return isUrgentA ? -1 : 1;
+      }
+      
+      final scheduledA = a['scheduled_time'] ?? a['scheduled_at'] ?? '';
+      final scheduledB = b['scheduled_time'] ?? b['scheduled_at'] ?? '';
+      
+      if (scheduledA.isNotEmpty && scheduledB.isNotEmpty) {
+        return scheduledA.compareTo(scheduledB);
+      } else if (scheduledA.isNotEmpty) {
+        return -1;
+      } else if (scheduledB.isNotEmpty) {
+        return 1;
+      }
+      
+      final createdA = a['created_at'] ?? '';
+      final createdB = b['created_at'] ?? '';
+      return createdB.compareTo(createdA);
+    });
+  }
   StreamSubscription<ConnectivityResult>? _connectivitySubscription;
   DateTime? _lastGeocodeTime;
   Timer? _refreshTimer;
@@ -324,6 +369,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       setState(() {
         _activeGigs.clear();
         _activeGigs.addAll(cached);
+        _sortActiveGigs();
       });
       debugPrint("⚡ [CACHE_HIT] Active Gigs loaded from local cache: ${cached.length} items.");
     }
@@ -392,6 +438,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           setState(() {
             _activeGigs.clear();
             _activeGigs.addAll(active);
+            _sortActiveGigs();
           });
         }
       }
@@ -429,6 +476,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       setState(() {
         _activeGigs.clear();
         _activeGigs.addAll(cached);
+        _sortActiveGigs();
       });
     }
 
@@ -445,6 +493,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           setState(() {
             _activeGigs.clear();
             _activeGigs.addAll(active);
+            _sortActiveGigs();
           });
           if (active.isNotEmpty) {
             debugPrint("✅ [ACTIVE_JOB_RESTORED] Found ${active.length} jobs");
@@ -785,6 +834,48 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _socketService.socket?.on('job_cancelled_by_user', handleUserCancel);
       _socketService.socket?.on('USER_CANCELLED_JOB', handleUserCancel);
 
+      _socketService.socket?.on('scheduled_job_reminder', (data) {
+        if (data != null && mounted) {
+          final String? message = data['message']?.toString();
+          showDialog(
+            context: context,
+            barrierDismissible: true,
+            builder: (context) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 24),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Urgent Task Reminder",
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber,
+                    ),
+                  ),
+                ],
+              ),
+              content: Text(
+                message ?? "You have an upcoming scheduled job starting soon. Please make sure you are online.",
+                style: GoogleFonts.inter(),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(
+                    "OK",
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF2563EB),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+      });
+
       _socketService.socket?.on('SELFIE_VERIFICATION_REQUIRED', (data) async {
         if (mounted && data != null) {
           final verificationId = data['verificationId']?.toString() ?? '1';
@@ -1113,6 +1204,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         setState(() {
           _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == (job['id']?.toString() ?? job['_id']?.toString()));
           _activeGigs.add(data['job'] ?? job);
+          _sortActiveGigs();
+          _activeJobsRefreshTrigger++;
         });
         Navigator.push(context, MaterialPageRoute(builder: (context) => JobExecutionScreen(jobId: job['id'], initialJob: data['job'] ?? job)));
       } else {
@@ -1273,7 +1366,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     final List<Widget> screens = [
       _buildDashboard(),
-      const ActiveJobsScreen(),
+      ActiveJobsScreen(key: ValueKey('active_jobs_$_activeJobsRefreshTrigger')),
       EarningsHistoryScreen(),
       const SupportScreen(),
       const WorkerProfileScreen(isTab: true),
@@ -1380,7 +1473,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final inactiveColor = const Color(0xFF94A3B8);
     
     return GestureDetector(
-      onTap: () => setState(() => _selectedIndex = index),
+      onTap: () {
+        setState(() {
+          _selectedIndex = index;
+          if (index == 1) {
+            _activeJobsRefreshTrigger++;
+          }
+        });
+      },
       child: Container(
         color: Colors.transparent,
         width: 65,
@@ -2397,6 +2497,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             children: _activeGigs.map((job) {
               final status = job['status'] ?? 'ACCEPTED';
               final isConfirmed = status == 'ACCEPTED' || status == 'ARRIVED' || status == 'IN_PROGRESS';
+              
+              final String? scheduledTimeStr = job['scheduled_time'] ?? job['scheduled_at'];
+              String timeText = "ASAP";
+              if (scheduledTimeStr != null && scheduledTimeStr.isNotEmpty) {
+                try {
+                  final dt = DateTime.parse(scheduledTimeStr).toLocal();
+                  timeText = DateFormat('hh:mm a').format(dt);
+                } catch (_) {}
+              }
+
+              final isUrgent = job['priority'] == 'High' || job['priority'] == 'Critical' || job['category'] == 'Emergency';
+
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
@@ -2404,13 +2516,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   children: [
                     Padding(
                       padding: const EdgeInsets.only(top: 12.0),
-                      child: Text(
-                        "ASAP",
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                          color: const Color(0xFF64748B),
-                        ),
+                      child: Column(
+                        children: [
+                          Text(
+                            timeText,
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              color: isUrgent ? const Color(0xFFEF4444) : const Color(0xFF64748B),
+                            ),
+                          ),
+                          if (isUrgent) ...[
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEE2E2),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFFCA5A5)),
+                              ),
+                              child: Text(
+                                "URGENT",
+                                style: GoogleFonts.inter(
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w900,
+                                  color: const Color(0xFFEF4444),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     const SizedBox(width: 16),
