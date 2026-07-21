@@ -55,19 +55,14 @@ class OtpService {
 
         // Mark OTP verified in DB
         await db.query(
-            "UPDATE jobs SET start_otp_verified = true, status = 'WORK_IN_PROGRESS', started_at = NOW() WHERE id = $1 AND worker_id = $2",
+            "UPDATE jobs SET start_otp_verified = true WHERE id = $1 AND worker_id = $2",
             [jobId, workerId]
         );
         await redis.del(`job:${jobId}:start_otp`);
 
-        const io = getIO();
-        if (io) {
-            io.to(`job:${jobId}`).emit('job_status_updated', {
-                jobId,
-                status: 'WORK_IN_PROGRESS',
-                message: "Work has officially started!"
-            });
-        }
+        const jobStateMachine = require('./job_state_machine.service');
+        await jobStateMachine.transition(jobId, 'OTP_VERIFIED', { workerId });
+        await jobStateMachine.transition(jobId, 'SERVICE_STARTED', { workerId });
 
         return { success: true, message: "START_OTP_VERIFIED" };
     }
@@ -115,19 +110,13 @@ class OtpService {
         }
 
         await db.query(
-            "UPDATE jobs SET completion_otp_verified = true, status = 'COMPLETED', completed_at = NOW() WHERE id = $1 AND worker_id = $2",
+            "UPDATE jobs SET completion_otp_verified = true WHERE id = $1 AND worker_id = $2",
             [jobId, workerId]
         );
         await redis.del(`job:${jobId}:completion_otp`);
 
-        const io = getIO();
-        if (io) {
-            io.to(`job:${jobId}`).emit('job_status_updated', {
-                jobId,
-                status: 'COMPLETED',
-                message: "Job completed and verified via OTP!"
-            });
-        }
+        const jobStateMachine = require('./job_state_machine.service');
+        await jobStateMachine.transition(jobId, 'CUSTOMER_VERIFIED', { workerId });
 
         return { success: true, message: "COMPLETION_OTP_VERIFIED" };
     }

@@ -61,5 +61,46 @@ module.exports = {
         maxConcurrentJobsPerWorker: parseInt(process.env.MAX_BATCHED_JOBS || '2', 10),
         maxRouteDeviationKm: parseFloat(process.env.MAX_ROUTE_DEVIATION_KM || '3.0'),
         maxEtaIncreaseMinutes: parseInt(process.env.MAX_ETA_INCREASE_MIN || '10', 10),
+    },
+
+    // Multi-Queue Dispatch Priority Levels
+    queues: {
+        priorities: ['EMERGENCY', 'HIGH_PRIORITY', 'INSTANT', 'SCHEDULED_RECOVERY', 'SCHEDULED_FUTURE'],
+        refreshIntervalsMs: {
+            EMERGENCY: 3000,          // 3 seconds aggressive refresh
+            HIGH_PRIORITY: 5000,      // 5 seconds
+            INSTANT: 10000,           // 10 seconds
+            SCHEDULED_RECOVERY: 10000,// 10 seconds
+            SCHEDULED_FUTURE: 30000   // 30 seconds
+        }
+    },
+
+    // Reservation & Worker Availability Engine Configuration
+    reservations: {
+        defaultTravelTimeMinutes: 20,
+        defaultBufferMinutes: 15,
+        categoryBuffers: {
+            'Simple Cleaning': 10,
+            'Cleaning': 15,
+            'AC Installation': 45,
+            'Plumbing': 20,
+            'Moving Service': 90,
+            'Emergency': 5,
+        },
+        dispatchWindows: [
+            1440, // 24 hours
+            720,  // 12 hours
+            360,  // 6 hours
+            180,  // 3 hours
+            60,   // 1 hour
+            30,   // 30 minutes
+            15    // 15 minutes
+        ],
+        activeDispatchWindowMinutes: 30, // Start actual pool dispatch 30 mins before start
+        standbyBackupCount: 5,
+        lateArrivalThresholdMinutes: 15, // Reassign if predicted delay > 15 mins
+        maxDailyWorkingHours: 10,
+        maxDailyTravelHours: 4,
+        maxDailyDistanceKm: 150
     }
 };

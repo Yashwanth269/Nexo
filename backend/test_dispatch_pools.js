@@ -16,6 +16,12 @@ setIO({
 async function testPoolDispatch() {
     console.log("🧪 Starting Pool Dispatch Queue Integration Test...");
     
+    // Pre-test cleanup
+    await db.query("DELETE FROM job_offers WHERE worker_id IN (SELECT id FROM workers WHERE phone_number IN ('9999999991', '9999999992', '9999999993'))");
+    await db.query("DELETE FROM jobs WHERE user_id IN (SELECT id FROM users WHERE phone_number = '9999999990')");
+    await db.query("DELETE FROM workers WHERE phone_number IN ('9999999991', '9999999992', '9999999993')");
+    await db.query("DELETE FROM users WHERE phone_number = '9999999990'");
+
     // 1. Create mock data
     const userRes = await db.query(
         "INSERT INTO users (full_name, phone_number) VALUES ('Mock Customer', '9999999990') RETURNING id"

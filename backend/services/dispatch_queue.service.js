@@ -8,6 +8,7 @@ const shadowBanService = require('./shadow_ban.service');
 const rankingService = require('./ranking.service');
 const searchRadiusService = require('./search_radius.service');
 const distributedLock = require('./distributed_lock.service');
+const reservationService = require('./reservation.service');
 
 class DispatchQueueService {
     /**
@@ -31,6 +32,26 @@ class DispatchQueueService {
     }
 
     /**
+     * Classifies a job into one of the 5 logical priority queues
+     */
+    determineJobQueue(job) {
+        if (job.status === 'REASSIGNING' || job.priority === 'Critical') {
+            return 'EMERGENCY';
+        }
+        if (job.priority === 'High' || job.urgency === 'express') {
+            return 'HIGH_PRIORITY';
+        }
+        if (job.scheduled_at) {
+            const wasAssigned = job.worker_id !== null || job.status === 'REDISTRIBUTING';
+            if (wasAssigned) {
+                return 'SCHEDULED_RECOVERY';
+            }
+            return 'SCHEDULED_FUTURE';
+        }
+        return 'INSTANT';
+    }
+
+    /**
      * Orchestrates the pool-based dispatch lifecycle
      */
     async runDispatchPipeline(jobId) {
@@ -42,10 +63,30 @@ class DispatchQueueService {
         if (jobRes.rowCount === 0) return;
         const job = jobRes.rows[0];
 
-        if (!['OPEN', 'REDISTRIBUTING', 'REASSIGNING'].includes(job.status)) {
+        if (!['OPEN', 'REDISTRIBUTING', 'REASSIGNING', 'SCHEDULED', 'BUILD_QUEUE'].includes(job.status)) {
             console.log(`[DISPATCH-TERMINATE] Job ${jobId} status is ${job.status}. Aborting.`);
             return;
         }
+
+        // Determine Priority Queue (Step 25: Multi-Queue Dispatch)
+        const queueType = this.determineJobQueue(job);
+        console.log(`[DISPATCH-QUEUE-TYPE] Job ${jobId} classified as: ${queueType}`);
+
+        // Check Scheduled dispatch window (Step 25)
+        if (queueType === 'SCHEDULED_FUTURE') {
+            const start = new Date(job.scheduled_at);
+            const timeDiffMin = (start.getTime() - Date.now()) / 60000;
+            const windowMin = dispatchConfig.reservations.activeDispatchWindowMinutes;
+
+            if (timeDiffMin > windowMin) {
+                console.log(`[DISPATCH-WINDOW-GATED] Job ${jobId} starts in ${timeDiffMin.toFixed(1)} mins (outside window of ${windowMin}m). Holding.`);
+                await db.query("UPDATE jobs SET status = 'SCHEDULED', updated_at = NOW() WHERE id = $1", [jobId]);
+                await this.logStateTransition(jobId, 'SCHEDULED_FUTURE');
+                return;
+            }
+        }
+
+        const isEmergencyQueue = queueType === 'EMERGENCY';
 
         // Initialize or fetch search analytics log (Step 14)
         let analyticsId = null;
@@ -90,10 +131,10 @@ class DispatchQueueService {
         }
 
         // Step 8: STANDBY QUEUE FOR SCHEDULED JOBS
-        if (job.scheduled_at) {
+        if (job.scheduled_at && queueType !== 'SCHEDULED_RECOVERY') {
             console.log(`[DISPATCH-SCHEDULED] Job ${jobId} is scheduled at ${job.scheduled_at}. Creating standby queue.`);
             const primaryWorker = candidates[0];
-            const standbyWorkers = candidates.slice(1, 6); // Keep top 5 backups
+            const standbyWorkers = candidates.slice(1, 1 + dispatchConfig.reservations.standbyBackupCount);
 
             // Store standby queue in Redis
             const standbyIds = standbyWorkers.map(w => w.id);
@@ -112,7 +153,7 @@ class DispatchQueueService {
         }
 
         // Step 2: CREATE DISPATCH POOLS
-        const pools = this.createDispatchPools(candidates, job.category);
+        const pools = this.createDispatchPools(candidates, job.category, isEmergencyQueue);
         console.log(`[DISPATCH-POOLS] Created ${pools.length} pools for Job ${jobId}`);
 
         // Step 3 & 4: DISPATCH ONLY ONE POOL AT A TIME
@@ -127,7 +168,7 @@ class DispatchQueueService {
 
             // Refresh job state check to ensure it hasn't been cancelled or accepted
             const currentJob = await db.query("SELECT status FROM jobs WHERE id = $1", [jobId]);
-            if (currentJob.rowCount === 0 || !['OPEN', 'REDISTRIBUTING', 'REASSIGNING', 'BUILD_QUEUE'].includes(currentJob.rows[0].status)) {
+            if (currentJob.rowCount === 0 || !['OPEN', 'REDISTRIBUTING', 'REASSIGNING', 'BUILD_QUEUE', 'SCHEDULED'].includes(currentJob.rows[0].status)) {
                 hasBeenAccepted = true;
                 break;
             }
@@ -138,7 +179,7 @@ class DispatchQueueService {
             console.log(`[DISPATCH-POOL] Activating ${stateName} with ${activePool.length} workers.`);
 
             // Send offers to active pool
-            const offerIds = await this.notifyPool(job, activePool, poolId);
+            const offerIds = await this.notifyPool(job, activePool, poolId, isEmergencyQueue);
 
             if (analyticsId) {
                 await db.query(`
@@ -149,7 +190,7 @@ class DispatchQueueService {
             }
 
             // Wait for anyone to accept or pool failure (Step 6)
-            const acceptResult = await this.waitForPoolAcceptance(jobId, offerIds);
+            const acceptResult = await this.waitForPoolAcceptance(jobId, offerIds, isEmergencyQueue);
             if (acceptResult) {
                 hasBeenAccepted = true;
                 break;
@@ -174,13 +215,16 @@ class DispatchQueueService {
         const searchRadiusService = require('./search_radius.service');
         const isEmergency = job.category === 'Emergency' || job.priority === 'High' || job.priority === 'Critical';
         
-        // Dynamically compute search radius limit (e.g. 50km in development fallback, 10-30km standard)
-        const radiusLimit = process.env.NODE_ENV === 'development' ? 500 : searchRadiusService.getMaxRadius(job.category, isEmergency);
+        // Dynamically compute search radius limit
+        let radiusLimit = process.env.NODE_ENV === 'development' ? 500 : searchRadiusService.getMaxRadius(job.category, isEmergency);
+        if (isEmergency) {
+            radiusLimit = radiusLimit * 1.5; // Larger search radius in Emergency (Step 25)
+        }
 
         const queryText = `
             SELECT w.id, w.full_name, w.phone_number, w.photo_url, w.skills, w.experience, w.rating as raw_rating,
                    w.jobs_completed, w.is_online, w.is_available, w.current_lat, w.current_lng, w.verification_status, w.tasks,
-                   w.updated_at as last_activity_time,
+                   w.updated_at as last_activity_time, w.availability_state,
                    r.trust_score as rep_trust_score, r.reliability_score as rep_reliability_score, r.overall_score as rep_overall_score,
                    earth_distance(ll_to_earth($1, $2), w.location_cube) / 1000.0 AS distance,
                    COALESCE((
@@ -195,6 +239,7 @@ class DispatchQueueService {
               AND w.is_online = true
               AND w.is_available = true
               AND w.verification_status = 'VERIFIED'
+              AND w.availability_state NOT IN ('SUSPENDED', 'BREAK')
               AND earth_distance(ll_to_earth($1, $2), w.location_cube) / 1000.0 <= $3
             ORDER BY distance ASC`;
 
@@ -217,6 +262,35 @@ class DispatchQueueService {
                 [worker.id]
             );
             if (activeJobCheck.rowCount > 0) continue;
+
+            // Step 26: Conflict Detection &smart gap filling
+            const duration = await reservationService.predictJobDuration(job.category);
+            const conflictCheck = await reservationService.checkCalendarConflict(
+                worker.id, 
+                job.scheduled_at || new Date(), 
+                duration, 
+                job.category, 
+                parseFloat(job.location_lat), 
+                parseFloat(job.location_lng)
+            );
+            if (conflictCheck.conflict) {
+                console.log(`[DISPATCH-REJECT-CONFLICT] Worker ${worker.id} excluded: ${conflictCheck.reason}`);
+                continue;
+            }
+
+            // Smart Gap Filling for instant jobs
+            if (!job.scheduled_at) {
+                const gapCheck = await reservationService.evaluateGapFilling(
+                    worker.id, 
+                    duration, 
+                    parseFloat(job.location_lat), 
+                    parseFloat(job.location_lng)
+                );
+                if (!gapCheck) {
+                    console.log(`[DISPATCH-REJECT-GAP-FILL] Worker ${worker.id} excluded: insufficient gap before next reservation`);
+                    continue;
+                }
+            }
 
             // Score and Rank
             const score = await this.calculateRankingScore(worker, job);
@@ -279,12 +353,24 @@ class DispatchQueueService {
     /**
      * Create Pools from candidates (Step 2)
      */
-    createDispatchPools(candidates, category) {
-        const poolSizes = dispatchConfig.pools.categoryOverrides[category] || dispatchConfig.pools;
+    createDispatchPools(candidates, category, isEmergencyQueue = false) {
+        let poolSizes;
+        if (isEmergencyQueue) {
+            // Larger pools for Emergency Dispatch (Step 25)
+            poolSizes = { pool1Size: 5, pool2Size: 10, pool3Size: 15, pool4Size: 20 };
+        } else {
+            poolSizes = dispatchConfig.pools.categoryOverrides[category] || dispatchConfig.pools;
+        }
+
         const pools = [];
         let index = 0;
 
-        const sizes = [poolSizes.pool1Size, poolSizes.pool2Size, poolSizes.pool3Size];
+        const sizes = [
+            poolSizes.pool1Size, 
+            poolSizes.pool2Size, 
+            poolSizes.pool3Size,
+            poolSizes.pool4Size || poolSizes.pool3Size
+        ];
 
         for (const size of sizes) {
             if (index >= candidates.length) break;
@@ -292,7 +378,7 @@ class DispatchQueueService {
             index += size;
         }
 
-        // Add remaining workers to pool 3 or a dynamic pool 4 if queue is large
+        // Add remaining workers to last pool if queue is large
         if (index < candidates.length) {
             if (pools.length > 0) {
                 pools[pools.length - 1] = pools[pools.length - 1].concat(candidates.slice(index));
@@ -307,13 +393,19 @@ class DispatchQueueService {
     /**
      * Sends offers to all workers in a pool simultaneously (Step 3 & 4)
      */
-    async notifyPool(job, pool, poolId) {
+    async notifyPool(job, pool, poolId, isEmergencyQueue = false) {
         const { getIO } = require('../config/socket');
         const io = getIO();
         const offerIds = [];
 
-        const poolConfig = dispatchConfig.pools.categoryOverrides[job.category] || dispatchConfig.pools;
-        const ttl = poolConfig.offerTtlSeconds;
+        let ttl;
+        if (isEmergencyQueue) {
+            ttl = 10; // Shorter offer timeout for emergency dispatch (Step 25)
+        } else {
+            const poolConfig = dispatchConfig.pools.categoryOverrides[job.category] || dispatchConfig.pools;
+            ttl = poolConfig.offerTtlSeconds;
+        }
+        
         const expiresAt = new Date(Date.now() + ttl * 1000);
 
         for (const worker of pool) {
@@ -347,9 +439,13 @@ class DispatchQueueService {
     /**
      * Blocks or polls until an offer in the pool is accepted (Step 5)
      */
-    async waitForPoolAcceptance(jobId, offerIds) {
-        const poolConfig = dispatchConfig.pools;
-        const ttl = poolConfig.offerTtlSeconds;
+    async waitForPoolAcceptance(jobId, offerIds, isEmergencyQueue = false) {
+        let ttl;
+        if (isEmergencyQueue) {
+            ttl = 10;
+        } else {
+            ttl = dispatchConfig.pools.offerTtlSeconds;
+        }
 
         for (let i = 0; i < ttl; i++) {
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -402,14 +498,12 @@ class DispatchQueueService {
         await this.logStateTransition(job.id, 'REDISTRIBUTING');
         await db.query("UPDATE jobs SET status = 'REDISTRIBUTING', updated_at = NOW() WHERE id = $1", [job.id]);
         await redis.set(`job:${job.id}:status`, 'REDISTRIBUTING');
-
-        // Continuous Scan loop will pick this job up and evaluate later (Step 7)
     }
 
     /**
      * Atomic lock & transaction for offer acceptance (Step 5 / Step 13)
      */
-    async acceptOfferAtomically(offerId, workerPhone) {
+    async acceptOfferAtomically(offerId, workerPhoneOrId) {
         const acceptLock = `job_accept_lock:${offerId}`;
         const locked = await redis.set(acceptLock, '1', 'NX', 'EX', 10);
         if (!locked) {
@@ -443,24 +537,24 @@ class DispatchQueueService {
             }
 
             // 2. Fetch worker and verify identity
-            const workerRes = await client.query(
-                "SELECT id, is_available FROM workers WHERE phone_number = $1 FOR UPDATE",
-                [workerPhone]
-            );
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workerPhoneOrId);
+            const workerRes = isUUID 
+                ? await client.query("SELECT id, is_available, availability_state, phone_number FROM workers WHERE id = $1 FOR UPDATE", [workerPhoneOrId])
+                : await client.query("SELECT id, is_available, availability_state, phone_number FROM workers WHERE phone_number = $1 FOR UPDATE", [workerPhoneOrId]);
             if (workerRes.rowCount === 0 || workerRes.rows[0].id !== offer.worker_id) {
                 await client.query('ROLLBACK');
                 return { success: false, error: "WORKER_INVALID", message: "Unauthorized worker." };
             }
             const worker = workerRes.rows[0];
 
-            if (!worker.is_available) {
+            if (!worker.is_available || worker.availability_state === 'BUSY' || worker.availability_state === 'SUSPENDED') {
                 await client.query('ROLLBACK');
                 return { success: false, error: "WORKER_BUSY", message: "You already have an active job." };
             }
 
             // 3. Lock job and verify status is open/pool active
             const jobRes = await client.query(
-                "SELECT id, status, user_id FROM jobs WHERE id = $1 FOR UPDATE",
+                "SELECT id, status, user_id, category, scheduled_at, location_lat, location_lng FROM jobs WHERE id = $1 FOR UPDATE",
                 [offer.job_id]
             );
             if (jobRes.rowCount === 0) {
@@ -469,7 +563,7 @@ class DispatchQueueService {
             }
 
             const job = jobRes.rows[0];
-            const activeStatuses = ['OPEN', 'REDISTRIBUTING', 'REASSIGNING', 'BUILD_QUEUE', 'POOL_1_ACTIVE', 'POOL_2_ACTIVE', 'POOL_3_ACTIVE'];
+            const activeStatuses = ['OPEN', 'REDISTRIBUTING', 'REASSIGNING', 'BUILD_QUEUE', 'SCHEDULED', 'POOL_1_ACTIVE', 'POOL_2_ACTIVE', 'POOL_3_ACTIVE'];
             if (!activeStatuses.includes(job.status)) {
                 await client.query('ROLLBACK');
                 return { success: false, error: "JOB_TAKEN", message: "Sorry, this job was just taken by another worker." };
@@ -495,6 +589,21 @@ class DispatchQueueService {
                  SET status = 'REVOKED' 
                  WHERE job_id = $1 AND id != $2 AND status = 'PENDING' RETURNING worker_id`,
                 [job.id, offerId]
+            );
+
+            // Step 26: Reserve Time Block in calendar
+            const start = job.scheduled_at || new Date();
+            await reservationService.reserveTimeBlock(
+                worker.id, job.id, start, job.category,
+                parseFloat(job.location_lat), parseFloat(job.location_lng),
+                client
+            );
+
+            // Set availability state to BUSY (if instant) or RESERVED (if scheduled)
+            const newState = job.scheduled_at ? 'RESERVED' : 'BUSY';
+            await client.query(
+                "UPDATE workers SET availability_state = $1 WHERE id = $2",
+                [newState, worker.id]
             );
 
             await client.query('COMMIT');
@@ -549,17 +658,19 @@ class DispatchQueueService {
             await client.query('BEGIN');
             
             // Check worker availability
-            const worker = await client.query("SELECT is_available FROM workers WHERE id = $1 FOR UPDATE", [workerId]);
-            if (worker.rowCount === 0 || !worker.rows[0].is_available) {
+            const worker = await client.query("SELECT is_available, availability_state FROM workers WHERE id = $1 FOR UPDATE", [workerId]);
+            if (worker.rowCount === 0 || !worker.rows[0].is_available || worker.rows[0].availability_state === 'BUSY') {
                 await client.query('ROLLBACK');
                 return { success: false };
             }
 
-            const job = await client.query("SELECT status FROM jobs WHERE id = $1 FOR UPDATE", [jobId]);
-            if (job.rowCount === 0 || !['OPEN', 'REDISTRIBUTING', 'REASSIGNING', 'BUILD_QUEUE'].includes(job.rows[0].status)) {
+            const job = await client.query("SELECT status, category, scheduled_at, location_lat, location_lng FROM jobs WHERE id = $1 FOR UPDATE", [jobId]);
+            if (job.rowCount === 0 || !['OPEN', 'REDISTRIBUTING', 'REASSIGNING', 'BUILD_QUEUE', 'SCHEDULED'].includes(job.rows[0].status)) {
                 await client.query('ROLLBACK');
                 return { success: false };
             }
+
+            const jData = job.rows[0];
 
             // Assign
             await client.query(
@@ -567,6 +678,20 @@ class DispatchQueueService {
                  SET status = 'ACCEPTED', worker_id = $1, accepted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP 
                  WHERE id = $2`,
                 [workerId, jobId]
+            );
+
+            // Step 26: Reserve time block in calendar
+            const start = jData.scheduled_at || new Date();
+            await reservationService.reserveTimeBlock(
+                workerId, jobId, start, jData.category,
+                parseFloat(jData.location_lat), parseFloat(jData.location_lng),
+                client
+            );
+
+            const newState = jData.scheduled_at ? 'RESERVED' : 'BUSY';
+            await client.query(
+                "UPDATE workers SET availability_state = $1 WHERE id = $2",
+                [newState, workerId]
             );
 
             await client.query('COMMIT');
@@ -586,7 +711,7 @@ class DispatchQueueService {
      * Emergency reassignment / Standby recovery (Step 12)
      */
     async handleEmergencyRecovery(jobId) {
-        console.log(`⚠️ [EMERGENCY-RECOVERY] Reassigning cancelled Job ${jobId}`);
+        console.log(`⚠️ [EMERGENCY-RECOVERY] Reassigning Job ${jobId}`);
 
         // Try Standby queue from Redis first (Step 8)
         const standbyStr = await redis.get(`job:${jobId}:standby_queue`);

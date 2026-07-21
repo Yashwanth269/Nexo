@@ -210,6 +210,15 @@ class RankingService {
             score = Math.max(0, score - 0.8);
         }
 
+        // Apply Load Balancing adjustments (daily/weekly earnings and idle time)
+        try {
+            const marketplaceIntel = require('./marketplace_intelligence.service');
+            const balanceRes = await marketplaceIntel.applyLoadBalancing(worker.id, score);
+            score = balanceRes.balancedScore;
+        } catch (balErr) {
+            // fallback
+        }
+
         if (isNaN(score) || !isFinite(score)) {
             score = 0.0;
         }

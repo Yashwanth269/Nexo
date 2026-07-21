@@ -513,6 +513,14 @@ class MatchingService {
                 console.error('⚠️ [REDISTRIBUTE-LOOP-ERROR]', err.message);
             });
         }, 30000); // Runs every 30 seconds
+
+        console.log('📅 [RESERVATION-MONITOR] Initializing 60s reservation monitor loop...');
+        this._reservationMonitorInterval = setInterval(() => {
+            const reservationService = require('./reservation.service');
+            reservationService.monitorActiveReservations().catch(err => {
+                console.error('⚠️ [RESERVATION-MONITOR-ERROR]', err.message);
+            });
+        }, 60000); // Runs every 60 seconds
     }
 
     async processRedistributingJobs() {

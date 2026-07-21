@@ -45,25 +45,10 @@ class ExecutionService {
             );
 
             if (jobResult.rowCount === 0) throw new Error("Job not found or worker unauthorized");
+                       const currentStatus = jobResult.rows[0].status;
             
-            const currentStatus = jobResult.rows[0].status;
-            
-            // Define allowable state transitions
-            const allowedTransitions = {
-                'ACCEPTED': ['ON_THE_WAY'],
-                'RESERVED': ['ON_THE_WAY'],
-                'CONFIRMED': ['ON_THE_WAY'],
-                'SCHEDULED': ['ON_THE_WAY'],
-                'READY_TO_START': ['ON_THE_WAY'],
-                'ON_THE_WAY': ['ARRIVED', 'FORCE_ARRIVAL_PENDING_CONFIRMATION'],
-                'FORCE_ARRIVAL_PENDING_CONFIRMATION': ['ARRIVED', 'ON_THE_WAY'],
-                'ARRIVED': ['WORK_IN_PROGRESS', 'WORK_STARTED'],
-                'WORK_IN_PROGRESS': ['COMPLETED', 'WAITING_FOR_PAYMENT'],
-                'WORK_STARTED': ['COMPLETED', 'WAITING_FOR_PAYMENT'],
-                'WAITING_FOR_PAYMENT': ['COMPLETED']
-            };
-
-            if (!allowedTransitions[currentStatus] || !allowedTransitions[currentStatus].includes(newStatus)) {
+            const jobStateMachine = require('./job_state_machine.service');
+            if (!jobStateMachine.isValidTransition(currentStatus, newStatus)) {
                 throw new Error(`Invalid transition: ${currentStatus} -> ${newStatus}`);
             }
 
@@ -157,24 +142,28 @@ class ExecutionService {
             }
 
             // Perform Update
-            let updateFields = "status = $1, updated_at = CURRENT_TIMESTAMP";
-            let queryParams = [newStatus, jobId];
-            if (newStatus === 'ON_THE_WAY') {
-                updateFields = "status = $1, on_the_way_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP";
-            } else if (newStatus === 'ARRIVED' || newStatus === 'FORCE_ARRIVAL_PENDING_CONFIRMATION') {
-                updateFields = "status = $1, arrived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP";
-            } else if (newStatus === 'WORK_IN_PROGRESS' || newStatus === 'STARTED' || newStatus === 'IN_PROGRESS') {
-                updateFields = "status = $1, started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP";
-            } else if (newStatus === 'COMPLETED') {
-                const paymentMethod = (metadata.paymentMethod || 'ONLINE').toUpperCase();
-                updateFields = "status = $1, completed_at = CURRENT_TIMESTAMP, payment_method = $3, updated_at = CURRENT_TIMESTAMP";
-                queryParams.push(paymentMethod);
-            }
+            await jobStateMachine.transition(jobId, newStatus, {
+                workerId: worker.id,
+                userId: jobResult.rows[0].user_id,
+                client,
+                metadata
+            });
 
-            await client.query(
-                `UPDATE jobs SET ${updateFields} WHERE id = $2::uuid`,
-                queryParams
-            );
+            if (newStatus === 'COMPLETED') {
+                const paymentMethod = (metadata.paymentMethod || 'ONLINE').toUpperCase();
+                await client.query(
+                    "UPDATE jobs SET payment_method = $1 WHERE id = $2",
+                    [paymentMethod, jobId]
+                );
+                await client.query(
+                    "UPDATE workers SET availability_state = 'AVAILABLE' WHERE id = $1",
+                    [worker.id]
+                );
+                await client.query(
+                    "UPDATE worker_calendar SET status = 'COMPLETED', updated_at = NOW() WHERE job_id = $1 AND worker_id = $2",
+                    [jobId, worker.id]
+                );
+            }
 
             // Log Event
             await client.query(

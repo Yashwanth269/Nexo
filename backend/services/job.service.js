@@ -97,6 +97,22 @@ class JobService {
                 [jobId]
             );
 
+            // Reserve Time Block in calendar
+            const reservationService = require('./reservation.service');
+            const start = job.scheduled_at || new Date();
+            await reservationService.reserveTimeBlock(
+                worker.id, job.id, start, job.category,
+                parseFloat(job.location_lat), parseFloat(job.location_lng),
+                client
+            );
+
+            // Set availability state to BUSY (if instant) or RESERVED (if scheduled)
+            const newState = job.scheduled_at ? 'RESERVED' : 'BUSY';
+            await client.query(
+                "UPDATE workers SET availability_state = $1 WHERE id = $2",
+                [newState, worker.id]
+            );
+
             await client.query('COMMIT');
             console.log(`[JOB_ACCEPT_SUCCESS] Job ${jobId} assigned to ${worker.id}`);
 
@@ -747,6 +763,18 @@ class JobService {
                 [jobId, worker.id, reason, note]
             );
 
+            // Release calendar block
+            await client.query(
+                "UPDATE worker_calendar SET status = 'CANCELLED' WHERE booking_id = $1",
+                [jobId]
+            );
+
+            // Reset worker availability state back to AVAILABLE
+            await client.query(
+                "UPDATE workers SET availability_state = 'AVAILABLE' WHERE id = $1",
+                [worker.id]
+            );
+
             await client.query('COMMIT');
 
             console.log(`[WORKER_CANCELLED] Release worker ${worker.id} from job ${jobId}. Reseting state to REDISTRIBUTING.`);
@@ -860,6 +888,20 @@ class JobService {
                 "UPDATE job_offers SET status = 'CANCELLED' WHERE job_id = $1 AND status = 'PENDING'",
                 [jobId]
             );
+
+            // Release calendar block
+            await client.query(
+                "UPDATE worker_calendar SET status = 'CANCELLED' WHERE booking_id = $1",
+                [jobId]
+            );
+
+            if (job.worker_id) {
+                // Reset worker availability state back to AVAILABLE
+                await client.query(
+                    "UPDATE workers SET availability_state = 'AVAILABLE' WHERE id = $1",
+                    [job.worker_id]
+                );
+            }
 
             await client.query('COMMIT');
 

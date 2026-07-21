@@ -44,6 +44,9 @@ eventStream.init(io);
 const { startBackgroundRefresh } = require('./services/market.service');
 startBackgroundRefresh(io);
 
+const marketplaceIntel = require('./services/marketplace_intelligence.service');
+marketplaceIntel.start();
+
 const { invalidateServiceCache } = require('./routes/home.routes');
 
 app.use(cors());
@@ -205,6 +208,8 @@ app.use('/api/auth', require('./routes/auth.routes'));
 // Protected routes — require valid JWT
 app.use('/api/worker/profile', authenticateToken, require('./routes/worker.profile.routes'));
 app.use('/api/user', authenticateToken, require('./routes/user.routes'));
+app.use('/api/marketplace', authenticateToken, require('./routes/marketplace.routes'));
+app.use('/api/jobs', authenticateToken, require('./routes/job_lifecycle.routes'));
 app.use('/api/jobs', authenticateToken, require('./routes/job.routes'));
 app.use('/api/workers', require('./routes/worker.routes')); // has internal optional auth
 app.use('/api/market', require('./routes/market.routes')); // has public + protected endpoints
