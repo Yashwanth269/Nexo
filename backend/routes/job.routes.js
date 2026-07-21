@@ -129,7 +129,31 @@ router.post('/create', jobCreateLimiter, async (req, res) => {
 router.post('/accept', async (req, res) => {
     try {
         const { jobId, workerId } = req.body;
-        const result = await jobService.acceptJob(jobId, workerId);
+        
+        // Resolve worker UUID if phone number passed
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workerId);
+        let resolvedWorkerId = workerId;
+        if (!isUUID) {
+            const wRes = await db.query("SELECT id FROM workers WHERE phone_number = $1", [workerId]);
+            if (wRes.rowCount > 0) {
+                resolvedWorkerId = wRes.rows[0].id;
+            }
+        }
+
+        // Check for active pending offer in staged dispatch queue
+        const offerRes = await db.query(
+            "SELECT id FROM job_offers WHERE job_id = $1 AND worker_id = $2 AND status = 'PENDING' LIMIT 1",
+            [jobId, resolvedWorkerId]
+        );
+
+        let result;
+        if (offerRes.rowCount > 0) {
+            const dispatchQueue = require('../services/dispatch_queue.service');
+            result = await dispatchQueue.acceptOfferAtomically(offerRes.rows[0].id, workerId);
+        } else {
+            result = await jobService.acceptJob(jobId, workerId);
+        }
+
         if (!result.success) return res.status(409).json(result);
         res.json(result);
     } catch (error) {
@@ -665,7 +689,30 @@ router.get('/worker/active-jobs-light/:workerId', handleActiveJobsLight);
 router.post('/reject', async (req, res) => {
     try {
         const { jobId, workerId } = req.body;
-        const result = await jobService.rejectJobOffer(jobId, workerId);
+        
+        // Resolve worker UUID if phone number passed
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workerId);
+        let resolvedWorkerId = workerId;
+        if (!isUUID) {
+            const wRes = await db.query("SELECT id FROM workers WHERE phone_number = $1", [workerId]);
+            if (wRes.rowCount > 0) {
+                resolvedWorkerId = wRes.rows[0].id;
+            }
+        }
+
+        const offerRes = await db.query(
+            "SELECT id FROM job_offers WHERE job_id = $1 AND worker_id = $2 AND status = 'PENDING' LIMIT 1",
+            [jobId, resolvedWorkerId]
+        );
+
+        let result;
+        if (offerRes.rowCount > 0) {
+            const dispatchQueue = require('../services/dispatch_queue.service');
+            result = await dispatchQueue.declineOffer(offerRes.rows[0].id, resolvedWorkerId);
+        } else {
+            result = await jobService.rejectJobOffer(jobId, workerId);
+        }
+
         res.json(result);
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

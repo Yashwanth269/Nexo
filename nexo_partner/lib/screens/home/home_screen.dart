@@ -569,38 +569,123 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _showOfflineConfirmation() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.power_settings_new_rounded, color: Colors.redAccent, size: 28),
-            const SizedBox(width: 8),
-            Text("Go Offline?", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Text(
-          "You will stop receiving new gig requests. Are you sure you want to go offline?",
-          style: GoogleFonts.inter(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("Stay Online", style: GoogleFonts.inter(color: Colors.white54, fontWeight: FontWeight.bold)),
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF151515), // Matches the premium dark bottom sheet background
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.white.withOpacity(0.08)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.4),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              )
+            ],
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _toggleOnline(false);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: Text("Go Offline", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.redAccent.withOpacity(0.3), width: 1.5),
+                ),
+                child: const Icon(
+                  Icons.power_settings_new_rounded,
+                  color: Colors.redAccent,
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                "Go Offline?",
+                style: GoogleFonts.outfit(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                "You will stop receiving new gig requests. Are you sure you want to go offline?",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: Colors.white60,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.white.withOpacity(0.12)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: Text(
+                        "Stay Online",
+                        style: GoogleFonts.outfit(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.redAccent.withOpacity(0.24),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          )
+                        ],
+                      ),
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _toggleOnline(false);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          "Go Offline",
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

@@ -809,7 +809,11 @@ class JobService {
                 console.log(`[DISPATCH-BACKUP] Worker cancelled. Successfully assigned backup worker: ${backupResult.backup.backup_worker_id}`);
             } else {
                 console.log(`[DISPATCH] No backup available. Performing global redispatch.`);
-                matchingService.broadcastJob(updatedJob);
+                const dispatchQueue = require('./dispatch_queue.service');
+                const standbyRecovered = await dispatchQueue.handleEmergencyRecovery(jobId);
+                if (!standbyRecovered) {
+                    matchingService.broadcastJob(updatedJob);
+                }
             }
 
             return { success: true, message: "Job cancelled and reopened/reassigned" };

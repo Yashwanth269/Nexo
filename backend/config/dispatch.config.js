@@ -12,6 +12,12 @@ module.exports = {
         pool2Size: parseInt(process.env.DISPATCH_POOL2_SIZE || '5', 10),
         pool3Size: parseInt(process.env.DISPATCH_POOL3_SIZE || '8', 10),
         offerTtlSeconds: parseInt(process.env.DISPATCH_OFFER_TTL_SEC || '20', 10),
+        cooldownSeconds: parseInt(process.env.DISPATCH_WORKER_COOLDOWN_SEC || '900', 10), // 15 mins
+        categoryOverrides: {
+            'Emergency': { pool1Size: 5, pool2Size: 10, pool3Size: 15, offerTtlSeconds: 15 },
+            'Critical': { pool1Size: 5, pool2Size: 10, pool3Size: 15, offerTtlSeconds: 15 },
+            'Plumbing': { pool1Size: 2, pool2Size: 4, pool3Size: 6, offerTtlSeconds: 30 }
+        }
     },
 
     // Search Radius Steps (km)

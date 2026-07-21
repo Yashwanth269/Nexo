@@ -293,7 +293,8 @@ class MatchingService {
     }
 
     async broadcastJob(job) {
-        this.runDispatchPipeline(job.id).catch(err => {
+        const dispatchQueue = require('./dispatch_queue.service');
+        dispatchQueue.broadcastJob(job.id).catch(err => {
             console.error(`[DISPATCH-PIPELINE-ERROR] Job ${job.id}:`, err.message);
         });
     }
@@ -554,49 +555,8 @@ class MatchingService {
                 if (!locked) continue;
 
                 try {
-                    // Check if 2-minute full re-evaluation is needed
-                    const lastFullEvalTime = await redis.get(`job:${job.id}:last_full_reeval`);
-                    const isFullReeval = !lastFullEvalTime || (now - parseInt(lastFullEvalTime) >= 120000);
-
-                    const searchRadiusService = require('./search_radius.service');
-                    const maxRadius = searchRadiusService.getMaxRadius(job.category, job.priority === 'High' || job.priority === 'Critical');
-                    const intent = parseJobIntent(job.description, job.category);
-
-                    // Fetch candidates within search radius
-                    const candidates = await this.getStageCandidates(job, intent, maxRadius);
-
-                    // Filter out workers notified in the last 5 minutes or rejected
-                    const recentOffers = await db.query(`
-                        SELECT DISTINCT worker_id FROM job_offers
-                        WHERE job_id = $1
-                          AND (status IN ('PENDING', 'ACCEPTED') OR (status = 'REJECTED' AND created_at > NOW() - INTERVAL '15 minutes') OR created_at > NOW() - INTERVAL '5 minutes')
-                    `, [job.id]);
-                    const recentNotifiedIds = new Set(recentOffers.rows.map(r => r.worker_id));
-
-                    const eligibleCandidates = candidates.filter(w => !recentNotifiedIds.has(w.id));
-
-                    if (eligibleCandidates.length > 0) {
-                        const targetCandidates = eligibleCandidates.slice(0, 3);
-                        console.log(`[REDISTRIBUTE-SCAN] Job ${job.id} (${isFullReeval ? 'Full 2m Re-eval' : 'Incremental 30s Scan'}): Notifying ${targetCandidates.length} newly eligible worker(s).`);
-
-                        await this.notifyWorkersForJob(job, targetCandidates);
-
-                        await logDispatchEvent(job.id, isFullReeval ? 'redistribute_full_reevaluation' : 'redistribute_incremental_notify', {
-                            newWorkersNotified: targetCandidates.length,
-                            maxRadius,
-                            isFullReeval
-                        });
-                    }
-
-                    if (isFullReeval) {
-                        await redis.set(`job:${job.id}:last_full_reeval`, now.toString(), 'EX', 3600);
-                    }
-
-                    // Keep job status REDISTRIBUTING
-                    if (job.status !== 'REDISTRIBUTING') {
-                        await db.query("UPDATE jobs SET status = 'REDISTRIBUTING', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [job.id]);
-                        await redis.set(`job:${job.id}:status`, 'REDISTRIBUTING');
-                    }
+                    const dispatchQueue = require('./dispatch_queue.service');
+                    await dispatchQueue.broadcastJob(job.id);
                 } catch (tickErr) {
                     console.error(`[REDISTRIBUTE-TICK-ERROR] Job ${job.id}:`, tickErr.message);
                 }
