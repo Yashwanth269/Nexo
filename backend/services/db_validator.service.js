@@ -25,7 +25,8 @@ class DBValidatorService {
                 'event_logs', 'disputes', 'advanced_fatigue_scores',
                 'dispatch_rejection_logs', 'worker_response_logs', 'search_analytics_logs',
                 'dispatch_ranking_breakdowns', 'ml_model_monitoring', 'refresh_tokens',
-                'ml_training_data', 'model_maturity'
+                'ml_training_data', 'model_maturity', 'worker_calendar', 'marketplace_zones',
+                'job_slas'
             ];
 
             const tableCheckRes = await db.query(`
@@ -43,6 +44,10 @@ class DBValidatorService {
             }
 
             // 2. Verify key columns if tables exist
+            if (existingTables.has('workers')) {
+                const cols = await this.getTableColumns('workers');
+                if (!cols.has('availability_state')) missingColumns.push('workers.availability_state');
+            }
             if (existingTables.has('disputes')) {
                 const cols = await this.getTableColumns('disputes');
                 if (!cols.has('evidence')) missingColumns.push('disputes.evidence');
@@ -60,6 +65,8 @@ class DBValidatorService {
                 const cols = await this.getTableColumns('jobs');
                 if (!cols.has('search_radius_km')) missingColumns.push('jobs.search_radius_km');
                 if (!cols.has('search_state_stage')) missingColumns.push('jobs.search_state_stage');
+                if (!cols.has('checklist')) missingColumns.push('jobs.checklist');
+                if (!cols.has('payout_status')) missingColumns.push('jobs.payout_status');
             }
 
             // 3. Verify key indexes

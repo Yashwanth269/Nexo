@@ -473,14 +473,18 @@ server.listen(PORT, () => {
     console.log(`--------------------------------------------\n`);
 });
 
-// Run Database Validation & Start Payment Cron Service
+// Run Database Auto-Migrations & Validation & Start Payment Cron Service
 const dbValidator = require('./services/db_validator.service');
-dbValidator.validateSchema().then(() => {
+const migrationRunner = require('./services/migration_runner.service');
+
+migrationRunner.runAllMigrations().then(() => {
+    return dbValidator.validateSchema();
+}).then(() => {
     console.log(`🔍 [DB-VALIDATION] Schema validation completed. Schema is ${dbValidator.isValid ? 'VALID' : 'INVALID'}`);
     const cronService = require('./services/cron.service');
     cronService.start();
 }).catch(err => {
-    console.error("🔍 [DB-VALIDATION-ERROR] Schema validation failed to run:", err.message);
+    console.error("🔍 [DB-MIGRATION-VALIDATION-ERROR] Schema migration/validation failed to run:", err.message);
     const cronService = require('./services/cron.service');
     cronService.start();
 });
