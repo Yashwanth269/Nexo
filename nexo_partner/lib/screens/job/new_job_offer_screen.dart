@@ -14,12 +14,15 @@ class NewJobOfferScreen extends StatefulWidget {
   final VoidCallback onDecline;
   final Function(double) onCounterOffer;
 
+  final bool playSound;
+
   const NewJobOfferScreen({
     super.key,
     required this.job,
     required this.onAccept,
     required this.onDecline,
     required this.onCounterOffer,
+    this.playSound = false,
   });
 
   @override
@@ -88,7 +91,9 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
     SocketService().socket?.on('USER_CANCELLED_JOB', _cancelListener!);
 
     _startTimer();
-    _playRingtone();
+    if (widget.playSound) {
+      _playRingtone();
+    }
   }
 
   Future<void> _playRingtone() async {

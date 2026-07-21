@@ -153,14 +153,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    final prefs = await SharedPreferences.getInstance();
     if (state == AppLifecycleState.resumed) {
       debugPrint("🚀 [APP_RESUMED] Re-synchronizing state...");
+      await prefs.setBool('isAppInForeground', true);
       _socketService.connect((job) => _onNewJobSocket(job)); // Ensure socket resync
+      FlutterBackgroundService().invoke("setAsForeground");
       if (_isOnline) {
         _startRefreshTimer();
       }
       _handleAppResume();
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      debugPrint("💤 [APP_BACKGROUNDED] Switching socket to background service...");
+      await prefs.setBool('isAppInForeground', false);
+      _socketService.disconnect();
+      FlutterBackgroundService().invoke("setAsBackground");
     }
   }
 
@@ -250,6 +258,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       debugPrint("🔄 [MIGRATION] Migrated legacy worker_phone to workerPhone");
     }
     
+    await prefs.setBool('isAppInForeground', true);
     // Ensure data is loaded before fetching
     if (_phoneNumber != "Worker") {
       debugPrint("📦 [LOAD_USER_DATA] Identity confirmed: $_phoneNumber");
@@ -764,6 +773,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       
       _socketService.connect((job) => _onNewJobSocket(job));
       BackgroundTracker.startOnlineService();
+      FlutterBackgroundService().invoke("setAsForeground");
       
       // LISTEN: Realtime Job Taken (by another worker)
       _socketService.socket?.on('job_taken', (data) {

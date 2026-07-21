@@ -89,12 +89,18 @@ void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
   await LocalNotificationService.initialize();
   
+  io.Socket? backgroundSocket;
+  
   if (service is AndroidServiceInstance) {
     service.on('setAsForeground').listen((event) {
       service.setAsForegroundService();
+      backgroundSocket?.disconnect();
     });
     service.on('setAsBackground').listen((event) {
       service.setAsBackgroundService();
+      if (backgroundSocket != null && !backgroundSocket.connected) {
+        backgroundSocket.connect();
+      }
     });
   }
 
@@ -186,14 +192,16 @@ void onStart(ServiceInstance service) async {
   final String workerPhone = prefs.getString('workerPhone') ?? prefs.getString('worker_phone') ?? "";
   final String token = prefs.getString('worker_token') ?? prefs.getString('workerToken') ?? "";
   
+  final bool isAppInForeground = prefs.getBool('isAppInForeground') ?? false;
+
   if (workerPhone.isNotEmpty) {
-    io.Socket socket = io.io(NetworkHelper.baseUrl, <String, dynamic>{
+    backgroundSocket = io.io(NetworkHelper.baseUrl, <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
       'auth': {'token': token}
     });
 
-    socket.onConnect((_) async {
+    backgroundSocket.onConnect((_) async {
       Position? position;
       try {
         position = await Geolocator.getLastKnownPosition();
@@ -207,7 +215,7 @@ void onStart(ServiceInstance service) async {
         debugPrint("Background socket startup location fetch failed: $e");
       }
 
-      socket.emit('worker_online', {
+      backgroundSocket?.emit('worker_online', {
         'phoneNumber': workerPhone,
         if (position != null) 'location': {
           'lat': position.latitude,
@@ -216,7 +224,7 @@ void onStart(ServiceInstance service) async {
       });
     });
 
-    socket.on('new_job_request', (data) async {
+    backgroundSocket.on('new_job_request', (data) async {
       dynamic jobMap;
       if (data is List) {
         if (data.isEmpty) return;
@@ -260,10 +268,12 @@ void onStart(ServiceInstance service) async {
       service.invoke('incoming_job', {'job': jobMap});
     });
 
-    socket.connect();
+    if (!isAppInForeground) {
+      backgroundSocket.connect();
+    }
     
     service.on('stopService').listen((event) {
-      socket.disconnect();
+      backgroundSocket?.disconnect();
       positionStream?.cancel();
       service.stopSelf();
     });
