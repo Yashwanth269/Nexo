@@ -594,12 +594,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF6A00).withOpacity(0.12),
+                  color: const Color(0xFF2563EB).withOpacity(0.12),
                   shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFFFF6A00).withOpacity(0.3), width: 1.5),
+                  border: Border.all(color: const Color(0xFF2563EB).withOpacity(0.3), width: 1.5),
                 ),
                 child: const Icon(
-                  Icons.power_settings_new_rounded, color: const Color(0xFFFF6A00),
+                  Icons.power_settings_new_rounded,
+                  color: Color(0xFF2563EB),
                   size: 36,
                 ),
               ),
@@ -652,7 +653,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFFF6A00).withOpacity(0.24),
+                            color: const Color(0xFF2563EB).withOpacity(0.24),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           )
@@ -664,7 +665,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           _toggleOnline(false);
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFF6A00),
+                          backgroundColor: const Color(0xFF2563EB),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
@@ -1310,11 +1311,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     width: 52,
                     height: 52,
                     decoration: BoxDecoration(
-                      color: _isOnline ? Colors.redAccent : const Color(0xFFFF6A00),
+                      color: _isOnline ? Colors.redAccent : const Color(0xFF2563EB),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: (_isOnline ? Colors.redAccent : const Color(0xFFFF6A00)).withOpacity(0.3),
+                          color: (_isOnline ? Colors.redAccent : const Color(0xFF2563EB)).withOpacity(0.3),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         )
@@ -1348,7 +1349,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildNewNavItem(int index, IconData icon, String label) {
     bool isSelected = _selectedIndex == index;
-    final activeColor = const Color(0xFFFF6A00);
+    final activeColor = const Color(0xFF2563EB);
     final inactiveColor = const Color(0xFF94A3B8);
     
     return GestureDetector(
@@ -1381,7 +1382,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildDashboard() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = const Color(0xFFFF6A00);
+    final primaryColor = const Color(0xFF2563EB);
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
@@ -1540,7 +1541,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ),
                         Switch(
                           value: _isOnline,
-                          activeColor: const Color(0xFFFF6A00),
+                          activeColor: const Color(0xFF2563EB),
                           activeTrackColor: const Color(0xFFDBEAFE),
                           inactiveThumbColor: const Color(0xFF64748B),
                           inactiveTrackColor: const Color(0xFFE2E8F0),
@@ -1563,7 +1564,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           children: [
                             Icon(
                               _isPaused ? Icons.play_circle_filled_rounded : Icons.pause_circle_filled_rounded,
-                              color: const Color(0xFFFF6A00),
+                              color: const Color(0xFF2563EB),
                               size: 24,
                             ),
                             const SizedBox(width: 12),
@@ -1571,7 +1572,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               child: Text(
                                 _isPaused ? "Resume Requests Dispatch" : "Temporarily Pause Requests",
                                 style: GoogleFonts.inter(
-                                  color: const Color(0xFFFF6A00),
+                                  color: const Color(0xFF2563EB),
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14,
                                 ),
@@ -1619,7 +1620,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                       child: const Icon(
                         Icons.location_on,
-                        color: Color(0xFFFF6A00),
+                        color: Color(0xFF2563EB),
                         size: 20,
                       ),
                     ),
@@ -1658,7 +1659,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                 child: const Icon(
                                   Icons.refresh_rounded,
                                   size: 18,
-                                  color: Color(0xFFFF6A00),
+                                  color: Color(0xFF2563EB),
                                 ),
                               ),
                             ],
@@ -1708,8 +1709,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                         colors: [
-                          Color(0xFFFF6A00),
-                          Color(0xFFEA580C),
+                          Color(0xFF2563EB),
+                          Color(0xFF1D4ED8),
                         ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -1717,7 +1718,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       borderRadius: BorderRadius.circular(28),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFFF6A00).withOpacity(0.2),
+                          color: const Color(0xFF2563EB).withOpacity(0.2),
                           blurRadius: 16,
                           offset: const Offset(0, 8),
                         ),
@@ -1836,7 +1837,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                   child: Text(
                                     tf['label']!,
                                     style: GoogleFonts.inter(
-                                      color: isSelected ? const Color(0xFFFF6A00) : Colors.white,
+                                      color: isSelected ? const Color(0xFF2563EB) : Colors.white,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 12,
                                     ),
@@ -1872,7 +1873,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       style: GoogleFonts.inter(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFFFF6A00),
+                        color: const Color(0xFF2563EB),
                       ),
                     ),
                   ),
@@ -1893,7 +1894,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       _buildQuickActionItem(Icons.account_balance_wallet_rounded, const Color(0xFF8B5CF6), "Earnings", () {
                         setState(() => _selectedIndex = 2);
                       }),
-                      _buildQuickActionItem(Icons.trending_up_rounded, const Color(0xFFFF6A00), "Performance", () {
+                      _buildQuickActionItem(Icons.trending_up_rounded, const Color(0xFF2563EB), "Performance", () {
                         _showPerformanceDialog();
                       }),
                     ],
@@ -1939,7 +1940,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       style: GoogleFonts.inter(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFFFF6A00),
+                        color: const Color(0xFF2563EB),
                       ),
                     ),
                   ),
@@ -1977,7 +1978,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       style: GoogleFonts.inter(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFFFF6A00),
+                        color: const Color(0xFF2563EB),
                       ),
                     ),
                   ),
@@ -2090,7 +2091,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 width: 28,
                 height: 28,
                 fit: BoxFit.cover,
-                fallback: const Icon(Icons.handyman, color: Color(0xFFFF6A00), size: 24),
+                fallback: const Icon(Icons.handyman, color: Color(0xFF2563EB), size: 24),
               ),
             ),
             const SizedBox(width: 14),
@@ -2245,7 +2246,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               color: Color(0xFFEFF6FF),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.search, color: Color(0xFFFF6A00), size: 24),
+            child: const Icon(Icons.search, color: Color(0xFF2563EB), size: 24),
           ),
           const SizedBox(height: 16),
           Text(
@@ -2352,7 +2353,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         children: [
           Row(
             children: [
-              const Icon(Icons.calendar_today_rounded, color: Color(0xFFFF6A00), size: 18),
+              const Icon(Icons.calendar_today_rounded, color: Color(0xFF2563EB), size: 18),
               const SizedBox(width: 8),
               Text(
                 "Today's Schedule",
@@ -2429,7 +2430,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                 style: GoogleFonts.inter(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: isConfirmed ? const Color(0xFF16A34A) : const Color(0xFFFF6A00),
+                                  color: isConfirmed ? const Color(0xFF16A34A) : const Color(0xFF2563EB),
                                 ),
                               ),
                             ),
@@ -2454,7 +2455,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Row(
           children: [
-            const Icon(Icons.trending_up_rounded, color: Color(0xFFFF6A00)),
+            const Icon(Icons.trending_up_rounded, color: Color(0xFF2563EB)),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -2471,13 +2472,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             const Divider(height: 20),
             _buildPerformanceRow("Average Rating", "4.8 ★", Colors.orange),
             const Divider(height: 20),
-            _buildPerformanceRow("Total Completed", "${_earningsSummary?['today']?['gigs'] ?? 0} Gigs", const Color(0xFFFF6A00)),
+            _buildPerformanceRow("Total Completed", "${_earningsSummary?['today']?['gigs'] ?? 0} Gigs", const Color(0xFF2563EB)),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text("Close", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00))),
+            child: Text("Close", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFF2563EB))),
           )
         ],
       ),
@@ -2521,7 +2522,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text("Close", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00))),
+            child: Text("Close", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFF2563EB))),
           )
         ],
       ),
@@ -2568,7 +2569,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text("OK", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00))),
+            child: Text("OK", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFF2563EB))),
           )
         ],
       ),
@@ -2626,7 +2627,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 style: GoogleFonts.outfit(
                   fontWeight: FontWeight.w900,
                   fontSize: 16,
-                  color: const Color(0xFFFF6A00),
+                  color: const Color(0xFF2563EB),
                   letterSpacing: 1.0,
                 ),
               ),
@@ -2641,11 +2642,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text("Referral code copied to clipboard!"),
-                  backgroundColor: Color(0xFFFF6A00),
+                  backgroundColor: Color(0xFF2563EB),
                 ),
               );
             },
-            child: Text("Copy Code", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00))),
+            child: Text("Copy Code", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFF2563EB))),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -2736,7 +2737,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text("OK", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00))),
+            child: Text("OK", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFF2563EB))),
           )
         ],
       ),
@@ -2794,7 +2795,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text("Close", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00))),
+            child: Text("Close", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFF2563EB))),
           )
         ],
       ),

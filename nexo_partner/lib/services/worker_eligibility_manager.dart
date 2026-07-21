@@ -503,7 +503,7 @@ class _EligibilityModalState extends State<_EligibilityModal> with WidgetsBindin
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _report.isFullyEligible
                         ? const Color(0xFF10B981)
-                        : const Color(0xFFFF6A00),
+                        : const Color(0xFF2563EB),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),

@@ -372,7 +372,7 @@ class _OtpScreenState extends State<OtpScreen> {
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFFFF6A00),
+                    color: const Color(0xFF2563EB),
                     letterSpacing: 1.5,
                   ),
                 ),

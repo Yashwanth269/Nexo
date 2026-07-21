@@ -160,7 +160,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
             ),
             const SizedBox(height: 16),
             ListTile(
-              leading: const Icon(Icons.photo_library_rounded, color: Color(0xFFFF6A00)),
+              leading: const Icon(Icons.photo_library_rounded, color: Color(0xFF2563EB)),
               title: Text("Upload Own Photo", style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
               onTap: () {
                 Navigator.pop(context);
@@ -239,7 +239,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: Color(0xFFFF6A00))),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFF2563EB))),
       );
     }
 
@@ -415,7 +415,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.verified_user_rounded, color: Color(0xFFFF6A00), size: 24),
+                  const Icon(Icons.verified_user_rounded, color: Color(0xFF2563EB), size: 24),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -435,7 +435,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
                       ],
                     ),
                   ),
-                  const Icon(Icons.chevron_right_rounded, color: Color(0xFFFF6A00), size: 20),
+                  const Icon(Icons.chevron_right_rounded, color: Color(0xFF2563EB), size: 20),
                 ],
               ),
             ),
