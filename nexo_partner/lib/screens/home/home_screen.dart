@@ -631,11 +631,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _socketService.connect((job) => _onNewJobSocket(job));
       BackgroundTracker.startOnlineService();
       
-      // LISTEN: Active Job Updates (Status changes from backend/other devices)
-      _socketService.socket?.on('active_job_updated', (data) {
-        if (data != null) {
-          debugPrint("🔔 [SOCKET] Active Job Updated: ${data['jobId']} -> ${data['status']}");
-          _fetchActiveGigs(); // Re-fetch to get full enriched data
+      // LISTEN: Realtime Job Taken (by another worker)
+      _socketService.socket?.on('job_taken', (data) {
+        if (data != null && mounted) {
+          final String? takenJobId = (data['jobId'] ?? data['job_id'])?.toString();
+          final String? takenWorkerId = (data['workerId'] ?? data['worker_id'])?.toString();
+          final String? takenWorkerPhone = (data['workerPhone'] ?? data['worker_phone'])?.toString();
+          
+          // Ignore if current worker is the one who accepted
+          if (takenWorkerId == _phoneNumber || takenWorkerPhone == _phoneNumber) return;
+
+          if (takenJobId != null && takenJobId.isNotEmpty) {
+            debugPrint("🚫 [SOCKET] Job $takenJobId taken by another worker ($takenWorkerId). Removing from feed.");
+            setState(() {
+              _jobRequests.removeWhere((j) {
+                final id = (j['id'] ?? j['_id'] ?? j['jobId'] ?? j['job_id'])?.toString();
+                return id == takenJobId;
+              });
+            });
+          }
         }
       });
 
@@ -742,8 +756,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     if (!isAlreadyActive) {
       if (!isDuplicate) {
+        final taggedJob = {
+          if (jobMap is Map) ...jobMap,
+          'isNearbyJob': true,
+        };
         setState(() {
-          _jobRequests.insert(0, jobMap);
+          _jobRequests.insert(0, taggedJob);
         });
       }
       _showJobNotification(jobMap);
@@ -1016,7 +1034,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         // Handle specific error reasons
         String errorMsg = data['message'] ?? "Could not accept job";
         if (errorMsg == "WORKER_ALREADY_BUSY") errorMsg = "You already have an active job!";
-        if (errorMsg == "JOB_ALREADY_TAKEN") errorMsg = "Sorry, this job was just taken by another worker.";
+        if (errorMsg == "JOB_ALREADY_TAKEN") {
+          errorMsg = "Sorry, this job was just taken by another worker.";
+          final targetId = (job['id'] ?? job['_id'])?.toString();
+          if (targetId != null) {
+            setState(() {
+              _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == targetId);
+            });
+          }
+        }
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(errorMsg), backgroundColor: Colors.redAccent),
