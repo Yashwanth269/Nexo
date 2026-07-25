@@ -133,6 +133,20 @@ class MigrationRunnerService {
 
             // Create PostGIS / Earth distance indexes on marketplace_zones center coordinate
             "CREATE INDEX IF NOT EXISTS idx_marketplace_zones_geo ON marketplace_zones USING gist (ll_to_earth(center_lat, center_lng));",
+
+            // 8. Staged Dispatch observability columns on search_analytics_logs
+            "ALTER TABLE search_analytics_logs ADD COLUMN IF NOT EXISTS queue_refresh_count INTEGER DEFAULT 0;",
+            "ALTER TABLE search_analytics_logs ADD COLUMN IF NOT EXISTS queue_build_time_ms INTEGER DEFAULT 0;",
+            "ALTER TABLE search_analytics_logs ADD COLUMN IF NOT EXISTS pools_used INTEGER DEFAULT 0;",
+            "ALTER TABLE search_analytics_logs ADD COLUMN IF NOT EXISTS offers_expired_count INTEGER DEFAULT 0;",
+            "ALTER TABLE search_analytics_logs ADD COLUMN IF NOT EXISTS offers_declined_count INTEGER DEFAULT 0;",
+            "ALTER TABLE search_analytics_logs ADD COLUMN IF NOT EXISTS standby_used BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE search_analytics_logs ADD COLUMN IF NOT EXISTS emergency_recovery_count INTEGER DEFAULT 0;",
+            "ALTER TABLE search_analytics_logs ADD COLUMN IF NOT EXISTS duplicate_acceptance_attempts INTEGER DEFAULT 0;",
+
+            // 9. Dispatch pool ID on job_offers
+            "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS dispatch_pool_id INTEGER DEFAULT 1;",
+            "CREATE INDEX IF NOT EXISTS idx_job_offers_dispatch_pool ON job_offers(job_id, dispatch_pool_id);",
         ];
 
         for (const query of queries) {

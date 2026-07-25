@@ -996,8 +996,20 @@ router.post('/:id/worker-reassign', async (req, res) => {
              VALUES ($1, 'WORKER', $2, $3, $4, $5, TRUE)`,
              [jobId, worker.id, statusBeforeReassign, reason, note || '']
         );
+
+        // ⚡ CRITICAL: Reset worker availability_state so they can accept new jobs
+        await client.query(
+            "UPDATE workers SET availability_state = 'AVAILABLE', is_available = true WHERE id = $1",
+            [worker.id]
+        );
+        // Release any calendar blocks for this job
+        await client.query(
+            "UPDATE worker_calendar SET status = 'CANCELLED' WHERE booking_id = $1",
+            [jobId]
+        );
         
         await client.query('COMMIT');
+        console.log(`[WORKER_STATE_RESET] Worker ${worker.id} availability_state reset to AVAILABLE after emergency reassign.`);
 
         // Redis cache status reset
         const redis = require('../config/redis');
@@ -1214,6 +1226,26 @@ const handleActiveJobsLight = async (req, res) => {
         });
 
         console.log(`⚡ [ACTIVE_GIGS_LOAD_TIME] ${totalTime}ms | [DB_QUERY_TIME]: ${queryTime}ms | [API_RESPONSE_TIME]: ${totalTime}ms`);
+        
+        // ⚡ SELF-HEALING: If worker has 0 active jobs but is still marked BUSY, auto-reset
+        if (enrichedJobs.length === 0) {
+            try {
+                const stateCheck = await db.query(
+                    "SELECT availability_state FROM workers WHERE id = $1",
+                    [worker.id]
+                );
+                if (stateCheck.rowCount > 0 && stateCheck.rows[0].availability_state === 'BUSY') {
+                    await db.query(
+                        "UPDATE workers SET availability_state = 'AVAILABLE', is_available = true WHERE id = $1",
+                        [worker.id]
+                    );
+                    console.log(`🔧 [SELF-HEAL] Worker ${worker.id} was BUSY with 0 active jobs — auto-reset to AVAILABLE.`);
+                }
+            } catch (healErr) {
+                console.warn(`[SELF-HEAL-WARN] ${healErr.message}`);
+            }
+        }
+
         res.json({ success: true, jobs: enrichedJobs });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -1594,6 +1626,20 @@ router.patch('/:userId/:jobId', async (req, res) => {
                 userId: job.user_id,
                 cancellation_reason: job.cancellation_reason
             });
+
+            // ⚡ CRITICAL: Reset worker availability_state so they can accept new jobs
+            if (job.worker_id) {
+                await db.query(
+                    "UPDATE workers SET availability_state = 'AVAILABLE', is_available = true WHERE id = $1",
+                    [job.worker_id]
+                );
+                // Release any calendar blocks for this job
+                await db.query(
+                    "UPDATE worker_calendar SET status = 'CANCELLED' WHERE booking_id = $1",
+                    [job.id]
+                ).catch(() => {});
+                console.log(`[WORKER_STATE_RESET] Worker ${job.worker_id} availability_state reset to AVAILABLE after user cancel.`);
+            }
             
             console.log(`[ACTIVE_JOB_CLEARED] Worker active job cleared in real-time.`);
             console.log(`[JOB_MARKED_UNSUCCESSFUL] Job: ${job.id} marked as unsuccessful history.`);
