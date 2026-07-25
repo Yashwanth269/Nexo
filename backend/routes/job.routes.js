@@ -524,6 +524,65 @@ router.get('/worker-reliability/:workerId', (req, res) => {
     }
 });
 
+// ==========================================
+// VOLUME 1C: MARKETPLACE OPTIMIZATION APIs
+// ==========================================
+const marketplaceOptimizationService = require('../services/marketplace_optimization.service');
+
+router.get('/earnings-forecast/:workerId', (req, res) => {
+    try {
+        const forecast = marketplaceOptimizationService.generateEarningsForecast(req.params.workerId, req.query.category);
+        res.json(forecast);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/marketplace/heatmap', (req, res) => {
+    try {
+        const heatmap = marketplaceOptimizationService.getDemandHeatMap();
+        res.json(heatmap);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/bundles', async (req, res) => {
+    try {
+        const candidateResult = await db.query(
+            "SELECT j.*, u.full_name as \"userName\" FROM jobs j LEFT JOIN users u ON j.user_id = u.id WHERE j.status IN ('OPEN', 'SCHEDULED_BIDDING')"
+        );
+        const bundles = marketplaceOptimizationService.findAndBuildJobBundles(candidateResult.rows);
+        res.json({ success: true, totalBundles: bundles.length, bundles });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==========================================
+// VOLUME 2: DISPATCH & ORCHESTRATION APIs
+// ==========================================
+const dispatchOrchestratorService = require('../services/dispatch_orchestrator.service');
+
+router.get('/dispatch/trace/:jobId', (req, res) => {
+    try {
+        const trace = dispatchOrchestratorService.getDispatchTrace(req.params.jobId);
+        res.json({ success: true, jobId: req.params.jobId, timeline: trace });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/dispatch/atomic-accept', async (req, res) => {
+    try {
+        const { jobId, workerId } = req.body;
+        const result = await dispatchOrchestratorService.attemptAtomicAcceptance(jobId, workerId);
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
 // Fetch Scheduled Job Worker Offers (Customer Comparison Screen)
 router.get('/:id/offers', async (req, res) => {
     try {
