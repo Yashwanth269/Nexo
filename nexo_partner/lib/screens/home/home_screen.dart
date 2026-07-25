@@ -1387,6 +1387,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final data = json.decode(response.body);
 
       if (response.statusCode == 200 && data['success']) {
+        if (data['offerId'] != null || (data['message'] != null && data['message'].toString().contains("expressed"))) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("🎉 ${data['message'] ?? 'Interest expressed! Customer will compare & select.'}"),
+              backgroundColor: const Color(0xFF10B981),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+          setState(() {
+            _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == (job['id']?.toString() ?? job['_id']?.toString()));
+          });
+          return;
+        }
+
         setState(() {
           _jobRequests.removeWhere((j) => (j['id']?.toString() ?? j['_id']?.toString()) == (job['id']?.toString() ?? job['_id']?.toString()));
           _activeGigs.add(data['job'] ?? job);

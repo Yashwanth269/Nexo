@@ -20,7 +20,9 @@ const createJobSchema = z.object({
     description: z.string(),
     lat: z.number(),
     lng: z.number(),
-    price: z.number()
+    price: z.number(),
+    scheduledAt: z.string().nullable().optional(),
+    scheduled_at: z.string().nullable().optional()
 });
 
 // Get Ongoing Job for User
@@ -46,7 +48,7 @@ router.get('/:userId/ongoing', async (req, res) => {
              FROM jobs j
              LEFT JOIN workers w ON j.worker_id = w.id
              WHERE j.user_id = $1::uuid 
-             AND j.status IN ('OPEN', 'REQUESTED', 'ACCEPTED', 'RESERVED', 'CONFIRMED', 'ON_THE_WAY', 'ARRIVED', 'FORCE_ARRIVAL_PENDING_CONFIRMATION', 'WORK_IN_PROGRESS', 'WORK_STARTED') 
+             AND j.status IN ('OPEN', 'SCHEDULED_BIDDING', 'SELECTION_PENDING_CONFIRMATION', 'REQUESTED', 'ACCEPTED', 'RESERVED', 'CONFIRMED', 'ON_THE_WAY', 'ARRIVED', 'FORCE_ARRIVAL_PENDING_CONFIRMATION', 'WORK_IN_PROGRESS', 'WORK_STARTED') 
              ORDER BY j.created_at DESC`,
             [targetUserId]
         );
@@ -73,7 +75,7 @@ router.get('/:userId/ongoing', async (req, res) => {
                     job.eta = `${Math.round(job.route_duration / 60)} mins`;
                 }
 
-                if (['OPEN', 'REQUESTED', 'REDISTRIBUTING', 'REASSIGNING'].includes(job.status)) {
+                if (['OPEN', 'SCHEDULED_BIDDING', 'REQUESTED', 'REDISTRIBUTING', 'REASSIGNING'].includes(job.status)) {
                     job.searchState = job.search_state_stage ? parseInt(job.search_state_stage) : 1;
                     job.searchRadius = job.search_radius_km ? Math.round(parseFloat(job.search_radius_km)) : 3;
                 }
@@ -106,6 +108,8 @@ router.post('/create', jobCreateLimiter, async (req, res) => {
             });
         }
 
+        const scheduledAt = validated.scheduledAt || validated.scheduled_at || req.body.scheduledAt || req.body.scheduled_at || null;
+
         const job = await jobService.createJob(
             validated.userId,
             validated.serviceType,
@@ -113,7 +117,8 @@ router.post('/create', jobCreateLimiter, async (req, res) => {
             validated.lat,
             validated.lng,
             validated.price,
-            validated.taskId
+            validated.taskId,
+            scheduledAt
         );
         
         // Immediate Async Dispatch

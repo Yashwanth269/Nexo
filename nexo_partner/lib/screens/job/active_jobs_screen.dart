@@ -156,6 +156,17 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
       final data = json.decode(response.body);
 
       if (response.statusCode == 200 && data['success']) {
+        if (data['offerId'] != null || (data['message'] != null && data['message'].toString().contains("expressed"))) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("🎉 ${data['message'] ?? 'Interest expressed! Customer will compare & select.'}"),
+              backgroundColor: const Color(0xFF10B981),
+            ),
+          );
+          _fetchJobs();
+          return;
+        }
+
         _fetchJobs();
         Navigator.push(
           context,

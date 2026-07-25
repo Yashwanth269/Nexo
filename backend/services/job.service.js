@@ -437,10 +437,10 @@ class JobService {
         }
     }
 
-    async createJob(userId, category, description, lat, lng, price, taskId = null) {
+    async createJob(userId, category, description, lat, lng, price, taskId = null, scheduledAt = null) {
         // Prevent duplicate active requests
         const existing = await db.query(
-            "SELECT id FROM jobs WHERE user_id = $1::uuid AND category = $2 AND status IN ('OPEN', 'REDISTRIBUTING', 'REASSIGNING')",
+            "SELECT id FROM jobs WHERE user_id = $1::uuid AND category = $2 AND status IN ('OPEN', 'SCHEDULED_BIDDING', 'REDISTRIBUTING', 'REASSIGNING')",
             [userId, category]
         );
         if (existing.rowCount > 0) {
@@ -463,11 +463,15 @@ class JobService {
             }
         }
 
+        const scheduledBiddingService = require('./scheduled_bidding.service');
+        const isScheduled = scheduledAt != null && scheduledBiddingService.isScheduledBiddingEligible(scheduledAt);
+        const initialStatus = isScheduled ? 'SCHEDULED_BIDDING' : 'OPEN';
+
         const result = await db.query(
-            `INSERT INTO jobs (user_id, category, description, location_lat, location_lng, price, status, task_id) 
-             VALUES ($1::uuid, $2, $3, $4, $5, $6, 'OPEN', $7) 
+            `INSERT INTO jobs (user_id, category, description, location_lat, location_lng, price, status, task_id, scheduled_at) 
+             VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9) 
              RETURNING *`,
-            [userId, category, description, lat, lng, price, taskId]
+            [userId, category, description, lat, lng, price, initialStatus, taskId, scheduledAt]
         );
         
         const job = result.rows[0];

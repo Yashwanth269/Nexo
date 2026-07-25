@@ -57,6 +57,7 @@ class _PostJobScreenState extends State<PostJobScreen> {
   String _workDuration = "2-4 Hours";
   String? _selectedDate;
   String? _selectedTime;
+  DateTime? _scheduledDateTime;
   double? _lat;
   double? _lng;
   StreamSubscription? _locationSubscription;
@@ -189,23 +190,29 @@ class _PostJobScreenState extends State<PostJobScreen> {
           return;
         }
 
+        final Map<String, dynamic> bodyPayload = {
+          'userId': userId,
+          'serviceType': _selectedCategory,
+          'taskId': _selectedTaskId,
+          'description': _descriptionController.text.isNotEmpty 
+              ? _descriptionController.text 
+              : "Request for $_selectedCategory",
+          'lat': _lat ?? 13.1415,
+          'lng': _lng ?? 78.1449,
+          'price': (double.tryParse(_budgetController.text) ?? 500.0).toInt(),
+        };
+
+        if (!_isUrgent && _scheduledDateTime != null) {
+          bodyPayload['scheduledAt'] = _scheduledDateTime!.toIso8601String();
+        }
+
         final response = await http.post(
           Uri.parse('$baseUrl/api/jobs/create'),
           headers: {
             'Content-Type': 'application/json',
             if (token != null) 'Authorization': 'Bearer $token',
           },
-          body: json.encode({
-            'userId': userId,
-            'serviceType': _selectedCategory,
-            'taskId': _selectedTaskId,
-            'description': _descriptionController.text.isNotEmpty 
-                ? _descriptionController.text 
-                : "Request for $_selectedCategory",
-            'lat': _lat ?? 13.1415,
-            'lng': _lng ?? 78.1449,
-            'price': (double.tryParse(_budgetController.text) ?? 500.0).toInt(),
-          }),
+          body: json.encode(bodyPayload),
         );
 
       Navigator.pop(context); // Close loading
@@ -1318,7 +1325,7 @@ class _PostJobScreenState extends State<PostJobScreen> {
                   const Icon(Icons.calendar_month_rounded, color: Color(0xFFFF6A00), size: 20),
                   const SizedBox(height: 4),
                   Text("Schedule", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12, color: !_isUrgent ? const Color(0xFFFF6A00) : const Color(0xFF0F172A))),
-                  Text((!_isUrgent && _selectedDate != null) ? "${_selectedDate} ${_selectedTime ?? ''}" : "(Later)", style: GoogleFonts.inter(fontSize: 10, color: !_isUrgent ? const Color(0xFFFF6A00) : const Color(0xFF64748B))),
+                  Text((!_isUrgent && _selectedDate != null) ? "$_selectedDate ${_selectedTime ?? ''}" : "(Later)", style: GoogleFonts.inter(fontSize: 10, color: !_isUrgent ? const Color(0xFFFF6A00) : const Color(0xFF64748B))),
                 ],
               ),
             ),
@@ -1796,6 +1803,7 @@ class _PostJobScreenState extends State<PostJobScreen> {
 
       if (pickedTime != null && mounted) {
         setState(() {
+          _scheduledDateTime = DateTime(pickedDate.year, pickedDate.month, pickedDate.day, pickedTime.hour, pickedTime.minute);
           _selectedDate = "${pickedDate.day}/${pickedDate.month}/${pickedDate.year}";
           _selectedTime = pickedTime.format(context);
         });
