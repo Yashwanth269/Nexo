@@ -415,6 +415,29 @@ const MIGRATIONS = [
         down: [
             "ALTER TABLE disputes DROP COLUMN IF EXISTS payment_id;"
         ]
+    },
+    {
+        version: 18,
+        name: 'training_schedule_and_disputes_update',
+        up: [
+            `CREATE TABLE IF NOT EXISTS training_schedule (
+                model_name VARCHAR(100) PRIMARY KEY,
+                last_trained_at TIMESTAMP WITH TIME ZONE,
+                last_data_count INT DEFAULT 0,
+                total_training_runs INT DEFAULT 0,
+                last_auc DECIMAL(5,4),
+                best_auc DECIMAL(5,4) DEFAULT 0.0,
+                status VARCHAR(50) DEFAULT 'idle',
+                error_message TEXT,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            "ALTER TABLE disputes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;"
+        ],
+        down: [
+            "DROP TABLE IF EXISTS training_schedule CASCADE;",
+            "ALTER TABLE disputes DROP COLUMN IF EXISTS updated_at;"
+        ]
     }
 ];
 
