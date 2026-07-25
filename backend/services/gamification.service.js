@@ -1,25 +1,28 @@
 const db = require('../config/db');
 const redis = require('../config/redis');
 const gamificationConfig = require('../config/gamification.config');
-const eventStream = require('../utils/event_stream');
 
 class GamificationService {
     constructor() {
         // Subscribe to event stream for automated event-driven evaluation
-        try {
-            eventStream.on('job_completed', async (data) => {
-                if (data.workerId) {
-                    await this.evaluateWorker(data.workerId).catch(() => {});
-                }
-            });
-            eventStream.on('feedback_received', async (data) => {
-                if (data.workerId) {
-                    await this.evaluateWorker(data.workerId).catch(() => {});
-                }
-            });
-        } catch (err) {
-            console.warn("[GAMIFICATION-EVENT-WARN] Event stream subscription failed:", err.message);
-        }
+        // Deferred to avoid circular dependencies during initial module load
+        setImmediate(() => {
+            try {
+                const eventStream = require('../utils/event_stream');
+                eventStream.on('job_completed', async (data) => {
+                    if (data.workerId) {
+                        await this.evaluateWorker(data.workerId).catch(() => {});
+                    }
+                });
+                eventStream.on('feedback_received', async (data) => {
+                    if (data.workerId) {
+                        await this.evaluateWorker(data.workerId).catch(() => {});
+                    }
+                });
+            } catch (err) {
+                console.warn("[GAMIFICATION-EVENT-WARN] Event stream subscription failed:", err.message);
+            }
+        });
     }
 
     /**
