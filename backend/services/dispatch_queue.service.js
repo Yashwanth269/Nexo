@@ -563,10 +563,19 @@ class DispatchQueueService {
             }
 
             const job = jobRes.rows[0];
-            const activeStatuses = ['OPEN', 'REDISTRIBUTING', 'REASSIGNING', 'BUILD_QUEUE', 'SCHEDULED', 'POOL_1_ACTIVE', 'POOL_2_ACTIVE', 'POOL_3_ACTIVE'];
+            const activeStatuses = ['OPEN', 'REDISTRIBUTING', 'REASSIGNING', 'BUILD_QUEUE', 'SCHEDULED', 'SCHEDULED_BIDDING', 'POOL_1_ACTIVE', 'POOL_2_ACTIVE', 'POOL_3_ACTIVE'];
             if (!activeStatuses.includes(job.status)) {
                 await client.query('ROLLBACK');
                 return { success: false, error: "JOB_TAKEN", message: "Sorry, this job was just taken by another worker." };
+            }
+
+            // Check if job is eligible for Scheduled Bidding (> 3 hours out)
+            const scheduledBiddingService = require('./scheduled_bidding.service');
+            if (scheduledBiddingService.isScheduledBiddingEligible(job.scheduled_at)) {
+                await client.query('ROLLBACK');
+                client.release();
+                await redis.del(acceptLock);
+                return await scheduledBiddingService.submitScheduledOffer(job.id, worker.id, { isAcceptance: true });
             }
 
             // 4. Perform atomic assignment

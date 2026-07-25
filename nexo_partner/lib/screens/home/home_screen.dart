@@ -804,6 +804,65 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
       });
 
+      // LISTEN: Scheduled Job Bidding Result Events
+      _socketService.socket?.on('SCHEDULED_OFFER_WON', (data) {
+        if (data != null && mounted) {
+          debugPrint("🏆 [SOCKET] SCHEDULED_OFFER_WON: ${data['jobId']}");
+          _fetchActiveGigs();
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF0F172A),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              title: Row(
+                children: [
+                  const Icon(Icons.celebration_rounded, color: Color(0xFF22C55E), size: 28),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Offer Accepted & Reserved!",
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18),
+                    ),
+                  ),
+                ],
+              ),
+              content: Text(
+                data['message'] ?? "Congratulations! The customer has selected your profile and reserved this scheduled job.",
+                style: GoogleFonts.inter(color: Colors.white70, fontSize: 14),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF22C55E),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text("View Reserved Jobs", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          );
+        }
+      });
+
+      _socketService.socket?.on('SCHEDULED_OFFER_NOT_SELECTED', (data) {
+        if (data != null && mounted) {
+          debugPrint("ℹ️ [SOCKET] SCHEDULED_OFFER_NOT_SELECTED: ${data['jobId']}");
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                data['message'] ?? "The customer selected another professional for a scheduled job. We are finding better opportunities for you!",
+                style: GoogleFonts.inter(),
+              ),
+              backgroundColor: const Color(0xFF334155),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      });
+
       final handleUserCancel = (data) {
         if (data != null) {
           final String? cancelledJobId = (data['jobId'] ?? data['job_id'])?.toString();

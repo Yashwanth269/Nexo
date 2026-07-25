@@ -190,12 +190,22 @@ class _JobRequestModalState extends State<JobRequestModal> {
         _timer?.cancel();
         if (mounted) {
           Navigator.pop(context);
-          Navigator.push(context, MaterialPageRoute(
-            builder: (context) => JobExecutionScreen(
-              jobId: widget.job['id'].toString(),
-              initialJob: data['job'],
-            ),
-          ));
+          if (data['offerId'] != null || (data['message'] != null && data['message'].toString().contains('submitted'))) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(data['message'] ?? 'Offer submitted! You will be notified when the customer selects a profile.'),
+                backgroundColor: const Color(0xFF22C55E),
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          } else if (data['job'] != null) {
+            Navigator.push(context, MaterialPageRoute(
+              builder: (context) => JobExecutionScreen(
+                jobId: widget.job['id'].toString(),
+                initialJob: data['job'],
+              ),
+            ));
+          }
         }
       } else {
         _timer?.cancel();

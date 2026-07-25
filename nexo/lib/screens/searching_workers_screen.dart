@@ -9,6 +9,7 @@ import 'package:nexo/screens/ongoing_job_screen.dart';
 import 'package:nexo/utils/network_helper.dart';
 import 'package:nexo/screens/chat_detail_screen.dart';
 import 'package:nexo/screens/job_details_screen.dart';
+import 'package:nexo/screens/scheduled_worker_offers_screen.dart';
 import 'package:nexo/services/socket_service.dart';
 import 'package:nexo/utils/image_utils.dart';
 
@@ -93,6 +94,11 @@ class _SearchingWorkersScreenState extends State<SearchingWorkersScreen>
           _showWorkerFoundPopup(data);
         }
       };
+
+      socketService.socket?.on('MANDATORY_SELECTION_REQUIRED', (data) {
+        if (!mounted || _isCancelled) return;
+        _showMandatorySelectionPrompt(data);
+      });
     }
   }
 
@@ -164,6 +170,74 @@ class _SearchingWorkersScreenState extends State<SearchingWorkersScreen>
     } catch (e) {
       debugPrint("Polling error: $e");
     }
+  }
+
+  void _showMandatorySelectionPrompt(dynamic data) {
+    final jobId = (data?['jobId'] ?? widget.job['id']).toString();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.amberAccent, size: 28),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                "Final Worker Selection Required",
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Your scheduled service starts in less than 1 hour! Please select a professional from your interested worker list to confirm your reservation.",
+              style: GoogleFonts.inter(color: Colors.white70, fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "If no selection is made, the system will automatically assign the highest-ranked available professional.",
+              style: GoogleFonts.inter(color: Colors.white54, fontSize: 12, fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _cancelRequest();
+            },
+            child: Text("Cancel Booking", style: GoogleFonts.inter(color: Colors.redAccent)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ScheduledWorkerOffersScreen(
+                    jobId: jobId,
+                    initialJobData: widget.job,
+                  ),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF6A00),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text("Compare & Select Worker", style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
 
@@ -628,6 +702,44 @@ class _SearchingWorkersScreenState extends State<SearchingWorkersScreen>
               // Dynamic segmented progress
               _buildSegmentedProgress(),
               const SizedBox(height: 24),
+
+              // View Worker Offers Button (For Scheduled Bidding)
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ScheduledWorkerOffersScreen(
+                          jobId: (widget.job['id'] ?? widget.job['job_id']).toString(),
+                          initialJobData: widget.job,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.list_alt_rounded, color: Colors.white),
+                  label: Text(
+                    "Compare Worker Offers",
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: Colors.white,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1E293B),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(26),
+                      side: const BorderSide(color: Color(0xFF334155), width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
 
               // Keep searching button
               SizedBox(

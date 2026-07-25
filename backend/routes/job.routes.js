@@ -128,7 +128,7 @@ router.post('/create', jobCreateLimiter, async (req, res) => {
 // Atomic Job Acceptance
 router.post('/accept', async (req, res) => {
     try {
-        const { jobId, workerId } = req.body;
+        const { jobId, workerId, offerPrice, proposedScheduledAt, notes } = req.body;
         
         // Resolve worker UUID if phone number passed
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workerId);
@@ -137,6 +137,21 @@ router.post('/accept', async (req, res) => {
             const wRes = await db.query("SELECT id FROM workers WHERE phone_number = $1", [workerId]);
             if (wRes.rowCount > 0) {
                 resolvedWorkerId = wRes.rows[0].id;
+            }
+        }
+
+        // Check if job is eligible for Scheduled Bidding (> 3 hours out)
+        const jobRes = await db.query("SELECT scheduled_at FROM jobs WHERE id = $1", [jobId]);
+        if (jobRes.rowCount > 0 && jobRes.rows[0].scheduled_at) {
+            const scheduledBiddingService = require('../services/scheduled_bidding.service');
+            if (scheduledBiddingService.isScheduledBiddingEligible(jobRes.rows[0].scheduled_at)) {
+                const result = await scheduledBiddingService.submitScheduledOffer(jobId, resolvedWorkerId, {
+                    offerPrice,
+                    proposedScheduledAt,
+                    notes,
+                    isAcceptance: true
+                });
+                return res.json(result);
             }
         }
 
@@ -161,15 +176,61 @@ router.post('/accept', async (req, res) => {
     }
 });
 
-// Worker submits a negotiation offer
+// Worker submits a negotiation / counter offer
 router.post('/negotiate', async (req, res) => {
     try {
-        const { jobId, workerId, price } = req.body;
+        const { jobId, workerId, price, proposedScheduledAt, notes } = req.body;
+
+        // Check if job is eligible for Scheduled Bidding (> 3 hours out)
+        const jobRes = await db.query("SELECT scheduled_at FROM jobs WHERE id = $1", [jobId]);
+        if (jobRes.rowCount > 0 && jobRes.rows[0].scheduled_at) {
+            const scheduledBiddingService = require('../services/scheduled_bidding.service');
+            if (scheduledBiddingService.isScheduledBiddingEligible(jobRes.rows[0].scheduled_at)) {
+                const result = await scheduledBiddingService.submitScheduledOffer(jobId, workerId, {
+                    offerPrice: price,
+                    proposedScheduledAt,
+                    notes,
+                    isAcceptance: false
+                });
+                return res.json(result);
+            }
+        }
+
         const result = await jobService.submitOffer(jobId, workerId, price);
         if (!result.success) return res.status(400).json(result);
         res.json(result);
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+// Fetch Scheduled Job Worker Offers (Customer Comparison Screen)
+router.get('/:id/offers', async (req, res) => {
+    try {
+        const jobId = req.params.id;
+        const userId = req.query.userId;
+        const scheduledBiddingService = require('../services/scheduled_bidding.service');
+        const result = await scheduledBiddingService.fetchJobOffers(jobId, userId);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Customer Selects & Reserves Winning Worker for Scheduled Job
+router.post('/:id/select-worker', async (req, res) => {
+    try {
+        const jobId = req.params.id;
+        const { userId, workerId, offerId } = req.body;
+        if (!userId || !workerId || !offerId) {
+            return res.status(400).json({ success: false, message: "Missing required parameters: userId, workerId, offerId" });
+        }
+        const scheduledBiddingService = require('../services/scheduled_bidding.service');
+        const result = await scheduledBiddingService.selectWinningWorker(jobId, userId, workerId, offerId);
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 

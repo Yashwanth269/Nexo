@@ -19,6 +19,11 @@ class CronService {
             await this._monitorScheduledJobs();
         });
 
+        // Run every minute: Scheduled Job Bidding Reminders & Selection Deadline Monitor
+        cron.schedule('* * * * *', async () => {
+            await this._processScheduledBiddingReminders();
+        });
+
         // Run every 5 minutes: auto-confirm cash payments older than 24h
         cron.schedule('*/5 * * * *', async () => {
             await this._autoConfirmCashPayments();
@@ -119,6 +124,15 @@ class CronService {
             await scheduledJobProtectionService.monitorScheduledJobs();
         } catch (e) {
             console.error('⏰ [CRON] Scheduled job protection error:', e.message);
+        }
+    }
+
+    async _processScheduledBiddingReminders() {
+        try {
+            const scheduledBiddingService = require('./scheduled_bidding.service');
+            await scheduledBiddingService.processScheduledRemindersAndDeadlines();
+        } catch (e) {
+            console.error('⏰ [CRON] Scheduled bidding reminder error:', e.message);
         }
     }
 
