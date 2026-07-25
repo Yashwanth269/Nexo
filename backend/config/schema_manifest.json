@@ -1,9 +1,21 @@
 {
-  "version": "1.2.0",
+  "version": "15",
   "migrations": [
-    { "version": "1.0.0", "name": "initial_schema" },
-    { "version": "1.1.0", "name": "ml_tables" },
-    { "version": "1.2.0", "name": "commission_history" }
+    { "version": "1", "name": "uuid_and_availability" },
+    { "version": "2", "name": "worker_calendar" },
+    { "version": "3", "name": "marketplace_zones" },
+    { "version": "4", "name": "dispatch_metadata" },
+    { "version": "5", "name": "advanced_fatigue_scores" },
+    { "version": "6", "name": "gamification_tables" },
+    { "version": "7", "name": "ml_prediction_logs" },
+    { "version": "8", "name": "worker_reputation_scores" },
+    { "version": "9", "name": "search_analytics_logs" },
+    { "version": "10", "name": "unique_constraints_and_explainability" },
+    { "version": "11", "name": "telemetry_tracking_metadata" },
+    { "version": "12", "name": "commission_history" },
+    { "version": "13", "name": "secure_otp_expiry" },
+    { "version": "14", "name": "double_entry_ledger_and_payment_events" },
+    { "version": "15", "name": "customer_memberships_table" }
   ],
   "tables": {
     "users": {
@@ -87,6 +99,33 @@
         "worker_id": { "type": "uuid", "nullable": false },
         "composite_fatigue_score": { "type": "numeric", "nullable": true },
         "fatigue_score": { "type": "numeric", "nullable": true, "optional": true }
+      }
+    },
+    "double_entry_ledger": {
+      "required": false,
+      "columns": {
+        "id": { "type": "uuid", "nullable": false },
+        "account_id": { "type": "uuid", "nullable": false },
+        "account_type": { "type": "character varying", "nullable": false },
+        "amount": { "type": "numeric", "nullable": false },
+        "entry_type": { "type": "character varying", "nullable": false }
+      }
+    },
+    "payment_events": {
+      "required": false,
+      "columns": {
+        "id": { "type": "uuid", "nullable": false },
+        "event_type": { "type": "character varying", "nullable": false },
+        "payload": { "type": "jsonb", "nullable": false },
+        "status": { "type": "character varying", "nullable": true }
+      }
+    },
+    "customer_memberships": {
+      "required": false,
+      "columns": {
+        "id": { "type": "uuid", "nullable": false },
+        "user_id": { "type": "uuid", "nullable": true },
+        "tier": { "type": "character varying", "nullable": false }
       }
     }
   },

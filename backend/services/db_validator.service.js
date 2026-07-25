@@ -81,24 +81,17 @@ class DBValidatorService {
     }
 
     /**
-     * Ensures migration logging tables are created and seeded with default logs if empty
+     * Reads the migration tracking table managed by migration_runner.service.js.
+     * Does NOT create or seed — that is migration_runner's responsibility.
+     * Returns an empty result safely if the table doesn't exist yet.
      */
-    async _ensureMigrationsTable() {
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS schema_migrations (
-                version VARCHAR(50) PRIMARY KEY,
-                name VARCHAR(100) NOT NULL,
-                applied_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
-        // Seed default migrations matching the base application version if empty
-        await db.query(`
-            INSERT INTO schema_migrations (version, name) VALUES
-            ('1.0.0', 'initial_schema'),
-            ('1.1.0', 'ml_tables'),
-            ('1.2.0', 'commission_history')
-            ON CONFLICT (version) DO NOTHING;
-        `);
+    async _readMigrationsTable() {
+        try {
+            return await db.query("SELECT version::text, name FROM schema_migrations ORDER BY version ASC");
+        } catch (e) {
+            // Table might not exist yet on a fresh deploy — treat as no migrations applied
+            return { rows: [] };
+        }
     }
 
     /**
@@ -132,8 +125,6 @@ class DBValidatorService {
         const optionalFeatureStatus = {};
 
         try {
-            await this._ensureMigrationsTable();
-
             // 1. Fetch all structural and migration metadata concurrently (parallelized round trips)
             const [
                 tableRes,
@@ -194,7 +185,7 @@ class DBValidatorService {
                           AND tc.table_schema = kcu.table_schema
                     WHERE tc.table_schema = 'public'
                 `),
-                db.query("SELECT version, name FROM schema_migrations ORDER BY version ASC")
+                this._readMigrationsTable()
             ]);
 
             // Map PG metadata arrays into indexed lookup sets/objects for fast in-memory validation
