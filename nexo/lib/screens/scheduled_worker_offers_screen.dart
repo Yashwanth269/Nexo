@@ -23,27 +23,39 @@ class ScheduledWorkerOffersScreen extends StatefulWidget {
   State<ScheduledWorkerOffersScreen> createState() => _ScheduledWorkerOffersScreenState();
 }
 
-class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScreen> {
+class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScreen> with SingleTickerProviderStateMixin {
   bool _isLoading = true;
   String? _error;
   Map<String, dynamic>? _job;
   List<dynamic> _offers = [];
-  Map<String, dynamic>? _searchStats;
   int _remainingSeconds = 0;
   Timer? _countdownTimer;
   bool _isSelecting = false;
-  String _selectedSortFilter = 'RECOMMENDED'; // 'RECOMMENDED', 'RATING', 'PRICE', 'ETA', 'EXPERIENCE', 'DISTANCE'
+  String _selectedSortFilter = 'RECOMMENDED';
   final String _baseUrl = NetworkHelper.baseUrl;
+
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+
+    _pulseAnimation = Tween<double>(begin: 0.9, end: 1.15).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
     _fetchOffers();
     _initSocketListeners();
   }
 
   @override
   void dispose() {
+    _pulseController.dispose();
     _countdownTimer?.cancel();
     super.dispose();
   }
@@ -55,12 +67,10 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
       socketService.connect(userId);
       socketService.socket?.on('SCHEDULED_OFFER_RECEIVED', (data) {
         if (!mounted) return;
-        debugPrint("🔔 [SOCKET] New Scheduled Offer received!");
         _fetchOffers(silent: true);
       });
       socketService.socket?.on('SCHEDULED_OFFER_WITHDRAWN', (data) {
         if (!mounted) return;
-        debugPrint("ℹ️ [SOCKET] Offer withdrawn by worker!");
         _fetchOffers(silent: true);
       });
       socketService.socket?.on('scheduled_offers_updated', (data) {
@@ -87,7 +97,6 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
           setState(() {
             _job = data['job'];
             _offers = data['offers'] ?? [];
-            _searchStats = data['search_stats'];
             _remainingSeconds = data['remaining_seconds'] ?? 0;
             _isLoading = false;
             _error = null;
@@ -106,7 +115,6 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
         });
       }
     } catch (e) {
-      debugPrint("Fetch offers error: $e");
       if (!silent) {
         setState(() {
           _error = "Network error. Please try again.";
@@ -149,14 +157,14 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
   }
 
   String _formatCountdown(int seconds) {
-    if (seconds <= 0) return "Selection Deadline Reached";
+    if (seconds <= 0) return "Selection Time Expired";
     final hours = seconds ~/ 3600;
     final mins = (seconds % 3600) ~/ 60;
     final secs = seconds % 60;
     if (hours > 0) {
-      return "${hours}h ${mins}m remaining to choose";
+      return "${hours}h ${mins}m left to select";
     }
-    return "${mins}m ${secs}s remaining to choose";
+    return "${mins}m ${secs}s left to select";
   }
 
   Future<void> _selectWorker(Map<String, dynamic> offer) async {
@@ -169,7 +177,7 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
         backgroundColor: const Color(0xFF0F172A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Text(
-          "Confirm Worker Selection",
+          "Confirm Booking",
           style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         content: Column(
@@ -177,15 +185,15 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Are you sure you want to select $workerName for this scheduled job?",
+              "Select $workerName for this service?",
               style: GoogleFonts.inter(color: Colors.white70, fontSize: 14),
             ),
             const SizedBox(height: 16),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: const Color(0xFF1E293B),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: const Color(0xFF334155)),
               ),
               child: Column(
@@ -193,17 +201,17 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("Agreed Price:", style: GoogleFonts.inter(color: Colors.white60)),
+                      Text("Total Price:", style: GoogleFonts.inter(color: Colors.white60, fontSize: 13)),
                       Text("₹${price.toStringAsFixed(2)}",
-                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF22C55E), fontSize: 16)),
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF22C55E), fontSize: 18)),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("Worker Response Window:", style: GoogleFonts.inter(color: Colors.white60, fontSize: 11)),
-                      Text("10 Mins Confirmation", style: GoogleFonts.inter(color: Colors.amberAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                      Text("Booking Guarantee:", style: GoogleFonts.inter(color: Colors.white60, fontSize: 12)),
+                      Text("Instant Confirmation", style: GoogleFonts.inter(color: Colors.amberAccent, fontSize: 12, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ],
@@ -221,9 +229,10 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFFF6A00),
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             ),
-            child: Text("Select & Reserve", style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+            child: Text("Confirm & Book", style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -256,7 +265,7 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("🎉 ${offer['worker_name']} has been selected! Awaiting 10-minute booking confirmation."),
+            content: Text("🎉 ${offer['worker_name']} selected! Waiting for pro's final confirmation."),
             backgroundColor: const Color(0xFF22C55E),
           ),
         );
@@ -308,9 +317,18 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          "Choose Your Professional",
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Choose Your Professional",
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18),
+            ),
+            Text(
+              "Scheduled Job Marketplace",
+              style: GoogleFonts.inter(color: Colors.white54, fontSize: 11),
+            ),
+          ],
         ),
         actions: [
           IconButton(
@@ -366,79 +384,27 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
 
     return Column(
       children: [
-        // Top Banner / Countdown Header
-        Container(
-          width: double.infinity,
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF334155)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF6A00).withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.timer_outlined, color: Color(0xFFFF6A00), size: 18),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _formatCountdown(_remainingSeconds),
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFFFF8533),
-                            fontSize: 14,
-                          ),
-                        ),
-                        if (_searchStats != null) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            "${_searchStats!['evaluated_count']} workers evaluated • ${_searchStats!['notified_count']} notified • ${_searchStats!['interested_count']} interested (${_searchStats!['counter_offers_count']} counter offers)",
-                            style: GoogleFonts.inter(color: Colors.white54, fontSize: 10),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+        // Clean Status Banner Card
+        _buildHeaderStatusCard(),
 
         // Sorting Filter Chips Bar
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          child: Row(
-            children: [
-              _buildFilterChip("⭐ Recommended", 'RECOMMENDED'),
-              _buildFilterChip("🏆 Highest Rating", 'RATING'),
-              _buildFilterChip("💰 Lowest Price", 'PRICE'),
-              _buildFilterChip("⚡ Fastest ETA", 'ETA'),
-              _buildFilterChip("🎓 Experience", 'EXPERIENCE'),
-              _buildFilterChip("📍 Nearest", 'DISTANCE'),
-            ],
+        if (_offers.isNotEmpty)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: Row(
+              children: [
+                _buildFilterChip("⭐ Recommended", 'RECOMMENDED'),
+                _buildFilterChip("🏆 Highest Rating", 'RATING'),
+                _buildFilterChip("💰 Lowest Price", 'PRICE'),
+                _buildFilterChip("⚡ Fastest ETA", 'ETA'),
+                _buildFilterChip("🎓 Experience", 'EXPERIENCE'),
+                _buildFilterChip("📍 Nearest", 'DISTANCE'),
+              ],
+            ),
           ),
-        ),
 
-        // Offers List
+        // Offers List or Empty Radar View
         Expanded(
           child: sortedList.isEmpty
               ? _buildEmptyOffersView()
@@ -459,6 +425,96 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _buildHeaderStatusCard() {
+    final offerCount = _offers.length;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF334155)),
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF6A00).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.timer_outlined, color: Color(0xFFFF6A00), size: 16),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _formatCountdown(_remainingSeconds),
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFFFF8533),
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: offerCount > 0 ? const Color(0xFF10B981).withValues(alpha: 0.2) : Colors.amber.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: offerCount > 0 ? const Color(0xFF10B981) : Colors.amber.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: Text(
+                  offerCount > 0 ? "⚡ $offerCount Pros Responded" : "📡 Broadcasting Live",
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: offerCount > 0 ? const Color(0xFF34D399) : Colors.amber,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+          const Divider(color: Colors.white12, height: 1),
+          const SizedBox(height: 10),
+
+          Row(
+            children: [
+              const Icon(Icons.info_outline_rounded, color: Colors.white54, size: 14),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  offerCount > 0
+                      ? "Compare ratings & prices below. You can select your pro anytime."
+                      : "Pros in your area are reviewing your job. Offers will appear here live.",
+                  style: GoogleFonts.inter(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -514,7 +570,6 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Hero Badge
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -529,7 +584,7 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
                     const Icon(Icons.star_rounded, color: Colors.white, size: 14),
                     const SizedBox(width: 4),
                     Text(
-                      "⭐ Best Overall Recommendation",
+                      "⭐ Recommended for You",
                       style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                   ],
@@ -544,7 +599,6 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
 
           const SizedBox(height: 14),
 
-          // Worker Header
           Row(
             children: [
               ImageUtils.buildProfileImage(
@@ -558,7 +612,7 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      offer['worker_name'] ?? 'Ravi Kumar',
+                      offer['worker_name'] ?? 'Professional',
                       style: GoogleFonts.outfit(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                     const SizedBox(height: 2),
@@ -570,7 +624,7 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
                           style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
                         ),
                         Text(
-                          "(${offer['completed_jobs']} jobs)",
+                          "(${offer['completed_jobs']} jobs completed)",
                           style: GoogleFonts.inter(color: Colors.white60, fontSize: 12),
                         ),
                         const SizedBox(width: 8),
@@ -590,7 +644,6 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
           const Divider(color: Colors.white12, height: 1),
           const SizedBox(height: 12),
 
-          // Why We Recommend Him Checklist
           Text(
             "Why we recommend them:",
             style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white70),
@@ -627,35 +680,154 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
   }
 
   Widget _buildEmptyOffersView() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: Color(0xFF1E293B),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
+
+          // Animated Radar Pulse
+          ScaleTransition(
+            scale: _pulseAnimation,
+            child: Container(
+              padding: const EdgeInsets.all(26),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF6A00).withValues(alpha: 0.12),
                 shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFFF6A00).withValues(alpha: 0.3), width: 2),
               ),
-              child: const Icon(Icons.person_search_rounded, color: Color(0xFFFF6A00), size: 48),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1E293B),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.radar_rounded, color: Color(0xFFFF6A00), size: 48),
+              ),
             ),
-            const SizedBox(height: 20),
-            Text(
-              "Searching for Nearby Professionals...",
-              style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-              textAlign: TextAlign.center,
+          ),
+
+          const SizedBox(height: 24),
+          Text(
+            "Searching for Nearby Professionals...",
+            style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Your scheduled booking is actively being broadcasted to top-rated, verified experts nearby.",
+            style: GoogleFonts.inter(fontSize: 13, color: Colors.white60, height: 1.4),
+            textAlign: TextAlign.center,
+          ),
+
+          const SizedBox(height: 32),
+
+          // How Scheduled Booking Works (3 Step Cards)
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFF334155)),
             ),
-            const SizedBox(height: 8),
-            Text(
-              "Dispatch is continuously broadcasting your scheduled job. As soon as workers accept or submit counter-offers, they will appear here in real-time.",
-              style: GoogleFonts.inter(fontSize: 13, color: Colors.white60, height: 1.4),
-              textAlign: TextAlign.center,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.help_outline_rounded, color: Color(0xFFFF6A00), size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      "How Scheduled Booking Works",
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildStepItem(
+                  step: "1",
+                  title: "Pros Review Your Request",
+                  description: "Nearby professionals receive your job timing & location.",
+                ),
+                const SizedBox(height: 14),
+                _buildStepItem(
+                  step: "2",
+                  title: "Offers & Counter-Bids Arrive",
+                  description: "Interested workers submit their profiles & prices here live.",
+                ),
+                const SizedBox(height: 14),
+                _buildStepItem(
+                  step: "3",
+                  title: "You Choose or Auto-Confirm",
+                  description: "Select your pro anytime, or auto-assign picks the top pro 1h before start.",
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.notifications_active_outlined, color: Colors.amberAccent, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "You will receive a notification as soon as the first offer arrives!",
+                    style: GoogleFonts.inter(color: Colors.amberAccent, fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
       ),
+    );
+  }
+
+  Widget _buildStepItem({required String step, required String title, required String description}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          decoration: const BoxDecoration(
+            color: Color(0xFFFF6A00),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              step,
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 12),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: GoogleFonts.inter(color: Colors.white60, fontSize: 12, height: 1.3),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -685,7 +857,6 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Badges Row
           if (badges.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
@@ -712,7 +883,6 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
               ),
             ),
 
-          // Main Header Row
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -770,7 +940,6 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
           const Divider(color: Color(0xFF334155), height: 1),
           const SizedBox(height: 12),
 
-          // Details Grid (Distance, Experience, Performance Score, Languages)
           Wrap(
             spacing: 10,
             runSpacing: 8,
@@ -808,7 +977,6 @@ class _ScheduledWorkerOffersScreenState extends State<ScheduledWorkerOffersScree
 
           const SizedBox(height: 16),
 
-          // Footer Row: Price & Action Button
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
