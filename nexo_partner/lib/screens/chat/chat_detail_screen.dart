@@ -368,7 +368,7 @@ class _ChatScreenState extends State<ChatScreen> {
         leading: IconButton(icon: const Icon(Icons.arrow_back, color: Color(0xFFFF6A00)), onPressed: () => Navigator.pop(context)),
         title: Row(
           children: [
-            CircleAvatar(radius: 18, backgroundImage: NetworkImage("https://i.pravatar.cc/150?u=${widget.userName}")),
+            CircleAvatar(radius: 18, backgroundImage: NetworkImage("https://ui-avatars.com/api/?name=${Uri.encodeComponent(widget.userName)}&background=2563eb&color=fff&size=128")),
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,

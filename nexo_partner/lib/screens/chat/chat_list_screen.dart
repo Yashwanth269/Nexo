@@ -98,10 +98,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
         title: Text("Messages", style: GoogleFonts.outfit(color: Colors.black, fontWeight: FontWeight.bold)),
         actions: [
           IconButton(icon: const Icon(Icons.search, color: Colors.grey), onPressed: () {}),
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: CircleAvatar(radius: 18, backgroundImage: NetworkImage("https://i.pravatar.cc/150?u=worker")),
-          ),
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: CircleAvatar(radius: 18, backgroundImage: NetworkImage("https://ui-avatars.com/api/?name=Worker&background=2563eb&color=fff&size=128")),
+            ),
         ],
       ),
       body: RefreshIndicator(
@@ -196,7 +196,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
           children: [
             CircleAvatar(
               radius: 28,
-              backgroundImage: NetworkImage(photo.isNotEmpty ? photo : 'https://i.pravatar.cc/150?u=$name'),
+              backgroundImage: NetworkImage((photo.isNotEmpty && !photo.contains('pravatar') && !photo.contains('unsplash')) ? photo : 'https://ui-avatars.com/api/?name=${Uri.encodeComponent(name)}&background=2563eb&color=fff&size=128'),
               onBackgroundImageError: (e, s) {},
               child: photo.isEmpty ? Text(name.isNotEmpty ? name[0] : '?', style: const TextStyle(fontWeight: FontWeight.bold)) : null,
             ),

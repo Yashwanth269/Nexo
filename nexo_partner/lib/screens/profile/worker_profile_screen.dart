@@ -22,11 +22,11 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
   final ImagePicker _picker = ImagePicker();
 
   final List<String> _prebuiltAvatars = [
-    "https://api.dicebear.com/7.x/adventurer/png?seed=John",
-    "https://api.dicebear.com/7.x/adventurer/png?seed=Alex",
-    "https://api.dicebear.com/7.x/adventurer/png?seed=Sara",
-    "https://api.dicebear.com/7.x/adventurer/png?seed=Mia",
-    "https://api.dicebear.com/7.x/adventurer/png?seed=Robert",
+    "https://ui-avatars.com/api/?name=Pro+1&background=2563eb&color=fff&size=128&bold=true",
+    "https://ui-avatars.com/api/?name=Pro+2&background=10b981&color=fff&size=128&bold=true",
+    "https://ui-avatars.com/api/?name=Pro+3&background=f59e0b&color=fff&size=128&bold=true",
+    "https://ui-avatars.com/api/?name=Pro+4&background=8b5cf6&color=fff&size=128&bold=true",
+    "https://ui-avatars.com/api/?name=Pro+5&background=ec4899&color=fff&size=128&bold=true",
   ];
 
   @override
@@ -323,13 +323,17 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
                           border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
                         ),
                         child: ClipOval(
-                          child: photoUrl != null
+                          child: (photoUrl != null &&
+                                  photoUrl.toString().isNotEmpty &&
+                                  !photoUrl.toString().contains('images.unsplash.com') &&
+                                  !photoUrl.toString().contains('pravatar.cc') &&
+                                  !photoUrl.toString().contains('adventurer'))
                               ? Image.network(
                                   photoUrl.startsWith('http') ? photoUrl : '${NetworkHelper.baseUrl}$photoUrl',
                                   fit: BoxFit.cover,
-                                  errorBuilder: (c, e, s) => Image.network("https://api.dicebear.com/7.x/adventurer/png?seed=$name"),
+                                  errorBuilder: (c, e, s) => Image.network("https://ui-avatars.com/api/?name=${Uri.encodeComponent(name)}&background=2563eb&color=fff&size=128&bold=true"),
                                 )
-                              : Image.network("https://api.dicebear.com/7.x/adventurer/png?seed=$name"),
+                              : Image.network("https://ui-avatars.com/api/?name=${Uri.encodeComponent(name)}&background=2563eb&color=fff&size=128&bold=true"),
                         ),
                       ),
                       Positioned(

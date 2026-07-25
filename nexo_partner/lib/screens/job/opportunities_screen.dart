@@ -239,7 +239,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> {
     } catch (e) {
       if (mounted) Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e"), backgroundColor: ThemeUtils.getErrorColor(context)),
+        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.redAccent),
       );
     }
   }
@@ -382,7 +382,7 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> {
       child: Center(
         child: Column(
           children: [
-            Icon(Icons.error_outline_rounded, color: ThemeUtils.getErrorColor(context), size: 48),
+            Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 48),
             const SizedBox(height: 12),
             Text(_error!, style: GoogleFonts.inter(color: ThemeUtils.getTextSecondary(context))),
             const SizedBox(height: 16),
@@ -1009,4 +1009,6 @@ class _OpportunitiesScreenState extends State<OpportunitiesScreen> {
         ],
       ),
     );
+  }
 }
+

@@ -600,22 +600,24 @@ class JobService {
 
         if (jobIds.length === 0) return [];
 
-        // Filter out rejected jobs for this worker
+        let workerObj = null;
+
+        // Filter out rejected jobs for this worker & resolve worker instance
         if (workerId) {
             const matchingService = require('./matching.service');
-            const worker = await matchingService.resolveWorker(workerId);
+            workerObj = await matchingService.resolveWorker(workerId);
             
-            if (worker) {
+            if (workerObj) {
                 const rejected = await db.query(
                     "SELECT job_id FROM job_offers WHERE worker_id = $1 AND status = 'REJECTED'", 
-                    [worker.id]
+                    [workerObj.id]
                 );
                 const rejectedIds = rejected.rows.map(r => r.job_id);
                 jobIds = jobIds.filter(id => !rejectedIds.includes(id));
 
                 const filtered = [];
                 for (const id of jobIds) {
-                    const lockValue = await redis.get(`dispatch_lock:${id}:${worker.id}`);
+                    const lockValue = await redis.get(`dispatch_lock:${id}:${workerObj.id}`);
                     if (lockValue !== 'rejected') filtered.push(id);
                 }
                 jobIds = filtered;
@@ -631,7 +633,15 @@ class JobService {
             [jobIds]
         );
 
-        return result.rows;
+        let jobs = result.rows;
+
+        // Strict Qualification/Skill Match Filter: Do not display jobs worker is not qualified for
+        if (workerObj) {
+            const { isSkillMatch } = require('../utils/skill_matcher');
+            jobs = jobs.filter(job => isSkillMatch(workerObj.skills || [], workerObj.tasks || [], job.category));
+        }
+
+        return jobs;
     }
 
     async rejectJobOffer(jobId, workerId) {

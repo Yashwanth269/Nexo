@@ -158,7 +158,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           'state': _selectedState,
           'experience': _selectedExperience,
           'workRadius': _workRadius.toInt(),
-          'photoUrl': _uploadedPhotoUrl ?? 'https://i.pravatar.cc/150?u=${widget.phoneNumber}',
+          'photoUrl': _uploadedPhotoUrl,
           'idUrl': _uploadedIdUrl
         }),
       );
