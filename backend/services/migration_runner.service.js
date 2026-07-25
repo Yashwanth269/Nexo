@@ -406,6 +406,17 @@ const MIGRATIONS = [
             "DROP TABLE IF EXISTS worker_skill_confidence CASCADE;"
         ]
     }
+    },
+    {
+        version: 17,
+        name: 'disputes_payment_id_column',
+        up: [
+            "ALTER TABLE disputes ADD COLUMN IF NOT EXISTS payment_id UUID REFERENCES payments(id) ON DELETE SET NULL;"
+        ],
+        down: [
+            "ALTER TABLE disputes DROP COLUMN IF EXISTS payment_id;"
+        ]
+    }
 ];
 
 const crypto = require('crypto');
