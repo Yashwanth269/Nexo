@@ -405,7 +405,6 @@ const MIGRATIONS = [
             "DROP TABLE IF EXISTS multi_service_bookings CASCADE;",
             "DROP TABLE IF EXISTS worker_skill_confidence CASCADE;"
         ]
-    }
     },
     {
         version: 17,
