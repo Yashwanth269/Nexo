@@ -450,6 +450,80 @@ router.post('/preferences/skills', (req, res) => {
     }
 });
 
+// ==========================================
+// AI CALENDAR ENGINE (ACE) & DAILY BRIEF APIs
+// ==========================================
+const aiCalendarEngine = require('../services/ai_calendar_engine.service');
+const marketplaceIntelligenceService = require('../services/marketplace_intelligence.service');
+
+router.get('/daily-brief/:workerId', (req, res) => {
+    try {
+        const brief = marketplaceIntelligenceService.generateDailyAIBrief(req.params.workerId);
+        res.json({ success: true, brief });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/calendar/:workerId', (req, res) => {
+    try {
+        const timeline = aiCalendarEngine.getWorkerTimeline(req.params.workerId);
+        res.json({ success: true, timeline });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/calendar/reserve', (req, res) => {
+    try {
+        const { workerId, job } = req.body;
+        const result = aiCalendarEngine.reserveSlot(workerId, job || {});
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+// ==========================================
+// MARKETPLACE INTELLIGENCE & PRICING APIs
+// ==========================================
+router.post('/price-recommendation', (req, res) => {
+    try {
+        const { job, workerId } = req.body;
+        const result = marketplaceIntelligenceService.generatePriceRecommendation(job || {}, workerId);
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/relationship/:customerId/:workerId', (req, res) => {
+    try {
+        const relationship = marketplaceIntelligenceService.getRelationshipScore(req.params.customerId, req.params.workerId);
+        res.json({ success: true, relationship });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/customer-reliability/:customerId', (req, res) => {
+    try {
+        const crs = marketplaceIntelligenceService.getCustomerReliabilityScore(req.params.customerId);
+        res.json({ success: true, crs });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/worker-reliability/:workerId', (req, res) => {
+    try {
+        const wrs = marketplaceIntelligenceService.getWorkerReliabilityScore(req.params.workerId);
+        res.json({ success: true, wrs });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Fetch Scheduled Job Worker Offers (Customer Comparison Screen)
 router.get('/:id/offers', async (req, res) => {
     try {
