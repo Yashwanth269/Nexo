@@ -161,6 +161,7 @@ async function runSecurityTests() {
     }
 
     // Cleanup
+    await db.query("DELETE FROM job_offers WHERE job_id IN (SELECT id FROM jobs WHERE user_id = $1)", [sqliUserId]);
     await db.query("DELETE FROM jobs WHERE user_id = $1", [sqliUserId]);
     await db.query("DELETE FROM users WHERE id = $1", [sqliUserId]);
     await db.pool.end();

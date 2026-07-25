@@ -160,7 +160,7 @@ class ExecutionService {
                     [worker.id]
                 );
                 await client.query(
-                    "UPDATE worker_calendar SET status = 'COMPLETED', updated_at = NOW() WHERE job_id = $1 AND worker_id = $2",
+                    "UPDATE worker_calendar SET status = 'COMPLETED' WHERE booking_id = $1 AND worker_id = $2",
                     [jobId, worker.id]
                 );
             }
@@ -309,15 +309,32 @@ class ExecutionService {
                 req.write(body);
                 req.end();
             });
+            
+            let finalScore = response.gps_trust_score || 100;
+            let finalAlerts = response.alerts || [];
+            let finalSuspicious = response.is_suspicious || false;
+
+            if (params.mockLocation) {
+                finalScore = Math.min(finalScore, 30);
+                if (!finalAlerts.includes('MOCK_LOCATION_DETECTED')) {
+                    finalAlerts.push('MOCK_LOCATION_DETECTED');
+                }
+                finalSuspicious = true;
+            }
+
             return {
-                gpsTrustScore: response.gps_trust_score || 100,
-                alerts: response.alerts || [],
-                isSuspicious: response.is_suspicious || false,
+                gpsTrustScore: finalScore,
+                alerts: finalAlerts,
+                isSuspicious: finalSuspicious,
                 mlScore: response.ml_score,
-                ruleScore: response.rule_score,
+                ruleScore: response.rule_score || (params.mockLocation ? 30 : 100),
             };
         } catch {
-            return { gpsTrustScore: 100, alerts: [], isSuspicious: false };
+            return {
+                gpsTrustScore: params.mockLocation ? 30 : 100,
+                alerts: params.mockLocation ? ['MOCK_LOCATION_DETECTED'] : [],
+                isSuspicious: params.mockLocation ? true : false
+            };
         }
     }
 

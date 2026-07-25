@@ -22,6 +22,7 @@ const STATES = {
     WORKER_PAYOUT_PENDING: 'WORKER_PAYOUT_PENDING',
     WORKER_PAYOUT_COMPLETED: 'WORKER_PAYOUT_COMPLETED',
     JOB_CLOSED: 'JOB_CLOSED',
+    FORCE_ARRIVAL_PENDING_CONFIRMATION: 'FORCE_ARRIVAL_PENDING_CONFIRMATION',
     
     // Terminal States & Exits
     CANCELLED: 'CANCELLED',
@@ -49,6 +50,19 @@ const LEGACY_MAP = {
     'SETTLED': STATES.JOB_CLOSED
 };
 
+const DB_STATE_MAP = {
+    [STATES.DISPATCHING]: 'OPEN',
+    [STATES.QUEUED]: 'BUILD_QUEUE',
+    [STATES.WORKER_ASSIGNED]: 'ACCEPTED',
+    [STATES.WORKER_EN_ROUTE]: 'ON_THE_WAY',
+    [STATES.WORKER_ARRIVED]: 'ARRIVED',
+    [STATES.SERVICE_IN_PROGRESS]: 'WORK_IN_PROGRESS',
+    [STATES.SERVICE_STARTED]: 'STARTED',
+    [STATES.SERVICE_COMPLETED]: 'COMPLETED',
+    [STATES.JOB_CLOSED]: 'SETTLED',
+    [STATES.FORCE_ARRIVAL_PENDING_CONFIRMATION]: 'FORCE_ARRIVAL_PENDING_CONFIRMATION'
+};
+
 const TRANSITIONS = {
     [STATES.BOOKED]: [STATES.VALIDATED, STATES.CANCELLED],
     [STATES.VALIDATED]: [STATES.QUEUED, STATES.CANCELLED],
@@ -56,7 +70,8 @@ const TRANSITIONS = {
     [STATES.DISPATCHING]: [STATES.WORKER_ASSIGNED, STATES.CANCELLED, STATES.EXPIRED],
     [STATES.WORKER_ASSIGNED]: [STATES.WORKER_CONFIRMED, STATES.WORKER_EN_ROUTE, STATES.CANCELLED],
     [STATES.WORKER_CONFIRMED]: [STATES.WORKER_EN_ROUTE, STATES.CANCELLED],
-    [STATES.WORKER_EN_ROUTE]: [STATES.WORKER_ARRIVED, STATES.CANCELLED],
+    [STATES.WORKER_EN_ROUTE]: [STATES.WORKER_ARRIVED, STATES.FORCE_ARRIVAL_PENDING_CONFIRMATION, STATES.CANCELLED],
+    [STATES.FORCE_ARRIVAL_PENDING_CONFIRMATION]: [STATES.WORKER_ARRIVED, STATES.CANCELLED],
     [STATES.WORKER_ARRIVED]: [STATES.OTP_VERIFIED, STATES.CANCELLED],
     [STATES.OTP_VERIFIED]: [STATES.SERVICE_STARTED],
     [STATES.SERVICE_STARTED]: [STATES.SERVICE_IN_PROGRESS],
@@ -130,12 +145,14 @@ class JobStateMachine {
         const timestampField = TIMESTAMPS[resolvedTo];
         const tsClause = timestampField ? `, ${timestampField} = CURRENT_TIMESTAMP` : '';
 
+        const dbState = DB_STATE_MAP[resolvedTo] || resolvedTo;
+
         let setClauses = [
             'status = $2',
             'state_timestamps = $3',
             'updated_at = CURRENT_TIMESTAMP' + tsClause
         ];
-        let params = [jobId, resolvedTo, JSON.stringify(existingTimestamps)];
+        let params = [jobId, dbState, JSON.stringify(existingTimestamps)];
         let paramIdx = 4;
 
         if (reason) {
@@ -156,7 +173,7 @@ class JobStateMachine {
         await this._logTransition(jobId, currentRawState, resolvedTo, metadata, workerId || currentRes.rows[0].worker_id, txClient);
 
         // Redis syncing & cleanup
-        await redis.set(`job:${jobId}:status`, resolvedTo, 'EX', 3600);
+        await redis.set(`job:${jobId}:status`, dbState, 'EX', 3600);
         if ([STATES.CANCELLED, STATES.EXPIRED, STATES.JOB_CLOSED].includes(resolvedTo)) {
             await this._cleanupRedis(jobId);
         }

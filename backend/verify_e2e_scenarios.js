@@ -3,6 +3,16 @@ const redis = require('./config/redis');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { SECRET_KEY } = require('./utils/auth.middleware');
+const { setIO } = require('./config/socket');
+
+// Mock socket.io instance to avoid uninitialized errors during tests
+setIO({
+    to: (room) => ({
+        emit: (event, data) => {}
+    })
+});
+
+const jobStateMachine = require('./services/job_state_machine.service');
 
 const BASE_URL = 'http://localhost:5000/api';
 
@@ -90,6 +100,7 @@ async function runScenario1() {
     if (!createData.success) throw new Error("Scenario 1: Job creation failed: " + JSON.stringify(createData));
     const jobId = createData.job.id;
     console.log("  [S1] Job created:", jobId);
+    await sleep(300);
 
     // 3. Worker Accepts Offer
     const acceptRes = await fetch(`${BASE_URL}/jobs/accept`, {
@@ -118,6 +129,17 @@ async function runScenario1() {
     });
     if (!(await arriveRes.json()).success) throw new Error("Scenario 1: Transition to ARRIVED failed");
     console.log("  [S1] Status → ARRIVED");
+
+    // 5.5 Verify Start OTP (Moves state to SERVICE_STARTED)
+    const otpService = require('./services/otp.service');
+    const startOtp = await otpService.generateStartOtp(jobId);
+    const verifyOtpRes = await fetch(`${BASE_URL}/jobs/${jobId}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${workerToken}` },
+        body: JSON.stringify({ toState: 'OTP_VERIFIED', otp: startOtp, workerId })
+    });
+    if (!(await verifyOtpRes.json()).success) throw new Error("Scenario 1: OTP verification failed");
+    console.log("  [S1] OTP Verified & Status → SERVICE_STARTED");
 
     // 6. Start Work (WORK_IN_PROGRESS)
     const wipRes = await fetch(`${BASE_URL}/jobs/${jobId}/status`, {
@@ -159,7 +181,8 @@ async function runScenario1() {
 
     // 10. Database Consistency Checks
     const job = (await db.query("SELECT * FROM jobs WHERE id = $1", [jobId])).rows[0];
-    if (job.status !== 'COMPLETED') throw new Error("Job status is not COMPLETED");
+    console.log(`DEBUG: job.status is '${job.status}', resolved is '${jobStateMachine.resolveState(job.status)}'`);
+    if (jobStateMachine.resolveState(job.status) !== jobStateMachine.STATES.SERVICE_COMPLETED) throw new Error("Job status is not COMPLETED: got " + job.status);
 
     const payment = (await db.query("SELECT * FROM payments WHERE id = $1", [paymentId])).rows[0];
     if (payment.payment_status !== 'SUCCESS') throw new Error("Payment status is not SUCCESS");
@@ -199,6 +222,7 @@ async function runScenario2() {
         body: JSON.stringify({ userId, serviceType: 'Plumber', description: 'Scenario 2 pipe leak', lat: 12.97, lng: 77.59, price: 500.0 })
     });
     const jobId = (await createRes.json()).job.id;
+    await sleep(300);
 
     // Worker 1 accepts
     await fetch(`${BASE_URL}/jobs/accept`, {
@@ -229,7 +253,7 @@ async function runScenario2() {
 
     // Assertions
     const job = (await db.query("SELECT * FROM jobs WHERE id = $1", [jobId])).rows[0];
-    if (job.status !== 'ACCEPTED' || job.worker_id !== workerId2) throw new Error("Job reassignment state incorrect");
+    if (jobStateMachine.resolveState(job.status) !== jobStateMachine.STATES.WORKER_ASSIGNED || job.worker_id !== workerId2) throw new Error("Job reassignment state incorrect");
 
     const w1 = (await db.query("SELECT reliability_score FROM workers WHERE id = $1", [workerId])).rows[0];
     if (parseFloat(w1.reliability_score) >= 5.0) throw new Error("Reliability penalty was not applied to Worker 1");
@@ -279,7 +303,7 @@ async function runScenario3() {
     console.log("  [S3] Manual SLA cron trigger ran, jobs reassigning count:", slaBreached.rowCount);
 
     const updatedJob = (await db.query("SELECT * FROM jobs WHERE id = $1", [jobId])).rows[0];
-    if (updatedJob.status !== 'REASSIGNING') throw new Error("Job did not timeout to REASSIGNING");
+    if (jobStateMachine.resolveState(updatedJob.status) !== jobStateMachine.STATES.DISPATCHING) throw new Error("Job did not timeout to REASSIGNING");
 
     console.log("  ✅ SLA Timeout and backup reassignment activation verified successfully!\n");
 }
@@ -375,7 +399,7 @@ async function runScenario5() {
     console.log("  [S5] User confirmed worker arrival. Status → ARRIVED");
 
     const job = (await db.query("SELECT status FROM jobs WHERE id = $1", [jobId])).rows[0];
-    if (job.status !== 'ARRIVED') throw new Error("Job status is not ARRIVED");
+    if (jobStateMachine.resolveState(job.status) !== jobStateMachine.STATES.WORKER_ARRIVED) throw new Error("Job status is not ARRIVED");
 
     console.log("  ✅ Worker force arrival and user confirmation flow verified!\n");
 }

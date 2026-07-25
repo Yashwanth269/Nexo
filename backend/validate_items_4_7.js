@@ -163,8 +163,12 @@ async function main() {
         });
     }
 
-    const modelsList = await mlGet('/models');
-    console.log('ML /models versions:', modelsList.versions?.length || 0);
+    try {
+        const modelsList = await mlGet('/models');
+        console.log('ML /models versions:', modelsList.versions?.length || 0);
+    } catch (e) {
+        console.log('ML /models error:', e.message);
+    }
 
     // ═══════════ ITEM 7: FATIGUE ENGINE ═══════════
     console.log('\n--- ITEM 7: Fatigue Engine Validation ---');

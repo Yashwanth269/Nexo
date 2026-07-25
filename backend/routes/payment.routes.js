@@ -71,7 +71,11 @@ router.post('/create', walletLimiter, async (req, res) => {
             const payment = await paymentService.createPayment(jobId, userId, workerId, parseFloat(amount), 'CASH');
 
             const executionService = require('../services/execution.service');
-            await executionService.transitionStatus(jobId, workerId, 'COMPLETED', { paymentMethod: 'CASH' });
+            const transitionResult = await executionService.transitionStatus(jobId, workerId, 'COMPLETED', { paymentMethod: 'CASH' });
+            console.log("DEBUG: cash transitionResult:", transitionResult);
+            if (!transitionResult.success) {
+                return res.status(400).json({ success: false, message: "Job transition to COMPLETED failed", error: transitionResult.error });
+            }
 
             return res.json({ success: true, payment, note: "Worker must mark cash as received via POST /api/payment/mark-cash-received" });
         } else if (paymentMode === 'PARTIAL') {

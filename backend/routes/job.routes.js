@@ -583,6 +583,71 @@ router.post('/dispatch/atomic-accept', async (req, res) => {
     }
 });
 
+// ==========================================
+// WORKER PRESENCE & HEARTBEAT APIs (VOLUME 2 PART 2)
+// ==========================================
+const workerPresenceService = require('../services/worker_presence.service');
+
+router.post('/worker/heartbeat', (req, res) => {
+    try {
+        const { workerId, payload, idempotencyKey } = req.body;
+        
+        // Check idempotency (Chapter 44)
+        if (idempotencyKey) {
+            const cached = workerPresenceService.checkIdempotency(idempotencyKey);
+            if (cached) return res.json(cached);
+        }
+
+        const result = workerPresenceService.processHeartbeat(workerId, payload || {});
+        if (idempotencyKey) workerPresenceService.saveIdempotency(idempotencyKey, result);
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/worker/presence/:workerId', (req, res) => {
+    try {
+        const presence = workerPresenceService.getPresence(req.params.workerId);
+        res.json({ success: true, presence });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==========================================
+// CONTROL TOWER & AI WORKER COACH APIs (VOLUME 3)
+// ==========================================
+const marketplaceControlTowerService = require('../services/marketplace_control_tower.service');
+
+router.get('/admin/control-tower/health', (req, res) => {
+    try {
+        const health = marketplaceControlTowerService.getMarketplaceHealthScore();
+        res.json(health);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/worker/ai-coach/:workerId', (req, res) => {
+    try {
+        const coachData = marketplaceControlTowerService.getAIWorkerCoachGuidance(req.params.workerId);
+        res.json(coachData);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/worker/fatigue/:workerId', (req, res) => {
+    try {
+        const hours = parseFloat(req.query.hours || '6');
+        const fatigue = marketplaceControlTowerService.evaluateWorkerFatigue(req.params.workerId, hours);
+        res.json({ success: true, fatigue });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Fetch Scheduled Job Worker Offers (Customer Comparison Screen)
 router.get('/:id/offers', async (req, res) => {
     try {
@@ -1336,9 +1401,18 @@ router.patch('/:userId/:jobId', async (req, res) => {
             }
             const currentStatus = statusCheck.rows[0].status;
             
+            const jobStateMachine = require('../services/job_state_machine.service');
+            const resolvedStatus = jobStateMachine.resolveState(currentStatus);
+
             // Block cancellation entirely if work is in progress or finished
-            const blockedStatuses = ['WORK_IN_PROGRESS', 'IN_PROGRESS', 'COMPLETED'];
-            if (blockedStatuses.includes(currentStatus)) {
+            const blockedStatuses = [
+                jobStateMachine.STATES.SERVICE_IN_PROGRESS,
+                jobStateMachine.STATES.SERVICE_COMPLETED,
+                'WORK_IN_PROGRESS',
+                'IN_PROGRESS',
+                'COMPLETED'
+            ];
+            if (blockedStatuses.includes(resolvedStatus) || blockedStatuses.includes(currentStatus)) {
                 return res.status(400).json({ 
                     success: false, 
                     error: "CANCEL_BLOCKED", 
@@ -1346,8 +1420,14 @@ router.patch('/:userId/:jobId', async (req, res) => {
                 });
             }
 
-            const lateStatuses = ['ON_THE_WAY', 'ARRIVED', 'FORCE_ARRIVAL_PENDING_CONFIRMATION'];
-            if (lateStatuses.includes(currentStatus)) {
+            const lateStatuses = [
+                jobStateMachine.STATES.WORKER_EN_ROUTE,
+                jobStateMachine.STATES.WORKER_ARRIVED,
+                'FORCE_ARRIVAL_PENDING_CONFIRMATION',
+                'ON_THE_WAY',
+                'ARRIVED'
+            ];
+            if (lateStatuses.includes(resolvedStatus) || lateStatuses.includes(currentStatus)) {
                 const reason = req.body.reason || updates.reason;
                 const notes = req.body.notes || req.body.note || updates.notes;
                 

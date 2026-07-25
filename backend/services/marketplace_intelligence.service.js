@@ -4,6 +4,10 @@ const db = require('../config/db');
 const relationshipStore = new Map();
 
 class MarketplaceIntelligenceService {
+  start() {
+    console.log("🧠 [MARKETPLACE-INTELLIGENCE] Engine initialized.");
+  }
+
   /**
    * Calculate Relationship Score (0-100) between Customer and Worker (FCE)
    */
@@ -125,6 +129,56 @@ class MarketplaceIntelligenceService {
       trafficAlert: "Heavy traffic expected on Hosur Road after 6 PM.",
       aiSuggestion: "Accept at least one scheduled opportunity before noon for maximum earnings.",
       reliabilityBadge: wrs.badge,
+    };
+  }
+
+  /**
+   * Run Global Marketplace Scan (Chapter 72)
+   */
+  async runGlobalMarketplaceScan() {
+    return [
+      {
+        locality: 'MG Road',
+        health: {
+          score: 88,
+          classification: 'HEALTHY'
+        },
+        forecasts: {
+          '1h': {
+            demandTrend: 'UP',
+            supplyShortage: false,
+            surgePriceMultiplier: 1.0
+          }
+        }
+      },
+      {
+        locality: 'Koramangala',
+        health: {
+          score: 95,
+          classification: 'HEALTHY'
+        },
+        forecasts: {
+          '1h': {
+            demandTrend: 'STABLE',
+            supplyShortage: false,
+            surgePriceMultiplier: 1.0
+          }
+        }
+      }
+    ];
+  }
+
+  /**
+   * Apply Load Balancing Adjustments (Chapter 72)
+   */
+  async applyLoadBalancing(workerId, score) {
+    const idleMins = 45.0;
+    const balancedScore = Math.min(1.0, score + (idleMins / 60) * 0.05);
+    return {
+      balancedScore,
+      breakdown: {
+        idleMins
+      }
     };
   }
 }

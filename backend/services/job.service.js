@@ -65,7 +65,7 @@ class JobService {
                 return { success: false, message: "JOB_NOT_FOUND" };
             }
 
-            if (!['OPEN', 'REDISTRIBUTING', 'REASSIGNING'].includes(lockResult.rows[0].status)) {
+            if (!['OPEN', 'REDISTRIBUTING', 'REASSIGNING', 'BUILD_QUEUE', 'POOL_1_ACTIVE', 'POOL_2_ACTIVE', 'POOL_3_ACTIVE'].includes(lockResult.rows[0].status)) {
                 await client.query('ROLLBACK');
                 await redis.del(lockKey);
                 return { success: false, message: "JOB_ALREADY_TAKEN" };
@@ -78,7 +78,7 @@ class JobService {
             const result = await client.query(
                 `UPDATE jobs 
                  SET worker_id = $1, status = $3, accepted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-                 WHERE id = $2 AND status IN ('OPEN', 'REDISTRIBUTING', 'REASSIGNING') 
+                 WHERE id = $2 AND status IN ('OPEN', 'REDISTRIBUTING', 'REASSIGNING', 'BUILD_QUEUE', 'POOL_1_ACTIVE', 'POOL_2_ACTIVE', 'POOL_3_ACTIVE') 
                  RETURNING *`,
                 [worker.id, jobId, assignStatus]
             );
