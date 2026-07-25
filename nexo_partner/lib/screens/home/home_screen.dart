@@ -10,35 +10,25 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:geocoding/geocoding.dart';
 import 'package:intl/intl.dart';
-import 'package:socket_io_client/socket_io_client.dart' as IO;
-
 import '../../services/socket_service.dart';
 import '../../services/cache_service.dart';
 import '../../services/background_service.dart';
 import '../../services/worker_eligibility_manager.dart';
-import '../../widgets/job_request_modal.dart';
 import '../../widgets/skeleton_loader.dart';
 import '../../utils/network_helper.dart';
 import '../../utils/image_utils.dart';
-import '../../components/glass_components.dart';
 import 'incoming_job_screen.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
-import '../auth/login_screen.dart';
-import '../settings/settings_screen.dart';
 import '../job/active_jobs_screen.dart';
-import '../earnings/earnings_history_screen.dart';
 import '../profile/worker_profile_screen.dart';
-import '../profile/worker_preferences_screen.dart';
 import '../job/opportunities_screen.dart';
 import '../../widgets/travel_home_banner.dart';
-import '../chat/chat_list_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../support/support_screen.dart';
 import '../job/new_job_offer_screen.dart';
 import '../job/job_execution_screen.dart';
 import '../security/selfie_verification_screen.dart';
-import 'dart:ui' as ui;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -52,7 +42,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   final List<dynamic> _jobRequests = [];
   final Set<String> _rejectedJobIds = {};
-  final Set<String> _shownJobIds = {}; // Prevent showing same job banner twice
   bool _isShowingIncomingJob = false; // Guard: only one banner at a time
   final List<dynamic> _activeGigs = [];
   final SocketService _socketService = SocketService();
@@ -66,67 +55,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (_token != null) 'Authorization': 'Bearer $_token',
     };
   }
-  String _workerName = "Expert";
   String? _profilePhoto;
-  String _locationStatus = "Activating location...";
   bool _isOnline = false;
   bool _isSearching = false;
   bool _isOffline = false;
   bool _hideEarnings = false;
-  List<String> _mySkills = [];
   String _currentArea = "Detecting location...";
   int _activeJobsRefreshTrigger = 0;
   bool _isTravelHomeActive = false;
   Map<String, dynamic> _travelHomeData = {};
 
-  Future<void> _fetchTravelHomeStatus() async {
-    if (_phoneNumber == "Worker") return;
-    try {
-      final uri = Uri.parse('${NetworkHelper.baseUrl}/api/jobs/travel-home/status?workerId=$_phoneNumber');
-      final response = await http.get(uri, headers: _getAuthHeaders());
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true && data['isActive'] == true) {
-          setState(() {
-            _isTravelHomeActive = true;
-            _travelHomeData = data['routeAnalysis'] ?? {};
-          });
-        } else {
-          setState(() {
-            _isTravelHomeActive = false;
-            _travelHomeData = {};
-          });
-        }
-      }
-    } catch (_) {}
-  }
 
-  Future<void> _startTravelHomeMode() async {
-    try {
-      final uri = Uri.parse('${NetworkHelper.baseUrl}/api/jobs/travel-home/start');
-      final response = await http.post(
-        uri,
-        headers: _getAuthHeaders(),
-        body: json.encode({
-          'workerId': _phoneNumber,
-          'homeLocation': {
-            'address': 'BTM Layout',
-            'lat': 12.9141,
-            'lng': 77.6412,
-          }
-        }),
-      );
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("🏠 Travel Home Mode Active! GPS battery saver enabled (15s)."),
-            backgroundColor: Color(0xFF166534),
-          ),
-        );
-        _fetchTravelHomeStatus();
-      }
-    } catch (_) {}
-  }
 
   Future<void> _stopTravelHomeMode() async {
     try {
@@ -140,112 +79,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _isTravelHomeActive = false;
         _travelHomeData = {};
       });
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Travel Home Mode ended.")),
       );
     } catch (_) {}
-  }
-
-  void _showPostJobNextStepSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF0F172A),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-            ),
-            const SizedBox(height: 16),
-            Text("Nice work 🎉 What's next?", style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-            const SizedBox(height: 4),
-            Text("Select your intention so Nexo can optimize your route and offers.", style: GoogleFonts.inter(fontSize: 12.5, color: Colors.white60)),
-            const SizedBox(height: 20),
-
-            _buildNextStepOptionTile(
-              icon: Icons.flash_on_rounded,
-              title: "Continue Working",
-              subtitle: "Keep receiving live and scheduled jobs near you",
-              color: const Color(0xFF2563EB),
-              onTap: () {
-                Navigator.pop(context);
-                _toggleOnline(true);
-              },
-            ),
-            const SizedBox(height: 10),
-
-            _buildNextStepOptionTile(
-              icon: Icons.home_rounded,
-              title: "Going Home",
-              subtitle: "Enter Travel Home Mode • Only receive jobs along your route",
-              color: const Color(0xFF166534),
-              onTap: () {
-                Navigator.pop(context);
-                _startTravelHomeMode();
-              },
-            ),
-            const SizedBox(height: 10),
-
-            _buildNextStepOptionTile(
-              icon: Icons.coffee_rounded,
-              title: "Take a Break",
-              subtitle: "Temporarily pause all incoming job notifications",
-              color: const Color(0xFFD97706),
-              onTap: () {
-                Navigator.pop(context);
-                _showOfflineConfirmation();
-              },
-            ),
-            const SizedBox(height: 10),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNextStepOptionTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.5)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: color.withValues(alpha: 0.2), shape: BoxShape.circle),
-              child: Icon(icon, color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: GoogleFonts.inter(fontSize: 11, color: Colors.white60)),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.white38),
-          ],
-        ),
-      ),
-    );
   }
 
   void _sortActiveGigs() {
@@ -358,12 +196,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
 
-  String _getInitials() {
-    return _phoneNumber.isNotEmpty ? _phoneNumber[0].toUpperCase() : "W";
-  }
-
   Future<void> _fetchInitialData() async {
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
+      if (!mounted) return;
       setState(() => _isOffline = result == ConnectivityResult.none);
       if (_isOffline) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -419,7 +254,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final prefs = await SharedPreferences.getInstance();
     final savedOnline = prefs.getBool('isOnline') ?? false;
     setState(() {
-      _workerName = prefs.getString('workerName') ?? "Expert";
       _phoneNumber = prefs.getString('workerPhone') ?? prefs.getString('worker_phone') ?? "Worker";
       _profilePhoto = prefs.getString('workerPhoto');
       _token = prefs.getString('worker_token');
@@ -510,16 +344,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       Position? position = await Geolocator.getLastKnownPosition();
       position ??= await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 5),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 5),
+        ),
       );
-      if (position != null) {
-        _updateLocationUI(position);
-        if (_isOnline) {
-          _socketService.updateLocation(position.latitude, position.longitude);
-        }
-      } else {
-        setState(() => _currentArea = "Location Unavailable");
+      _updateLocationUI(position);
+      if (_isOnline) {
+        _socketService.updateLocation(position.latitude, position.longitude);
       }
     } catch (e) {
       setState(() => _currentArea = "Detection Timeout");
@@ -742,8 +574,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         try {
           pos = await Geolocator.getLastKnownPosition();
           pos ??= await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.low,
-            timeLimit: const Duration(seconds: 2),
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.low,
+              timeLimit: Duration(seconds: 2),
+            ),
           );
         } catch (e) {
           debugPrint("⚠️ [GPS] Failed to retrieve current GPS for nearby jobs: $e");
@@ -795,132 +629,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  double _searchRadius = 10.0;
+  final double _searchRadius = 10.0;
   bool _isPaused = false;
-
-  void _showOfflineConfirmation() {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF151515), // Matches the premium dark bottom sheet background
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.white.withOpacity(0.08)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.4),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              )
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2563EB).withOpacity(0.12),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF2563EB).withOpacity(0.3), width: 1.5),
-                ),
-                child: const Icon(
-                  Icons.power_settings_new_rounded,
-                  color: Color(0xFF2563EB),
-                  size: 36,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                "Go Offline?",
-                style: GoogleFonts.outfit(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                "You will stop receiving new gig requests. Are you sure you want to go offline?",
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: Colors.white60,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: Colors.white.withOpacity(0.12)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: Text(
-                        "Stay Online",
-                        style: GoogleFonts.outfit(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF2563EB).withOpacity(0.24),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          )
-                        ],
-                      ),
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _toggleOnline(false);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: Text(
-                          "Go Offline",
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   void _toggleOnline(bool value) async {
     if (value) {
@@ -984,7 +694,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           showDialog(
             context: context,
             barrierDismissible: false,
-            builder: (context) => AlertDialog(
+            builder: (dialogContext) => AlertDialog(
               backgroundColor: const Color(0xFF0F172A),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               title: Row(
@@ -1033,7 +743,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               actions: [
                 TextButton(
                   onPressed: () async {
-                    Navigator.pop(context);
+                    Navigator.pop(dialogContext);
                     try {
                       final prefs = await SharedPreferences.getInstance();
                       final workerId = prefs.getString('worker_id') ?? prefs.getString('id');
@@ -1054,7 +764,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    Navigator.pop(context);
+                    Navigator.pop(dialogContext);
                     try {
                       final prefs = await SharedPreferences.getInstance();
                       final workerId = prefs.getString('worker_id') ?? prefs.getString('id');
@@ -1103,7 +813,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           showDialog(
             context: context,
             barrierDismissible: false,
-            builder: (context) => AlertDialog(
+            builder: (dialogContext) => AlertDialog(
               backgroundColor: const Color(0xFF0F172A),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               title: Row(
@@ -1124,7 +834,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
               actions: [
                 ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.pop(dialogContext),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF22C55E),
                     foregroundColor: Colors.white,
@@ -1154,7 +864,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
       });
 
-      final handleUserCancel = (data) {
+      void handleUserCancel(dynamic data) {
         if (data != null) {
           final String? cancelledJobId = (data['jobId'] ?? data['job_id'])?.toString();
           debugPrint("🔔 [SOCKET] Job cancelled by user: $cancelledJobId");
@@ -1173,7 +883,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             showDialog(
               context: context,
               barrierDismissible: false,
-              builder: (context) => AlertDialog(
+              builder: (dialogContext) => AlertDialog(
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 title: Text("Gig Cancelled by Customer", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.red)),
                 content: Text(
@@ -1182,7 +892,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => Navigator.pop(dialogContext),
                     child: Text("OK", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00))),
                   ),
                 ],
@@ -1190,7 +900,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             );
           }
         }
-      };
+      }
       _socketService.socket?.on('job_cancelled_by_user', handleUserCancel);
       _socketService.socket?.on('USER_CANCELLED_JOB', handleUserCancel);
 
@@ -1351,162 +1061,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Widget _buildModernJobDialog(dynamic job) {
-    int timeLeft = 30;
-    Timer? timer;
 
-    return StatefulBuilder(
-      builder: (context, setDialogState) {
-        timer ??= Timer.periodic(const Duration(seconds: 1), (t) {
-          if (timeLeft > 0) {
-            setDialogState(() => timeLeft--);
-          } else {
-            t.cancel();
-            Navigator.pop(context);
-          }
-        });
-
-        return WillPopScope(
-          onWillPop: () async => false,
-          child: Scaffold(
-            backgroundColor: Colors.black.withOpacity(0.85),
-            body: Center(
-              child: Container(
-                margin: const EdgeInsets.all(32),
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(32),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 40)],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        SizedBox(
-                          width: 80,
-                          height: 80,
-                          child: CircularProgressIndicator(
-                            value: timeLeft / 30,
-                            strokeWidth: 6,
-                            color: const Color(0xFFFF6A00),
-                            backgroundColor: Colors.black12,
-                          ),
-                        ),
-                        Text("$timeLeft", style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00))),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    Text("New Opportunity!", style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text(job['title'] ?? job['category'] ?? "Quick Task", style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.black87)),
-                    const SizedBox(height: 16),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.info_outline, size: 16, color: Colors.black54),
-                              const SizedBox(width: 8),
-                              Text("Description", style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(job['description'] ?? "No additional details provided.", style: GoogleFonts.inter(fontSize: 14, color: Colors.black87, height: 1.4)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("Estimated Earnings", style: GoogleFonts.inter(fontSize: 12, color: Colors.black54)),
-                            Row(
-                              children: [
-                                Text("₹", style: GoogleFonts.outfit(fontSize: 24, color: Colors.green, fontWeight: FontWeight.bold)),
-                                Text("${job['earnings'] ?? job['price'] ?? '0'}", style: GoogleFonts.outfit(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.black87)),
-                              ],
-                            ),
-                          ],
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFF7ED),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.location_on, color: Color(0xFFFF6A00), size: 16),
-                              const SizedBox(width: 4),
-                              Text(job['distance']?.toString() ?? "Nearby", style: GoogleFonts.inter(color: const Color(0xFFFF6A00), fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () async {
-                              timer?.cancel();
-                              Navigator.pop(context);
-                              await _rejectJob(job['id']);
-                            },
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              side: const BorderSide(color: Colors.red),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                            child: const Text("DECLINE", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () {
-                              timer?.cancel();
-                              Navigator.pop(context);
-                              _acceptJob(job);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                            child: const Text("ACCEPT", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   Future<void> _rejectJob(String jobId) async {
     if (_phoneNumber == "Worker") {
       await _loadUserData(); // Try last minute re-fetch
+      if (!mounted) return;
       if (_phoneNumber == "Worker") {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error: Identity not resolved. Please restart app.")));
         return;
@@ -1532,17 +1092,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _acceptJob(dynamic job) async {
     if (_phoneNumber == "Worker") {
       await _loadUserData(); // Try last minute re-fetch
+      if (!mounted) return;
       if (_phoneNumber == "Worker") {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error: Identity not resolved. Please restart app.")));
         return;
       }
     }
     
+    if (!mounted) return;
     // Show blocking loader
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFFFF6A00))),
+      builder: (dialogContext) => const Center(child: CircularProgressIndicator(color: Color(0xFFFF6A00))),
     );
 
     try {
@@ -1557,6 +1119,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       
       // Close loader
       if (mounted) Navigator.pop(context);
+      if (!mounted) return;
 
       final data = json.decode(response.body);
 
@@ -1605,43 +1168,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     } catch (e) {
       if (mounted) Navigator.pop(context);
+      if (!mounted) return;
       debugPrint("Accept error: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Connection error. Please try again."), backgroundColor: Colors.redAccent),
       );
-    }
-  }
-
-  Future<void> _submitCounterOffer(String jobId, double price) async {
-    try {
-      final response = await http.post(
-        Uri.parse('${NetworkHelper.baseUrl}/api/jobs/negotiate'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'jobId': jobId,
-          'workerId': _phoneNumber,
-          'price': price,
-        }),
-      );
-      
-      if (response.statusCode == 200) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Counter offer sent successfully!")),
-          );
-          setState(() {
-            _jobRequests.removeWhere((j) => j['id'] == jobId);
-          });
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Failed to send counter offer.")),
-          );
-        }
-      }
-    } catch (e) {
-      debugPrint("Negotiate error: $e");
     }
   }
 
@@ -1650,10 +1181,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       Position? lastPos = await Geolocator.getLastKnownPosition();
       lastPos ??= await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
-        timeLimit: const Duration(seconds: 4),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 4),
+        ),
       );
-      if (lastPos != null && mounted) {
+      if (mounted) {
         _updateLocationUI(lastPos);
         if (_isOnline) {
           _socketService.updateLocation(lastPos.latitude, lastPos.longitude);
@@ -1720,17 +1253,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    if (mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-        (route) => false,
-      );
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1746,15 +1268,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       const WorkerProfileScreen(isTab: true),
     ];
 
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: _selectedIndex == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
         if (_selectedIndex != 0) {
           setState(() {
             _selectedIndex = 0;
           });
-          return false;
         }
-        return true;
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
@@ -1836,67 +1358,141 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildBottomNav() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+    final bg = isDark ? const Color(0xFF0F172A) : Colors.white;
+
+    // Per-tab accent colors
+    const tabColors = [
+      Color(0xFF2563EB), // Home      – blue
+      Color(0xFF10B981), // Live      – green (center FAB)
+      Color(0xFFFF6A00), // Opps      – orange
+      Color(0xFF7C3AED), // My Gigs   – purple
+      Color(0xFF64748B), // Profile   – slate
+    ];
+
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : Colors.white,
+        color: bg,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 20,
             offset: const Offset(0, -4),
           )
         ],
       ),
-      padding: const EdgeInsets.only(bottom: 10, top: 6),
       child: SafeArea(
         top: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildNewNavItem(0, Icons.home_rounded, "Home"),
-            _buildNewNavItem(1, Icons.bolt_rounded, "Live"),
-            _buildNewNavItem(2, Icons.calendar_month_rounded, "Opportunities"),
-            _buildNewNavItem(3, Icons.work_rounded, "My Gigs"),
-            _buildNewNavItem(4, Icons.person_rounded, "Profile"),
-          ],
+        child: SizedBox(
+          height: 64,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // 0: Home
+              _buildNavTab(0, Icons.home_rounded, "Home", tabColors[0]),
+              // 2: Opportunities (2nd slot)
+              _buildNavTab(2, Icons.calendar_month_rounded, "Opps", tabColors[2]),
+              // 1: CENTER – Live FAB pill
+              GestureDetector(
+                onTap: () => setState(() {
+                  _selectedIndex = 1;
+                  _activeJobsRefreshTrigger++;
+                }),
+                child: Transform.translate(
+                  offset: const Offset(0, -12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: _selectedIndex == 1
+                                ? [const Color(0xFF10B981), const Color(0xFF059669)]
+                                : [const Color(0xFFE6FBF4), const Color(0xFFD0F7EA)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(22),
+                          boxShadow: _selectedIndex == 1
+                              ? [BoxShadow(color: const Color(0xFF10B981).withValues(alpha: 0.45), blurRadius: 14, offset: const Offset(0, 4))]
+                              : [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.bolt_rounded,
+                              size: 24,
+                              color: _selectedIndex == 1 ? Colors.white : const Color(0xFF10B981),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "Live",
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: _selectedIndex == 1 ? Colors.white : const Color(0xFF10B981),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // 3: My Gigs
+              _buildNavTab(3, Icons.work_rounded, "My Gigs", tabColors[3]),
+              // 4: Profile
+              _buildNavTab(4, Icons.person_rounded, "Profile", tabColors[4]),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildNewNavItem(int index, IconData icon, String label) {
-    bool isSelected = _selectedIndex == index;
-    final activeColor = const Color(0xFF2563EB);
-    final inactiveColor = const Color(0xFF94A3B8);
-    
+  Widget _buildNavTab(int index, IconData icon, String label, Color accentColor) {
+    final bool isSelected = _selectedIndex == index;
+    final inactiveColor = const Color(0xFFCBD5E1);
+
     return GestureDetector(
       onTap: () {
         setState(() {
           _selectedIndex = index;
-          if (index == 1) {
-            _activeJobsRefreshTrigger++;
-          }
+          if (index == 1) _activeJobsRefreshTrigger++;
         });
       },
-      child: Container(
-        color: Colors.transparent,
-        width: 65,
+      child: SizedBox(
+        width: 58,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              color: isSelected ? activeColor : inactiveColor,
-              size: 24,
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: isSelected ? accentColor.withValues(alpha: 0.12) : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                icon,
+                color: isSelected ? accentColor : inactiveColor,
+                size: 22,
+              ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.inter(
                 fontSize: 10,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected ? activeColor : inactiveColor,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? accentColor : inactiveColor,
               ),
             ),
           ],
@@ -1907,7 +1503,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildDashboard() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = const Color(0xFF2563EB);
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
@@ -2032,7 +1627,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
+                      color: Colors.black.withValues(alpha: 0.04),
                       blurRadius: 16,
                       offset: const Offset(0, 4),
                     )
@@ -2083,7 +1678,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ),
                         Switch(
                           value: _isOnline,
-                          activeColor: const Color(0xFF2563EB),
+                          activeThumbColor: const Color(0xFF2563EB),
                           activeTrackColor: const Color(0xFFDBEAFE),
                           inactiveThumbColor: const Color(0xFF64748B),
                           inactiveTrackColor: const Color(0xFFE2E8F0),
@@ -2141,7 +1736,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
+                      color: Colors.black.withValues(alpha: 0.02),
                       blurRadius: 12,
                       offset: const Offset(0, 2),
                     )
@@ -2229,10 +1824,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     }
                   }
 
-                  if (_selectedTimeframe == 'today') timeframeLabel = "Today's";
-                  else if (_selectedTimeframe == 'week') timeframeLabel = "This Week's";
-                  else if (_selectedTimeframe == 'month') timeframeLabel = "This Month's";
-                  else if (_selectedTimeframe == 'year') timeframeLabel = "This Year's";
+                  if (_selectedTimeframe == 'today') {
+                    timeframeLabel = "Today's";
+                  } else if (_selectedTimeframe == 'week') {
+                    timeframeLabel = "This Week's";
+                  } else if (_selectedTimeframe == 'month') {
+                    timeframeLabel = "This Month's";
+                  } else if (_selectedTimeframe == 'year') {
+                    timeframeLabel = "This Year's";
+                  }
                   else if (_selectedTimeframe == 'random') {
                     timeframeLabel = _selectedCustomDateStr != null ? "$_selectedCustomDateStr" : "Custom Day's";
                   }
@@ -2260,7 +1860,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       borderRadius: BorderRadius.circular(28),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF2563EB).withOpacity(0.2),
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.2),
                           blurRadius: 16,
                           offset: const Offset(0, 8),
                         ),
@@ -2298,7 +1898,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               child: Container(
                                 padding: const EdgeInsets.all(6),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
+                                  color: Colors.white.withValues(alpha: 0.2),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(Icons.arrow_forward, color: Colors.white, size: 14),
@@ -2320,7 +1920,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15),
+                            color: Colors.white.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
@@ -2373,7 +1973,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                   margin: const EdgeInsets.only(right: 8),
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                   decoration: BoxDecoration(
-                                    color: isSelected ? Colors.white : Colors.white.withOpacity(0.1),
+                                    color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
@@ -2547,7 +2147,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               width: 50,
               height: 50,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.08),
+                color: color.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Icon(icon, color: color, size: 24),
@@ -2609,7 +2209,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.02),
+              color: Colors.black.withValues(alpha: 0.02),
               blurRadius: 10,
               offset: const Offset(0, 2),
             )
@@ -2732,44 +2332,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildActiveJobCard(dynamic job) {
-    if (job == null) return const SizedBox.shrink();
-    return GestureDetector(
-      onTap: () => Navigator.push(
-        context, 
-        MaterialPageRoute(builder: (context) => JobExecutionScreen(jobId: job['id'], initialJob: job))
-      ).then((_) => _fetchActiveGigs()),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.green.withOpacity(0.15), blurRadius: 12, offset: const Offset(0, 4))],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-              child: const Icon(Icons.work_history, color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(job['title'] ?? job['category'] ?? "Ongoing Gig", style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text("Tap to resume work", style: GoogleFonts.inter(color: Colors.white70, fontSize: 11)),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, color: Colors.white70),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildEmptyJobs() {
     return Container(

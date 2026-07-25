@@ -1,87 +1,86 @@
 const db = require('../config/db');
-
-// Live Feature Store profiles
-const featureStore = {
-  workers: new Map(),
-  customers: new Map(),
-  areas: new Map(),
-};
+const featureStoreService = require('./feature_store.service');
 
 class HybridAIDecisionEngine {
   /**
-   * Get or initialize Worker Feature Profile (Chapter 59)
+   * Hybrid AI Pipeline: Business Rules Policy Validation + Dynamic ML Scoring (Chapter 56)
    */
-  getWorkerFeatureProfile(workerId) {
-    const wId = workerId.toString();
-    if (!featureStore.workers.has(wId)) {
-      featureStore.workers.set(wId, {
-        workerId: wId,
-        acceptanceRate: 96,
-        completionRate: 99,
-        reliabilityScore: 98,
-        averageRating: 4.9,
-        jobsCompleted: 420,
-        preferredAreas: ["Koramangala", "HSR Layout"],
-        repeatCustomerCount: 18,
-        fatigueScore: 25, // 0-100 (25 = fresh)
-        currentEarningsToday: 1850,
-      });
-    }
-    return featureStore.workers.get(wId);
-  }
-
-  /**
-   * Chapter 56 — Hybrid AI Pipeline: Business Rules Policy Validation + AI Ranking
-   */
-  evaluateCandidateWorker(job, candidateWorker) {
-    const profile = this.getWorkerFeatureProfile(candidateWorker.id || candidateWorker.workerId);
+  async evaluateCandidateWorker(job, candidateWorker) {
+    const workerId = candidateWorker.id || candidateWorker.workerId;
     
+    // 1. Fetch real features from FeatureStoreService (removes mock features map)
+    const features = await featureStoreService.getWorkerFeatures(workerId);
+
     // ==========================================
     // STEP 1: BUSINESS RULES POLICY OVERRIDES
     // AI cannot bypass these hard security/trust rules!
     // ==========================================
-    if (profile.reliabilityScore < 70) {
+    if (features.reliability_score < 0.70) {
       return {
         passedPolicy: false,
         rejectionReason: "RELIABILITY_BELOW_THRESHOLD_70",
         aiRankScore: 0,
+        modelVersion: '1.2.0-mooe',
+        timestamp: new Date().toISOString()
       };
     }
 
-    if (candidateWorker.isSuspended) {
+    if (candidateWorker.isSuspended || features.is_shadow_banned) {
       return {
         passedPolicy: false,
         rejectionReason: "WORKER_ACCOUNT_SUSPENDED",
         aiRankScore: 0,
+        modelVersion: '1.2.0-mooe',
+        timestamp: new Date().toISOString()
       };
     }
 
     // ==========================================
-    // STEP 2: MULTI-OBJECTIVE OPTIMIZATION ENGINE (MOOE - Chapter 71)
+    // STEP 2: MULTI-OBJECTIVE OPTIMIZATION ENGINE (MOOE)
     // Evaluates Customer Sat, Worker Sat, Platform Profit, & Marketplace Balance
     // ==========================================
-    const custSatScore = (profile.averageRating / 5.0) * 100 * 0.30;
-    const workerSatScore = (profile.acceptanceRate) * 0.25;
-    const platformProfitScore = (profile.completionRate) * 0.25;
-    const fairnessScore = Math.max(0, 100 - (profile.currentEarningsToday / 100)) * 0.20;
+    const custSatScore = (features.avg_rating / 5.0) * 100 * 0.30;
+    const workerSatScore = (features.acceptance_rate * 100) * 0.25;
+    const platformProfitScore = features.completion_rate * 0.25;
+    
+    // Fairness: Prefer workers who haven't completed a lot of active jobs today to balance load
+    const activeJobs = features.active_jobs_count || 0;
+    const fairnessScore = Math.max(0, 100 - (activeJobs * 25)) * 0.20;
 
     const totalAIRankScore = Math.round(custSatScore + workerSatScore + platformProfitScore + fairnessScore);
 
     // ==========================================
-    // STEP 3: EXPLAINABLE AI (XAI - Chapter 69)
+    // STEP 3: EXPLAINABLE AI (XAI)
+    // Generate rationale dynamically based on real features
     // ==========================================
-    const xaiRationale = [
-      `⭐ Recommended because: Matches preferred area (${profile.preferredAreas.join(', ')})`,
-      `📅 96% completion probability for your schedule`,
-      `❤️ Repeat customer relationship (${profile.repeatCustomerCount} returning clients)`,
-      `⚡ Top 8% Pro reliability rating (${profile.reliabilityScore}% WRS)`
-    ];
+    const xaiRationale = [];
+    if (features.avg_rating >= 4.7) {
+        xaiRationale.push(`⭐ Recommended because of high average rating (${features.avg_rating} / 5.0)`);
+    }
+    if (features.completion_rate >= 95) {
+        xaiRationale.push(`📅 Excellent completion rate (${features.completion_rate}% of accepted tasks)`);
+    }
+    if (features.reliability_score >= 0.90) {
+        xaiRationale.push(`⚡ Top Pro reliability rating (${(features.reliability_score * 100).toFixed(0)}% WRS)`);
+    }
+    if (features.fatigue_score < 0.30) {
+        xaiRationale.push(`🔋 Fresh availability (low fatigue index: ${features.fatigue_score})`);
+    } else {
+        xaiRationale.push(`⚠️ Moderate fatigue level detected`);
+    }
+
+    // Determine prediction confidence based on feature availability
+    const featureCount = Object.values(features).filter(v => v !== null && v !== undefined).length;
+    const confidence = Math.min(1.0, featureCount / 18);
 
     return {
       passedPolicy: true,
       aiRankScore: totalAIRankScore,
-      profile,
+      features,
       xaiRationale,
+      predictionConfidence: parseFloat(confidence.toFixed(2)),
+      modelVersion: '1.2.0-mooe',
+      timestamp: new Date().toISOString()
     };
   }
 }

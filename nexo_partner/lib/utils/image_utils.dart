@@ -58,7 +58,7 @@ class ImageUtils {
             width: width,
             height: height,
             fit: fit,
-            errorBuilder: (_, __, ___) => getCategoryIcon(taskName, size: (width ?? 24) * 0.7),
+            errorBuilder: (context, error, stackTrace) => getCategoryIcon(taskName, size: (width ?? 24) * 0.7),
           );
         }
         // Non-existent local asset path - fallback directly to category icon
@@ -125,7 +125,7 @@ class ImageUtils {
       radius: radius,
       backgroundImage: NetworkImage(resolvedUrl),
       backgroundColor: Colors.transparent,
-      onBackgroundImageError: (_, __) {},
+      onBackgroundImageError: (exception, stackTrace) {},
     );
   }
 }

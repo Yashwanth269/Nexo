@@ -88,7 +88,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
       ),
       child: Row(
         children: [
@@ -183,6 +183,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Color _getBgColor(String type) {
-    return _getIconColor(type).withOpacity(0.1);
+    return _getIconColor(type).withValues(alpha: 0.1);
   }
 }

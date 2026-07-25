@@ -48,5 +48,48 @@ module.exports = {
         lateCancelPenaltyScore: 0.25,
         noShowPenaltyScore: 0.40,
         consecutiveNoShowLimit: 2
+    },
+
+    // Upcoming Job Monitoring Settings
+    monitoring: {
+        lookAheadHours: parseInt(process.env.SCHEDULED_LOOK_AHEAD_HOURS || '48', 10),
+        overdueGraceHours: parseInt(process.env.SCHEDULED_OVERDUE_GRACE_HOURS || '2', 10),
+        statuses: ['ACCEPTED', 'RESERVED', 'CONFIRMED', 'REDISTRIBUTING', 'OPEN']
+    },
+
+    // Replacement and Risk Tier settings
+    proactiveReplacementTier: 'RED',
+    proactiveReplacementStatuses: ['ACCEPTED', 'RESERVED'],
+    overdueReplacementStatuses: ['ACCEPTED', 'RESERVED', 'CONFIRMED'],
+
+    // Event type logging configuration
+    eventTypes: {
+        healthCheck: 'scheduled_health_check'
+    },
+
+    // Emergency replacement reasons
+    reasons: {
+        workerNoShow: 'WORKER_NO_SHOW',
+        proactiveHighRisk: 'PROACTIVE_HIGH_RISK'
+    },
+
+    // Socket messaging event configurations & template strings
+    messaging: {
+        workerReminder: {
+            eventName: 'scheduled_job_reminder',
+            urgent: true,
+            getMessage: (mins) => `⚠️ Action Required: Please turn ONLINE and confirm your upcoming job scheduled in ${mins} mins.`
+        },
+        searchingStatus: {
+            eventName: 'searching_status',
+            status: 'SEARCHING_NEARBY',
+            message: "Finding another professional for your scheduled booking...",
+            isReplacement: true
+        },
+        jobStatusUpdated: {
+            eventName: 'job_status_updated',
+            status: 'REDISTRIBUTING',
+            message: "Finding another professional..."
+        }
     }
 };

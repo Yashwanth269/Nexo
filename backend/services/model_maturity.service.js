@@ -1,5 +1,66 @@
 const db = require('../config/db');
 
+// Model-Specific Minimum Sample Thresholds (Point 1)
+const MODEL_THRESHOLDS = {
+    eta: { minSamples: 100000, f1Min: 0.80 },
+    dispatch: { minSamples: 500000, f1Min: 0.85 },
+    pricing: { minSamples: 30000, f1Min: 0.75 },
+    acceptance: { minSamples: 30000, f1Min: 0.75 },
+    default: { minSamples: 5000, f1Min: 0.70 }
+};
+
+function calculateROC_AUC(samples) {
+    const sorted = [...samples].sort((a, b) => b.prediction - a.prediction);
+    const n = sorted.length;
+    let nPos = 0;
+    let nNeg = 0;
+    
+    sorted.forEach(s => {
+        if (s.actual === 1) nPos++;
+        else nNeg++;
+    });
+
+    if (nPos === 0 || nNeg === 0) return 0.5;
+
+    let sumRanks = 0;
+    for (let i = 0; i < n; i++) {
+        if (sorted[i].actual === 1) {
+            sumRanks += (n - i);
+        }
+    }
+
+    return (sumRanks - (nPos * (nPos + 1)) / 2) / (nPos * nNeg);
+}
+
+function calculateECE(samples, binCount = 10) {
+    const bins = Array.from({ length: binCount }, () => ({
+        count: 0,
+        sumConfidence: 0,
+        sumActual: 0
+    }));
+
+    samples.forEach(s => {
+        const binIndex = Math.min(binCount - 1, Math.floor(s.prediction * binCount));
+        bins[binIndex].count++;
+        bins[binIndex].sumConfidence += s.prediction;
+        bins[binIndex].sumActual += s.actual;
+    });
+
+    let ece = 0;
+    const total = samples.length;
+    if (total === 0) return 0;
+
+    bins.forEach(b => {
+        if (b.count > 0) {
+            const avgConf = b.sumConfidence / b.count;
+            const avgActual = b.sumActual / b.count;
+            ece += (b.count / total) * Math.abs(avgConf - avgActual);
+        }
+    });
+
+    return ece;
+}
+
 class ModelMaturityService {
     async recordPrediction(modelName, entityId, features, prediction, confidence = null) {
         try {
@@ -26,6 +87,19 @@ class ModelMaturityService {
     }
 
     async evaluateModel(modelName) {
+        // Query samples to calculate ROC AUC and ECE calibration error
+        const samplesRes = await db.query(`
+            SELECT prediction, actual_outcome::int as actual
+            FROM ml_training_data
+            WHERE model_type = $1 AND actual_outcome IS NOT NULL
+            ORDER BY logged_at DESC LIMIT 10000
+        `, [modelName]);
+
+        const samples = samplesRes.rows.map(r => ({
+            prediction: parseFloat(r.prediction || 0),
+            actual: r.actual === 1 ? 1 : 0
+        }));
+
         const statsRes = await db.query(`
             SELECT
                 COUNT(*) as total,
@@ -37,12 +111,15 @@ class ModelMaturityService {
             FROM ml_training_data
             WHERE model_type = $1 AND actual_outcome IS NOT NULL
         `, [modelName]);
+
         const stats = statsRes.rows[0];
         const total = parseInt(stats.total || 0);
         const outcomes = parseInt(stats.with_outcomes || 0);
 
+        const config = MODEL_THRESHOLDS[modelName.toLowerCase()] || MODEL_THRESHOLDS.default;
+
         if (outcomes < 10) {
-            await this._updateMaturity(modelName, total, outcomes, null, null, null, null, null, 5000, false);
+            await this._updateMaturity(modelName, total, outcomes, null, null, null, null, null, config.minSamples, false);
             return { modelName, totalPredictions: total, recordedOutcomes: outcomes, isProductionReady: false, reason: 'Insufficient data' };
         }
 
@@ -55,9 +132,16 @@ class ModelMaturityService {
         const recall = tp + fn > 0 ? tp / (tp + fn) : 0;
         const f1 = precision + recall > 0 ? 2 * (precision * recall) / (precision + recall) : 0;
         const accuracy = (tp + tn) / Math.max(1, outcomes);
-        const isProductionReady = total >= 5000 && f1 >= 0.75;
 
-        await this._updateMaturity(modelName, total, outcomes, precision, recall, f1, accuracy, null, 5000, isProductionReady);
+        // Compute ROC AUC & ECE (Calibration Error) - Points 2 & 3
+        const aucRoc = calculateROC_AUC(samples);
+        const calibrationError = calculateECE(samples);
+
+        const isProductionReady = outcomes >= config.minSamples && f1 >= config.f1Min;
+
+        await this._updateMaturity(
+            modelName, total, outcomes, precision, recall, f1, aucRoc, calibrationError, config.minSamples, isProductionReady
+        );
 
         return {
             modelName,
@@ -67,6 +151,8 @@ class ModelMaturityService {
             recall: Math.round(recall * 10000) / 10000,
             f1: Math.round(f1 * 10000) / 10000,
             accuracy: Math.round(accuracy * 10000) / 10000,
+            aucRoc: Math.round(aucRoc * 10000) / 10000,
+            calibrationError: Math.round(calibrationError * 10000) / 10000,
             isProductionReady,
         };
     }

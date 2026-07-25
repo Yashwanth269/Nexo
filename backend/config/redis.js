@@ -49,6 +49,14 @@ class InMemoryRedis {
 
 
 
+    async mget(...keys) {
+        const results = [];
+        for (const k of keys) {
+            results.push(await this.get(k));
+        }
+        return results;
+    }
+
     get isOpen() {
         return true;
     }

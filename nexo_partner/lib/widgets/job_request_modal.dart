@@ -98,7 +98,7 @@ class _JobRequestModalState extends State<JobRequestModal> {
             // Warning Icon
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(color: const Color(0xFFFF6A00).withOpacity(0.1), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: const Color(0xFFFF6A00).withValues(alpha: 0.1), shape: BoxShape.circle),
               child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFFF6A00), size: 40),
             ),
             const SizedBox(height: 24),
@@ -278,13 +278,13 @@ class _JobRequestModalState extends State<JobRequestModal> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text("PRIORITY TASK", style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white.withOpacity(0.8))),
+                            Text("PRIORITY TASK", style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white.withValues(alpha: 0.8))),
                             Text("New Job Request", style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
                           ],
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
+                          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
                           child: Row(
                             children: [
                               const Icon(Icons.timer_outlined, color: Colors.white, size: 20),
@@ -399,7 +399,7 @@ class _JobRequestModalState extends State<JobRequestModal> {
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               color: _showNegotiation ? Colors.transparent : const Color(0xFFFFF7ED),
-                              border: Border.all(color: const Color(0xFFFF6A00).withOpacity(_showNegotiation ? 0.1 : 0.3)),
+                              border: Border.all(color: const Color(0xFFFF6A00).withValues(alpha: _showNegotiation ? 0.1 : 0.3)),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Column(
@@ -499,7 +499,7 @@ class _JobRequestModalState extends State<JobRequestModal> {
   Widget _buildStatCard(IconData icon, String label, String value) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: const Color(0xFFFFF7ED).withOpacity(0.5), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: const Color(0xFFFFF7ED).withValues(alpha: 0.5), borderRadius: BorderRadius.circular(16)),
       child: Row(
         children: [
           Icon(icon, color: const Color(0xFFFF6A00), size: 24),

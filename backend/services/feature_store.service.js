@@ -5,72 +5,121 @@ const WORKER_CACHE_TTL = 1800;
 const JOB_CACHE_TTL = 1800;
 
 class FeatureStoreService {
+    /**
+     * Fetch features for a single worker
+     */
     async getWorkerFeatures(workerId) {
-        const cacheKey = `worker:features:${workerId}`;
+        const batchRes = await this.getWorkersFeaturesBatch([workerId]);
+        return batchRes[workerId] || this.getDefaultWorkerFeatures(workerId);
+    }
+
+    /**
+     * Batch Retrieval API (Resolves sequential N+1 read overhead for dispatch/ranking loops)
+     */
+    async getWorkersFeaturesBatch(workerIds) {
+        if (!workerIds || workerIds.length === 0) return {};
+        
+        const results = {};
+        const uncachedIds = [];
+        const cacheKeys = workerIds.map(id => `worker:features:${id}`);
+
+        // 1. Try reading all from Redis concurrently (Batch MGET)
         try {
-            const cached = await redis.get(cacheKey);
-            if (cached) {
-                await redis.expire(cacheKey, WORKER_CACHE_TTL);
-                return JSON.parse(cached);
-            }
+            const cachedValues = await redis.mget(...cacheKeys);
+            cachedValues.forEach((val, idx) => {
+                const wId = workerIds[idx];
+                if (val) {
+                    results[wId] = JSON.parse(val);
+                } else {
+                    uncachedIds.push(wId);
+                }
+            });
         } catch (err) {
-            console.warn('[FEATURE_STORE] Redis read failed:', err.message);
+            console.warn('[FEATURE_STORE] Redis MGET failed, falling back to DB batch:', err.message);
+            uncachedIds.push(...workerIds);
         }
 
-        try {
-            const res = await db.query(
-                `SELECT * FROM worker_features WHERE worker_id = $1`,
-                [workerId]
-            );
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const safeIds = uncachedIds.filter(id => uuidRegex.test(id));
 
-            let features;
-            if (res.rowCount > 0) {
-                const row = res.rows[0];
-                const acceptanceRate = row.completion_rate !== null && row.completion_rate > 0
-                    ? parseFloat(row.completion_rate) / 100.0
-                    : 1.0;
-                features = {
-                    worker_id: row.worker_id,
-                    completion_rate: parseFloat(row.completion_rate || 100.0),
-                    cancellation_rate: parseFloat(row.cancellation_rate || 0.0),
-                    avg_rating: parseFloat(row.avg_rating || 4.5),
-                    total_ratings_count: parseInt(row.total_ratings_count || 0),
-                    avg_response_time: parseFloat(row.avg_response_time || 2.0),
-                    reliability_score: parseFloat(row.reliability_score || 1.0),
-                    eta_confidence_score: parseFloat(row.eta_confidence_score || 0.95),
-                    worker_load_score: parseFloat(row.worker_load_score || 0.0),
-                    active_jobs_count: parseInt(row.active_jobs_count || 0),
-                    fatigue_score: parseFloat(row.fatigue_score || 0.0),
-                    fatigue_24h: parseFloat(row.fatigue_24h || 0.0),
-                    fatigue_7d: parseFloat(row.fatigue_7d || 0.0),
-                    fatigue_30d: parseFloat(row.fatigue_30d || 0.0),
-                    fraud_risk_score: parseFloat(row.fraud_risk_score || 0.0),
-                    is_shadow_banned: row.is_shadow_banned || false,
-                    trust_decay_factor: parseFloat(row.trust_decay_factor || 1.0),
-                    last_job_event_at: row.last_job_event_at || row.last_event_at,
-                    acceptance_rate: acceptanceRate,
-                    online_consistency: 1.0,
-                };
-            } else {
-                features = this.getDefaultWorkerFeatures(workerId);
+        // 2. Fetch uncached profiles from database in one single query (removes sequential loop)
+        try {
+            const dbRows = {};
+            if (safeIds.length > 0) {
+                const res = await db.query(
+                    "SELECT * FROM worker_features WHERE worker_id = ANY($1::uuid[])",
+                    [safeIds]
+                );
+                res.rows.forEach(row => {
+                    dbRows[row.worker_id] = row;
+                });
             }
 
-            const fatigue24h = await redis.get(`worker:${workerId}:rejections`) || '0';
-            const ignored = await redis.get(`worker:${workerId}:ignored`) || '0';
-            const timeouts = await redis.get(`worker:${workerId}:timeouts`) || '0';
+            // Map and calculate features
+            for (const id of uncachedIds) {
+                const row = dbRows[id];
+                let features;
 
-            const rCount = parseInt(fatigue24h);
-            const iCount = parseInt(ignored);
-            const tCount = parseInt(timeouts);
-            const z = (0.4 * rCount) + (0.3 * iCount) + (0.2 * tCount) - 2.0;
-            features.fatigue_24h = Math.min(1.0, 1 / (1 + Math.exp(-z)));
+                if (row) {
+                    const acceptanceRate = row.completion_rate !== null && row.completion_rate > 0
+                        ? parseFloat(row.completion_rate) / 100.0
+                        : 1.0;
+                    features = {
+                        worker_id: row.worker_id,
+                        completion_rate: parseFloat(row.completion_rate || 100.0),
+                        cancellation_rate: parseFloat(row.cancellation_rate || 0.0),
+                        avg_rating: parseFloat(row.avg_rating || 4.5),
+                        total_ratings_count: parseInt(row.total_ratings_count || 0, 10),
+                        avg_response_time: parseFloat(row.avg_response_time || 2.0),
+                        reliability_score: parseFloat(row.reliability_score || 1.0),
+                        eta_confidence_score: parseFloat(row.eta_confidence_score || 0.95),
+                        worker_load_score: parseFloat(row.worker_load_score || 0.0),
+                        active_jobs_count: parseInt(row.active_jobs_count || 0, 10),
+                        fatigue_score: parseFloat(row.fatigue_score || 0.0),
+                        fatigue_24h: parseFloat(row.fatigue_24h || 0.0),
+                        fatigue_7d: parseFloat(row.fatigue_7d || 0.0),
+                        fatigue_30d: parseFloat(row.fatigue_30d || 0.0),
+                        fraud_risk_score: parseFloat(row.fraud_risk_score || 0.0),
+                        is_shadow_banned: row.is_shadow_banned || false,
+                        trust_decay_factor: parseFloat(row.trust_decay_factor || 1.0),
+                        last_job_event_at: row.last_job_event_at || row.last_event_at || new Date().toISOString(),
+                        acceptance_rate: acceptanceRate,
+                        online_consistency: 1.0,
+                        
+                        // Lineage Metadata
+                        _lineage: {
+                            source: 'PostgreSQL:worker_features',
+                            version: '1.0.0',
+                            status: 'DERIVED',
+                            lastUpdated: row.updated_at || new Date().toISOString()
+                        }
+                    };
+                } else {
+                    features = this.getDefaultWorkerFeatures(id);
+                }
 
-            await redis.set(cacheKey, JSON.stringify(features), 'EX', WORKER_CACHE_TTL);
-            return features;
-        } catch (err) {
-            console.error('[FEATURE_STORE] DB read failed:', err.message);
-            return this.getDefaultWorkerFeatures(workerId);
+                // Compute rolling fatigue values
+                const rCount = await redis.get(`worker:${id}:rejections`) || '0';
+                const iCount = await redis.get(`worker:${id}:ignored`) || '0';
+                const tCount = await redis.get(`worker:${id}:timeouts`) || '0';
+                const z = (0.4 * parseInt(rCount, 10)) + (0.3 * parseInt(iCount, 10)) + (0.2 * parseInt(tCount, 10)) - 2.0;
+                features.fatigue_24h = Math.min(1.0, 1 / (1 + Math.exp(-z)));
+
+                // Write-through cache key
+                const cacheKey = `worker:features:${id}`;
+                await redis.set(cacheKey, JSON.stringify(features), 'EX', WORKER_CACHE_TTL).catch(() => {});
+                
+                results[id] = features;
+            }
+        } catch (dbErr) {
+            console.error('[FEATURE_STORE] Batch database query failed:', dbErr.message);
+            // Fallback to defaults
+            uncachedIds.forEach(id => {
+                results[id] = this.getDefaultWorkerFeatures(id);
+            });
         }
+
+        return results;
     }
 
     getDefaultWorkerFeatures(workerId) {
@@ -95,6 +144,12 @@ class FeatureStoreService {
             last_job_event_at: new Date().toISOString(),
             acceptance_rate: 1.0,
             online_consistency: 0.5,
+            _lineage: {
+                source: 'Memory:DefaultValues',
+                version: '1.0.0',
+                status: 'UNKNOWN_FALLBACK',
+                lastUpdated: new Date().toISOString()
+            }
         };
     }
 

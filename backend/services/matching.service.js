@@ -614,118 +614,120 @@ class MatchingService {
         const candidates = [];
         const shadowBanService = require('./shadow_ban.service');
         const fatigueService = require('./fatigue.service');
-        const reputationService = require('./reputation.service');
+        const featureStoreService = require('./feature_store.service');
         const dispatchConfig = require('../config/dispatch.config');
 
-        const logRejection = async (workerId, reason, score = 0.0) => {
-            try {
-                await db.query(`
-                    CREATE TABLE IF NOT EXISTS dispatch_rejection_logs (
-                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                        worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
-                        job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
-                        dispatch_score DECIMAL DEFAULT 0.0,
-                        reject_reason VARCHAR(255) NOT NULL,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                `);
-                const check = await db.query(
-                    "SELECT id FROM dispatch_rejection_logs WHERE job_id = $1 AND worker_id = $2 AND reject_reason = $3",
-                    [job.id, workerId, reason]
-                );
-                if (check.rowCount === 0) {
-                    await db.query(
-                        `INSERT INTO dispatch_rejection_logs (job_id, worker_id, dispatch_score, reject_reason)
-                         VALUES ($1, $2, $3, $4)`,
-                        [job.id, workerId, score, reason]
-                    );
-                }
-            } catch (e) {
-                // Non-critical rejection log write
-            }
+        // Extract worker IDs for batch preloading
+        const workerIds = workers.map(w => w.id);
+
+        // 1. Batch load features for all workers concurrently (resolves N+1 loops)
+        const featuresMap = await featureStoreService.getWorkersFeaturesBatch(workerIds);
+
+        // 2. Batch load category skill confidences
+        let confidenceMap = {};
+        if (workerIds.length > 0) {
+            const confidenceRes = await db.query(
+                "SELECT worker_id, confidence_score FROM worker_skills WHERE category = $1 AND worker_id = ANY($2::uuid[])",
+                [job.category, workerIds]
+            );
+            confidenceRes.rows.forEach(r => {
+                confidenceMap[r.worker_id] = (parseInt(r.confidence_score || 50) / 100.0);
+            });
+        }
+
+        // 3. Batch load affinity scores (previous completed jobs count)
+        let affinityMap = {};
+        if (workerIds.length > 0) {
+            const affinityRes = await db.query(
+                "SELECT worker_id, COUNT(*)::int as count FROM jobs WHERE user_id = $1 AND worker_id = ANY($2::uuid[]) AND status = 'COMPLETED' GROUP BY worker_id",
+                [job.user_id, workerIds]
+            );
+            affinityRes.rows.forEach(r => {
+                affinityMap[r.worker_id] = r.count;
+            });
+        }
+
+        const rejectionsToLog = [];
+        const logRejection = (workerId, reason, score = 0.0) => {
+            rejectionsToLog.push({ workerId, reason, score });
         };
 
         for (const worker of workers) {
             // Check 1: Distance
             if (worker.distance > radiusKm) {
-                await logRejection(worker.id, 'Distance');
+                logRejection(worker.id, 'Distance');
                 continue;
             }
 
             // Check 2: Online
             if (!worker.is_online) {
-                await logRejection(worker.id, 'Offline');
+                logRejection(worker.id, 'Offline');
                 continue;
             }
 
             // Check 3: Available
             if (!worker.is_available) {
-                await logRejection(worker.id, 'Busy');
+                logRejection(worker.id, 'Busy');
                 continue;
             }
 
             // Check 4: Verification
             if (worker.verification_status !== 'VERIFIED') {
-                await logRejection(worker.id, 'Unverified');
+                logRejection(worker.id, 'Unverified');
                 continue;
             }
 
             // Check 5: Exclusions
             if (excludedIds.has(worker.id)) {
-                await logRejection(worker.id, 'Already working');
+                logRejection(worker.id, 'Already working');
                 continue;
             }
             
             // Check 6: Skill match
             if (!isSkillMatch(worker.skills, worker.tasks, job.category)) {
-                await logRejection(worker.id, 'Skill mismatch');
+                logRejection(worker.id, 'Skill mismatch');
                 continue;
             }
 
-            const rep = await reputationService.getReputation(worker.id).catch(() => ({}));
-            const fatigue = await fatigueService.calculateAdvancedFatigue(worker.id).catch(() => ({ score: 0, band: 'NONE' }));
+            // Get preloaded features
+            const features = featuresMap[worker.id] || {
+                fatigue_score: 0.0,
+                reliability_score: 1.0,
+                avg_rating: 4.5,
+                is_shadow_banned: false,
+                acceptance_rate: 1.0
+            };
 
             // Check 7: Fatigue
-            if (fatigue.band === 'CRITICAL') {
-                await logRejection(worker.id, 'Fatigue');
+            if (features.fatigue_score > 0.85) {
+                logRejection(worker.id, 'Fatigue');
                 continue;
             }
 
             // Check 8: Shadow ban
-            const shadowPenalties = await shadowBanService.applyBanPenalties(worker.id, 1.0, 1.0);
-            if (shadowPenalties.dispatch === 0.0) {
-                await logRejection(worker.id, 'Shadow banned');
+            if (features.is_shadow_banned) {
+                logRejection(worker.id, 'Shadow banned');
                 continue;
             }
 
             // Check 9: Trust score
             const trustVal = worker.rep_trust_score !== null ? parseFloat(worker.rep_trust_score) : 50;
             if (trustVal < 40) {
-                await logRejection(worker.id, 'Trust too low');
+                logRejection(worker.id, 'Trust too low');
                 continue;
             }
 
             // Check 10: Reputation
             const repVal = worker.rep_overall_score !== null ? parseFloat(worker.rep_overall_score) : 50;
             if (repVal < 40) {
-                await logRejection(worker.id, 'Reputation too low');
+                logRejection(worker.id, 'Reputation too low');
                 continue;
             }
 
             // Score computation
-            let skillConfidence = 0.5;
-            try {
-                const sc = await skillConfidenceService.getCategoryConfidence(worker.id, job.category);
-                skillConfidence = (sc.confidence_score || 50) / 100.0;
-            } catch (e) {}
-
+            const skillConfidence = confidenceMap[worker.id] || 0.5;
             const reputation = repVal / 100.0;
-
-            let pAccept = 0.5;
-            try {
-                const acceptanceResult = await rankingService.calculateAcceptanceProbability(worker, worker.distance, job.price);
-                pAccept = acceptanceResult.probability || 0.5;
-            } catch (e) {}
+            const pAccept = features.acceptance_rate || 0.5;
 
             const distanceScore = 1.0 / (1.0 + worker.distance);
             const availabilityScore = worker.is_available ? 1.0 : 0.5;
@@ -753,35 +755,31 @@ class MatchingService {
             let score = compSkill + compRep + compAccept + compDist + compFairnessEarnings + compFairnessIdle + compAvail + compEta;
 
             // Apply Penalties
-            const fatiguePenalty = fatigue.score * 0.15;
+            const fatiguePenalty = (features.fatigue_score || 0.0) * 0.15;
             score -= fatiguePenalty;
-            score *= shadowPenalties.visibility;
 
             // Affinity boost
             let affinityBoost = 0.0;
-            const prevHired = await db.query(
-                "SELECT COUNT(*) FROM jobs WHERE user_id = $1 AND worker_id = $2 AND status = 'COMPLETED'",
-                [job.user_id, worker.id]
-            );
-            if (parseInt(prevHired.rows[0]?.count || 0) > 0) {
+            const prevHiredCount = affinityMap[worker.id] || 0;
+            if (prevHiredCount > 0) {
                 affinityBoost = 0.10;
                 score += affinityBoost;
             }
 
             const finalScore = Math.min(1.0, Math.max(0.0, score));
 
-            // Log detailed ranking breakdown to DB (Point 14)
+            // Log detailed ranking breakdown to DB
             try {
                 await db.query(`
                     INSERT INTO dispatch_ranking_breakdowns (
                         job_id, worker_id, final_score, skill_score, distance_score,
                         acceptance_probability, trust_score, availability_score, eta_score,
-                        fatigue_penalty, fraud_penalty
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                        fatigue_penalty, fraud_penalty, model_version, feature_version, dispatch_policy_version
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 `, [
                     job.id,
                     worker.id,
-                    finalScore * 100, // format as out of 100 for display (e.g. 92)
+                    finalScore * 100,
                     compSkill * 100,
                     compDist * 100,
                     compAccept * 100,
@@ -789,7 +787,10 @@ class MatchingService {
                     compAvail * 100,
                     compEta * 100,
                     -fatiguePenalty * 100,
-                    0.0 // fraud penalty placeholder
+                    0.0,
+                    '1.2.0-bandit',
+                    '2.0.1',
+                    '1.0.0'
                 ]);
             } catch (breakdownErr) {
                 console.error('[RANKING-BREAKDOWN-ERROR]', breakdownErr.message);
@@ -801,6 +802,38 @@ class MatchingService {
                 pAccept,
                 etaMinutes
             });
+        }
+
+        // Perform bulk insert of dispatch rejection logs to avoid sequential database write hits
+        if (rejectionsToLog.length > 0) {
+            try {
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS dispatch_rejection_logs (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                        job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+                        dispatch_score DECIMAL DEFAULT 0.0,
+                        reject_reason VARCHAR(255) NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                `);
+
+                const values = [];
+                const valueStrings = [];
+                let paramIdx = 1;
+                rejectionsToLog.forEach(r => {
+                    valueStrings.push(`($${paramIdx}, $${paramIdx+1}, $${paramIdx+2}, $${paramIdx+3})`);
+                    values.push(r.workerId, job.id, r.score, r.reason);
+                    paramIdx += 4;
+                });
+                
+                await db.query(`
+                    INSERT INTO dispatch_rejection_logs (worker_id, job_id, dispatch_score, reject_reason)
+                    VALUES ${valueStrings.join(', ')}
+                `, values);
+            } catch (bulkErr) {
+                console.warn('[REJECTION-BULK-LOG-WARN]', bulkErr.message);
+            }
         }
 
         // Contextual Bandit Exploration: 10% newer worker quotas

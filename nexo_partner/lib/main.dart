@@ -8,12 +8,15 @@ import 'screens/profile/profile_setup_screen.dart';
 import 'package:nexo_partner/services/cache_service.dart';
 import 'package:nexo_partner/services/background_service.dart';
 import 'package:nexo_partner/services/notification_service.dart';
+import 'package:nexo_partner/utils/theme_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await BackgroundTracker.initializeService();
   await LocalNotificationService.initialize();
   await CacheService.init();
+  await ThemeManager.init(); // Load active theme from preferences
+
   final prefs = await SharedPreferences.getInstance();
   final String? token = prefs.getString('worker_token');
   final bool isProfileComplete = prefs.getBool('isProfileComplete') ?? false;
@@ -37,15 +40,34 @@ class NexoPartnerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Nexo Partner',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFF6A00)),
-        useMaterial3: true,
-        textTheme: GoogleFonts.interTextTheme(),
-      ),
-      home: initialScreen,
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeManager.themeModeNotifier,
+      builder: (context, currentThemeMode, child) {
+        return MaterialApp(
+          title: 'Nexo Partner',
+          debugShowCheckedModeBanner: false,
+          themeMode: currentThemeMode,
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFFFF6A00),
+              brightness: Brightness.light,
+            ),
+            useMaterial3: true,
+            textTheme: GoogleFonts.interTextTheme(),
+            scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+          ),
+          darkTheme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFFFF6A00),
+              brightness: Brightness.dark,
+            ),
+            useMaterial3: true,
+            textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+            scaffoldBackgroundColor: const Color(0xFF0F172A),
+          ),
+          home: initialScreen,
+        );
+      },
     );
   }
 }

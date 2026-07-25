@@ -1,99 +1,118 @@
 const db = require('../config/db');
-const { getIO } = require('../config/socket');
-
-const ACHIEVEMENTS = {
-    TOP_WORKER: { title: 'Top Worker', desc: 'Consistently high ratings and completions', icon: 'trophy' },
-    FASTEST_RESPONDER: { title: 'Fastest Responder', desc: 'Responds to job offers within 2 minutes on average', icon: 'lightning' },
-    MOST_RELIABLE: { title: 'Most Reliable', desc: '100% completion rate over 30+ jobs', icon: 'shield' },
-    CUSTOMER_FAVORITE: { title: 'Customer Favorite', desc: 'Highest repeat hire rate', icon: 'heart' },
-    MONTHLY_CHAMPION: { title: 'Monthly Champion', desc: 'Most jobs completed this month', icon: 'crown' },
-    IRON_WORKER: { title: 'Iron Worker', desc: 'Completed 500+ jobs', icon: 'medal' },
-    FIVE_STAR: { title: 'Five Star', desc: 'Maintained 5.0 rating for 30+ jobs', icon: 'star' },
-    EARLY_BIRD: { title: 'Early Bird', desc: 'Accepts jobs before 7 AM', icon: 'sunrise' },
-    NIGHT_OWL: { title: 'Night Owl', desc: 'Completes jobs after 10 PM', icon: 'moon' },
-    SPEED_DEMON: { title: 'Speed Demon', desc: 'Completes jobs 30% faster than average', icon: 'rocket' },
-};
+const redis = require('../config/redis');
+const gamificationConfig = require('../config/gamification.config');
+const eventStream = require('../utils/event_stream');
 
 class GamificationService {
+    constructor() {
+        // Subscribe to event stream for automated event-driven evaluation
+        try {
+            eventStream.on('job_completed', async (data) => {
+                if (data.workerId) {
+                    await this.evaluateWorker(data.workerId).catch(() => {});
+                }
+            });
+            eventStream.on('feedback_received', async (data) => {
+                if (data.workerId) {
+                    await this.evaluateWorker(data.workerId).catch(() => {});
+                }
+            });
+        } catch (err) {
+            console.warn("[GAMIFICATION-EVENT-WARN] Event stream subscription failed:", err.message);
+        }
+    }
+
+    /**
+     * Evaluates a worker's achievements using precomputed features (optimizes database scans)
+     */
     async evaluateWorker(workerId) {
-        const workerRes = await db.query("SELECT * FROM workers WHERE id = $1", [workerId]);
-        if (workerRes.rowCount === 0) return;
-        const worker = workerRes.rows[0];
+        // 1. Fetch precomputed features (avoiding 6 expensive sequential aggregate queries)
+        const featureStoreService = require('./feature_store.service');
+        const features = await featureStoreService.getWorkerFeatures(workerId);
 
-        const statsRes = await db.query(`
-            SELECT
-                COUNT(*) FILTER (WHERE status = 'COMPLETED') as total_completed,
-                COUNT(*) FILTER (WHERE status = 'COMPLETED' AND completed_at >= NOW() - INTERVAL '30 days') as monthly_completed,
-                COALESCE(AVG(r.rating) FILTER (WHERE r.rating_type = 'USER_TO_WORKER'), 0) as avg_rating,
-                COUNT(*) FILTER (WHERE r.rating = 5) as five_star_count,
-                COUNT(DISTINCT jo.user_id) FILTER (WHERE jo.status = 'ACCEPTED') as unique_customers
-            FROM jobs j
-            LEFT JOIN ratings r ON r.to_id = j.worker_id AND r.rating_type = 'USER_TO_WORKER'
-            LEFT JOIN job_offers jo ON jo.job_id = j.id AND jo.worker_id = j.worker_id
-            WHERE j.worker_id = $1
-        `, [workerId]);
-        const stats = statsRes.rows[0];
+        // Fetch remaining weekend stats & offers count in parallel
+        const now = new Date();
+        const dayAgo = new Date(now - 24 * 60 * 60 * 1000);
+        
+        const [weekendRes, offersRes] = await Promise.all([
+            db.query(
+                "SELECT COUNT(*)::int as count FROM jobs WHERE worker_id = $1 AND status = 'COMPLETED' AND EXTRACT(ISODOW FROM COALESCE(completed_at, created_at)) IN (6, 7)", 
+                [workerId]
+            ),
+            db.query(
+                "SELECT COUNT(*)::int as count FROM job_offers WHERE worker_id = $1", 
+                [workerId]
+            )
+        ]);
 
-        const responseRes = await db.query(`
-            SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (jo.updated_at - jo.created_at))), 0) as avg_response_seconds
-            FROM job_offers jo WHERE jo.worker_id = $1 AND jo.status = 'ACCEPTED'
-        `, [workerId]);
-        const avgResponse = parseFloat(responseRes.rows[0]?.avg_response_seconds || 999);
+        const weekendJobs = weekendRes.rows[0]?.count || 0;
+        const totalOffers = offersRes.rows[0]?.count || 0;
+        
+        const completedJobs = features.total_ratings_count || 0; // rating count approximation or features.jobs_completed
+        // Query completed jobs count directly from jobs table to be precise
+        const jobsCountRes = await db.query("SELECT COUNT(*)::int as count FROM jobs WHERE worker_id = $1 AND status = 'COMPLETED'", [workerId]);
+        const actualCompletedJobs = jobsCountRes.rows[0]?.count || 0;
 
-        const evaluations = [
-            {
-                type: 'TOP_WORKER',
-                check: stats.total_completed >= 50 && parseFloat(stats.avg_rating) >= 4.5,
-            },
-            {
-                type: 'FASTEST_RESPONDER',
-                check: avgResponse < 120 && stats.total_completed >= 20,
-            },
-            {
-                type: 'MOST_RELIABLE',
-                check: stats.total_completed >= 30,
-            },
-            {
-                type: 'CUSTOMER_FAVORITE',
-                check: parseInt(stats.unique_customers || 0) >= 20,
-            },
-            {
-                type: 'MONTHLY_CHAMPION',
-                check: parseInt(stats.monthly_completed || 0) >= 30,
-            },
-            {
-                type: 'IRON_WORKER',
-                check: stats.total_completed >= 500,
-            },
-            {
-                type: 'FIVE_STAR',
-                check: parseInt(stats.five_star_count || 0) >= 30,
-            },
-            {
-                type: 'EARLY_BIRD',
-                check: false,
-            },
-            {
-                type: 'NIGHT_OWL',
-                check: false,
-            },
-            {
-                type: 'SPEED_DEMON',
-                check: false,
-            },
-        ];
+        const evaluations = [];
+        const progress = {};
 
+        // 2. Evaluate rules dynamically based on configuration
+        for (const [type, ach] of Object.entries(gamificationConfig.achievements)) {
+            let eligible = false;
+            let current = 0;
+            let target = 1;
+
+            if (type === 'FAST_RESPONDER') {
+                target = ach.rules.minOffers;
+                current = totalOffers;
+                eligible = totalOffers >= ach.rules.minOffers && features.avg_response_time < ach.rules.maxResponseSec;
+            } else if (type === 'TOP_RATED') {
+                target = ach.rules.minRatings;
+                current = features.total_ratings_count;
+                eligible = features.total_ratings_count >= ach.rules.minRatings && features.avg_rating >= ach.rules.minRating;
+            } else if (type === 'RELIABLE_PROFESSIONAL') {
+                target = ach.rules.minJobs;
+                current = actualCompletedJobs;
+                eligible = actualCompletedJobs >= ach.rules.minJobs && features.cancellation_rate < ach.rules.maxCancellationRate;
+            } else if (type === 'WEEKEND_HERO') {
+                target = ach.rules.minWeekendJobs;
+                current = weekendJobs;
+                eligible = actualCompletedJobs >= ach.rules.minJobs && weekendJobs >= ach.rules.minWeekendJobs;
+            } else if (type === 'RISING_STAR') {
+                target = ach.rules.minJobs;
+                current = actualCompletedJobs;
+                eligible = actualCompletedJobs >= ach.rules.minJobs && features.avg_rating >= ach.rules.minRating && features.completion_rate >= ach.rules.minCompletionRate;
+            }
+
+            evaluations.push({ type, check: eligible, details: ach });
+            progress[type] = {
+                title: ach.title,
+                current,
+                target,
+                percentage: Math.min(100, Math.round((current / target) * 100))
+            };
+        }
+
+        // Remove ineligible achievements
+        const ineligibleTypes = evaluations.filter(ev => !ev.check).map(ev => ev.type);
+        if (ineligibleTypes.length > 0) {
+            await db.query(
+                "DELETE FROM worker_achievements WHERE worker_id = $1 AND achievement_type = ANY($2)",
+                [workerId, ineligibleTypes]
+            );
+        }
+
+        // Insert new achievements using bulk parameters if possible, or simple checks
         for (const ev of evaluations) {
             if (!ev.check) continue;
-            const config = ACHIEVEMENTS[ev.type];
             await db.query(`
                 INSERT INTO worker_achievements (worker_id, achievement_type, title, description, icon, awarded_at)
                 VALUES ($1, $2, $3, $4, $5, NOW())
                 ON CONFLICT (worker_id, achievement_type) DO NOTHING
-            `, [workerId, ev.type, config.title, config.desc, config.icon]);
+            `, [workerId, ev.type, ev.details.title, ev.details.desc, ev.details.icon]);
         }
 
-        return { workerId, stats, avgResponse };
+        return { workerId, progress };
     }
 
     async getWorkerAchievements(workerId) {
@@ -104,7 +123,18 @@ class GamificationService {
         return res.rows;
     }
 
+    /**
+     * Get Leaderboard with Redis caching support (reduces DB lookup workload)
+     */
     async getLeaderboard(category = null, limit = 20) {
+        const cacheKey = `leaderboard:${category || 'global'}:${limit}`;
+        try {
+            const cached = await redis.get(cacheKey);
+            if (cached) {
+                return JSON.parse(cached);
+            }
+        } catch (err) {}
+
         let query = `
             SELECT w.id, w.full_name, w.photo_url,
                    COUNT(DISTINCT wa.id) as achievements_count,
@@ -120,8 +150,15 @@ class GamificationService {
         }
         query += " GROUP BY w.id, w.full_name, w.photo_url, r.overall_score ORDER BY achievements_count DESC, reputation_score DESC LIMIT $" + (params.length + 1);
         params.push(limit);
+        
         const res = await db.query(query, params);
-        return res.rows;
+        const rows = res.rows;
+
+        try {
+            await redis.set(cacheKey, JSON.stringify(rows), 'EX', gamificationConfig.leaderboardCacheTtl);
+        } catch (err) {}
+
+        return rows;
     }
 }
 

@@ -1,80 +1,20 @@
 const db = require('../config/db');
+const disputeConfig = require('../config/dispute.config');
+const userTrustService = require('./user_trust.service');
 const http = require('http');
 const https = require('https');
-const userTrustService = require('./user_trust.service');
 
-const SLA_HOURS = 48;
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+async function callMLService(endpoint, bodyData) {
+    const body = JSON.stringify(bodyData);
+    let attempts = 0;
+    const maxRetries = disputeConfig.mlMaxRetries;
+    const timeout = disputeConfig.mlTimeoutMs;
 
-class DisputeService {
-    async createDispute(paymentId, jobId, initiatorId, initiatorRole, respondentId, reason, description = '', evidence = []) {
-        const slaDeadline = new Date(Date.now() + SLA_HOURS * 60 * 60 * 1000);
-        const res = await db.query(
-            `INSERT INTO disputes (payment_id, job_id, initiator_id, initiator_role, respondent_id, reason, description, evidence, sla_deadline)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-             RETURNING *`,
-            [paymentId, jobId, initiatorId, initiatorRole, respondentId, reason, description, JSON.stringify(evidence), slaDeadline]
-        );
-
-        const dispute = res.rows[0];
-        await this._evaluateDisputeRisk(dispute);
-        if (initiatorRole === 'USER') {
-            userTrustService.recordEvent(initiatorId, 'DISPUTE').catch(() => {});
-        }
-        return dispute;
-    }
-
-    async _evaluateDisputeRisk(dispute) {
+    while (attempts < maxRetries) {
+        attempts++;
         try {
-            const jobRes = await db.query("SELECT * FROM jobs WHERE id = $1", [dispute.job_id]);
-            const job = jobRes.rows[0];
-            if (!job) return;
-
-            const workerRepRes = await db.query(
-                "SELECT trust_score, reliability_score FROM worker_reputation_scores WHERE worker_id = $1",
-                [job.worker_id]
-            );
-            const workerRep = workerRepRes.rows[0] || {};
-            const userPayRes = await db.query(
-                "SELECT score FROM payment_trust_scores WHERE subject_id = $1 AND role = 'USER'",
-                [job.user_id]
-            );
-            const userPay = userPayRes.rows[0] || {};
-            const disputeCountRes = await db.query(
-                "SELECT COUNT(*) as count FROM disputes d JOIN jobs j ON d.job_id = j.id WHERE j.worker_id = $1",
-                [job.worker_id]
-            );
-            const userDisputeCountRes = await db.query(
-                "SELECT COUNT(*) as count FROM disputes d JOIN jobs j ON d.job_id = j.id WHERE j.user_id = $1",
-                [job.user_id]
-            );
-
-            const categoryMap = {
-                "PLUMBING": 0, "ELECTRICIAN": 1, "CLEANING": 2, "PAINTING": 3,
-                "CARPENTRY": 4, "MOVING": 5, "GARDENING": 6, "APPLIANCE_REPAIR": 7,
-                "IT_SUPPORT": 8, "TUTORING": 9, "PHOTOGRAPHY": 10, "EVENT": 11,
-                "DELIVERY": 12, "OTHER": 13
-            };
-            const features = {
-                job_amount: parseFloat(job.price || 0),
-                category_encoded: categoryMap[job.category] || 13,
-                job_duration_minutes: job.completed_at ? (new Date(job.completed_at) - new Date(job.created_at)) / 60000 : 30,
-                worker_trust_score: parseFloat(workerRep.trust_score || 50),
-                worker_reliability_score: parseFloat(workerRep.reliability_score || 50),
-                worker_fraud_probability: 0.0,
-                worker_dispute_history: parseInt(disputeCountRes.rows[0]?.count || 0),
-                user_payment_trust_score: parseFloat(userPay.score || 50),
-                user_dispute_history: parseInt(userDisputeCountRes.rows[0]?.count || 0),
-                user_tenure_days: 30,
-                payment_type_encoded: job.payment_method === 'CASH' ? 1 : 0,
-                is_high_value: parseFloat(job.price || 0) > 1000 ? 1 : 0,
-                hour_of_day: new Date().getHours(),
-                day_of_week: new Date().getDay(),
-            };
-
-            const body = JSON.stringify({ features });
-            const response = await new Promise((resolve, reject) => {
-                const urlObj = new URL(`${ML_SERVICE_URL}/predict/dispute-risk`);
+            return await new Promise((resolve, reject) => {
+                const urlObj = new URL(`${disputeConfig.mlServiceUrl}${endpoint}`);
                 const transport = urlObj.protocol === 'https:' ? https : http;
                 const options = {
                     hostname: urlObj.hostname,
@@ -82,21 +22,115 @@ class DisputeService {
                     path: urlObj.pathname,
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-                    timeout: 2000,
+                    timeout,
                 };
                 const req = transport.request(options, (res) => {
                     let data = '';
                     res.on('data', (chunk) => data += chunk);
                     res.on('end', () => {
                         try { resolve(JSON.parse(data)); }
-                        catch { resolve(null); }
+                        catch { reject(new Error("Invalid JSON response from ML Service")); }
                     });
                 });
-                req.on('error', () => resolve(null));
-                req.on('timeout', () => { req.destroy(); resolve(null); });
+                req.on('error', (err) => reject(err));
+                req.on('timeout', () => { req.destroy(); reject(new Error("ML Request Timeout")); });
                 req.write(body);
                 req.end();
             });
+        } catch (err) {
+            console.warn(`[ML-CLIENT-WARN] Attempt ${attempts} failed: ${err.message}`);
+            if (attempts >= maxRetries) {
+                throw err;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, attempts)));
+        }
+    }
+}
+
+class DisputeService {
+    /**
+     * Create a dispute within a secure SQL transaction boundary
+     */
+    async createDispute(paymentId, jobId, initiatorId, initiatorRole, respondentId, reason, description = '', evidence = []) {
+        const client = await db.pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            const slaDeadline = new Date(Date.now() + disputeConfig.slaHours * 60 * 60 * 1000);
+            
+            const res = await client.query(
+                `INSERT INTO disputes (payment_id, job_id, initiator_id, initiator_role, respondent_id, reason, description, evidence, sla_deadline)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                 RETURNING *`,
+                [paymentId, jobId, initiatorId, initiatorRole, respondentId, reason, description, JSON.stringify(evidence), slaDeadline]
+            );
+            const dispute = res.rows[0];
+
+            // Record user trust events if customer-initiated
+            if (initiatorRole === 'USER') {
+                await userTrustService.recordEvent(initiatorId, 'DISPUTE').catch(() => {});
+            }
+
+            await client.query('COMMIT');
+            
+            // Trigger ML risk model in background (non-blocking for UI transaction)
+            this._evaluateDisputeRisk(dispute).catch(err => {
+                console.warn("[DISPUTE-BACKGROUND-ML-WARN] Evaluation failed:", err.message);
+            });
+
+            return dispute;
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw new Error(`[DISPUTE-TRANSACTION-FAILED] Could not record dispute: ${err.message}`);
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * Gathers all ML risk feature components concurrently
+     */
+    async _evaluateDisputeRisk(dispute) {
+        try {
+            // Fetch features concurrently (parallel DB lookups)
+            const [
+                jobRes,
+                workerRepRes,
+                userPayRes,
+                disputeCountRes,
+                userDisputeCountRes
+            ] = await Promise.all([
+                db.query("SELECT price, category, worker_id, user_id, payment_method, completed_at, created_at FROM jobs WHERE id = $1", [dispute.job_id]),
+                db.query("SELECT trust_score, reliability_score FROM worker_reputation_scores WHERE worker_id = (SELECT worker_id FROM jobs WHERE id = $1)", [dispute.job_id]),
+                db.query("SELECT score FROM payment_trust_scores WHERE subject_id = (SELECT user_id FROM jobs WHERE id = $1) AND role = 'USER'", [dispute.job_id]),
+                db.query("SELECT COUNT(*)::int as count FROM disputes d JOIN jobs j ON d.job_id = j.id WHERE j.worker_id = (SELECT worker_id FROM jobs WHERE id = $1)", [dispute.job_id]),
+                db.query("SELECT COUNT(*)::int as count FROM disputes d JOIN jobs j ON d.job_id = j.id WHERE j.user_id = (SELECT user_id FROM jobs WHERE id = $1)", [dispute.job_id])
+            ]);
+
+            const job = jobRes.rows[0];
+            if (!job) return;
+
+            const workerRep = workerRepRes.rows[0] || {};
+            const userPay = userPayRes.rows[0] || {};
+            
+            const features = {
+                job_amount: parseFloat(job.price || 0),
+                category_encoded: disputeConfig.categoryMap[job.category] || disputeConfig.categoryMap.OTHER,
+                job_duration_minutes: job.completed_at ? (new Date(job.completed_at) - new Date(job.created_at)) / 60000 : disputeConfig.defaultJobDurationMinutes,
+                worker_trust_score: parseFloat(workerRep.trust_score || 50),
+                worker_reliability_score: parseFloat(workerRep.reliability_score || 50),
+                worker_fraud_probability: 0.0,
+                worker_dispute_history: parseInt(disputeCountRes.rows[0]?.count || 0),
+                user_payment_trust_score: parseFloat(userPay.score || 50),
+                user_dispute_history: parseInt(userDisputeCountRes.rows[0]?.count || 0),
+                user_tenure_days: disputeConfig.defaultUserTenureDays,
+                payment_type_encoded: job.payment_method === 'CASH' ? 1 : 0,
+                is_high_value: parseFloat(job.price || 0) > disputeConfig.highValueThreshold ? 1 : 0,
+                hour_of_day: new Date().getHours(),
+                day_of_week: new Date().getDay(),
+            };
+
+            const response = await callMLService('/predict/dispute-risk', { features });
 
             if (response) {
                 await db.query(`
@@ -124,26 +158,52 @@ class DisputeService {
         }
     }
 
+    /**
+     * Resolve a dispute with resolver tracking
+     */
     async resolveDispute(disputeId, resolvedBy, resolution, outcome) {
-        const res = await db.query(
-            `UPDATE disputes
-             SET status = 'RESOLVED', resolution = $1, resolved_by = $2, resolved_at = NOW(), updated_at = NOW()
-             WHERE id = $3 AND status = 'OPEN'
-             RETURNING *`,
-            [resolution, resolvedBy, disputeId]
-        );
-        if (res.rowCount === 0) throw new Error("Dispute not found or already resolved");
-        return res.rows[0];
+        const client = await db.pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            const res = await client.query(
+                `UPDATE disputes
+                 SET status = 'RESOLVED', resolution = $1, resolved_by = $2, resolved_at = NOW(), updated_at = NOW()
+                 WHERE id = $3 AND status = 'OPEN'
+                 RETURNING *`,
+                [resolution, resolvedBy, disputeId]
+            );
+            if (res.rowCount === 0) {
+                throw new Error("Dispute not found or already resolved");
+            }
+
+            // Write action log
+            await client.query(`
+                INSERT INTO event_logs (event_type, metadata)
+                VALUES ($1, $2)
+            `, [
+                'dispute_resolved',
+                JSON.stringify({ disputeId, resolvedBy, resolution, outcome, timestamp: new Date().toISOString() })
+            ]);
+
+            await client.query('COMMIT');
+            return res.rows[0];
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
+        }
     }
 
     async getDispute(disputeId) {
-        const res = await db.query(`SELECT * FROM disputes WHERE id = $1`, [disputeId]);
+        const res = await db.query(`SELECT id, payment_id, job_id, initiator_id, initiator_role, respondent_id, status, reason, description, sla_deadline, sla_breached FROM disputes WHERE id = $1`, [disputeId]);
         return res.rows[0] || null;
     }
 
     async getDisputesByPayment(paymentId) {
         const res = await db.query(
-            `SELECT * FROM disputes WHERE payment_id = $1 ORDER BY created_at DESC`,
+            `SELECT id, payment_id, job_id, initiator_id, initiator_role, respondent_id, status, reason, description, sla_deadline, sla_breached FROM disputes WHERE payment_id = $1 ORDER BY created_at DESC`,
             [paymentId]
         );
         return res.rows;
@@ -152,7 +212,7 @@ class DisputeService {
     async getDisputesByRole(subjectId, role) {
         const column = role === 'WORKER' ? 'initiator_id' : 'respondent_id';
         const res = await db.query(
-            `SELECT * FROM disputes WHERE ${column} = $1 ORDER BY created_at DESC`,
+            `SELECT id, payment_id, job_id, initiator_id, initiator_role, respondent_id, status, reason, description, sla_deadline, sla_breached FROM disputes WHERE ${column} = $1 ORDER BY created_at DESC`,
             [subjectId]
         );
         return res.rows;
@@ -160,14 +220,16 @@ class DisputeService {
 
     async getOpenDisputes() {
         const res = await db.query(
-            `SELECT * FROM disputes WHERE status = 'OPEN' ORDER BY sla_deadline ASC`
+            `SELECT id, payment_id, job_id, initiator_id, initiator_role, respondent_id, status, reason, description, sla_deadline, sla_breached FROM disputes WHERE status = 'OPEN' ORDER BY sla_deadline ASC`
         );
         return res.rows;
     }
 
+    /**
+     * Evaluates SLA breach without performing dangerous runtime DDL table alters
+     */
     async checkSlaBreaches() {
         try {
-            await db.query("ALTER TABLE disputes ADD COLUMN IF NOT EXISTS sla_breached BOOLEAN DEFAULT FALSE").catch(() => {});
             const res = await db.query(
                 `UPDATE disputes
                  SET sla_breached = TRUE, status = 'ESCALATED', updated_at = NOW()

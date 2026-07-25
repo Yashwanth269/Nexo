@@ -21,15 +21,14 @@ class FeedService {
         const userLat = parseFloat(lat);
         const userLng = parseFloat(lng);
         
-        // 1. Generate Cache Key using Geohash precision 5 (~4.9km district block)
+        // Geohash cache region precision 5 (~4.9km)
         const hash = geoHash.encode(userLat, userLng, 5);
         const cacheKey = `feed_region:${hash}`;
         
         let rankedPostIds = [];
         let cached = false;
         
-        // Try getting cached post IDs
-        const cachedData = await redis.get(cacheKey);
+        const cachedData = await redis.get(cacheKey).catch(() => null);
         if (cachedData) {
             try {
                 rankedPostIds = JSON.parse(cachedData);
@@ -40,14 +39,11 @@ class FeedService {
             }
         }
         
-        // 2. Cache Miss: Recompute hybrid ranking from DB
         if (!cached || rankedPostIds.length === 0) {
             console.log(`[FEED_RANKING] Geo-cache MISS for region key ${cacheKey}. Recalculating ranking...`);
             
-            // Fetch candidates up to city scale (50.0 km) in one single database scan
             const allCandidates = await this.fetchGeoFeedCandidates(userLat, userLng, 50.0);
             
-            // Gradual Radius Expansion Handling: filter based on geo scoping rules
             let candidates = allCandidates.filter(c => parseFloat(c.distance_km) <= 5.0);
             let expansionLevel = 'locality (0-5km)';
             
@@ -62,15 +58,40 @@ class FeedService {
             
             console.log(`[LOCALITY_MATCH] Selected ${candidates.length} candidates using expansion level: ${expansionLevel}`);
             
+            // Batch Pre-load user affinities and category stats to avoid N+1 query loop
+            const affinities = {};
+            let preferredCategory = null;
+
+            if (userId && candidates.length > 0) {
+                const workerIds = candidates.map(c => c.worker_id).filter(Boolean);
+                const [affinityRes, prefRes] = await Promise.all([
+                    db.query("SELECT worker_id, hire_count FROM user_worker_affinity WHERE user_id = $1 AND worker_id = ANY($2::uuid[])", [userId, workerIds]),
+                    db.query(`
+                        SELECT category, COUNT(*) as count 
+                        FROM jobs 
+                        WHERE user_id = $1 AND status = 'COMPLETED' 
+                        GROUP BY category 
+                        ORDER BY count DESC 
+                        LIMIT 1
+                    `, [userId])
+                ]);
+                
+                affinityRes.rows.forEach(r => {
+                    affinities[r.worker_id] = r.hire_count;
+                });
+                if (prefRes.rows.length > 0) {
+                    preferredCategory = prefRes.rows[0].category;
+                }
+            }
+
             // Score candidates
             const scored = [];
             for (const post of candidates) {
-                const scoreDetails = await this.calculateFeedScore(post, userLat, userLng, userId);
+                const userHires = affinities[post.worker_id] || 0;
+                const scoreDetails = this.calculateFeedScoreSync(post, userLat, userLng, userId, userHires, preferredCategory);
                 
-                // Suppress flagged or zero-scored items (e.g. far-away un-trending posts or fraud)
                 if (scoreDetails.fraudRiskScore > 0.70 || scoreDetails.finalScore <= 0.0 || post.is_flagged) {
-                    console.log(`[FRAUD_DETECTED] completed_job_post ${post.id} suppressed. Fraud risk: ${scoreDetails.fraudRiskScore}, Score: ${scoreDetails.finalScore}`);
-                    continue; // Skip entirely
+                    continue;
                 }
                 
                 scored.push({
@@ -80,16 +101,13 @@ class FeedService {
                 });
             }
             
-            // Sort by finalScore DESC
             scored.sort((a, b) => b.score - a.score);
             rankedPostIds = scored.map(item => ({ id: item.id, score: item.score }));
             
-            // Store in Redis (TTL = 30s)
-            await redis.set(cacheKey, JSON.stringify(rankedPostIds), 'EX', 30);
-            console.log(`[FEED_RANKING] Recalculated & cached ${rankedPostIds.length} ranked posts for ${cacheKey}. Latency: ${Date.now() - start}ms`);
+            await redis.set(cacheKey, JSON.stringify(rankedPostIds), 'EX', 30).catch(() => {});
         }
         
-        // 3. Cursor-based Pagination
+        // Cursor Pagination
         let startIndex = 0;
         if (cursor) {
             try {
@@ -108,16 +126,10 @@ class FeedService {
             ? Buffer.from(JSON.stringify({ lastId: pageSlice[pageSlice.length - 1].id })).toString('base64')
             : null;
             
-        // 4. Retrieve Full Details of Paginated Posts
-        const posts = [];
-        for (const item of pageSlice) {
-            const postDetail = await this.getPostDetailById(item.id, userId, userLat, userLng);
-            if (postDetail) {
-                posts.push(postDetail);
-            }
-        }
+        // 4. Retrieve Full Details in a Single Batch (fixes critical N+1 DB lookup loop!)
+        const postIds = pageSlice.map(item => item.id);
+        const posts = await this.getPostDetailsBatch(postIds, userId, userLat, userLng);
         
-        // 5. Query Active Local Worker Avatars (within 15km) for the dynamic header facepile
         const activeWorkers = await this.fetchActiveLocalWorkers(userLat, userLng);
         
         return {
@@ -134,11 +146,87 @@ class FeedService {
     }
 
     /**
-     * Database-driven geo feed candidates selection within a wide 25km radius.
+     * Batch retrieves post details using single query mappings to completely avoid N+1 DB lookups
+     */
+    async getPostDetailsBatch(postIds, userId = null, userLat = null, userLng = null) {
+        if (!postIds || postIds.length === 0) return [];
+        try {
+            const res = await db.query(`
+                SELECT 
+                    p.*,
+                    w.full_name as worker_name,
+                    w.photo_url as worker_photo,
+                    w.rating as worker_rating,
+                    w.jobs_completed as worker_jobs_completed
+                FROM completed_job_posts p
+                LEFT JOIN workers w ON p.worker_id = w.id
+                WHERE p.id = ANY($1::uuid[]) AND p.is_flagged = false
+            `, [postIds]);
+
+            const likedSet = new Set();
+            const savedSet = new Set();
+
+            if (userId) {
+                const [likesRes, savesRes] = await Promise.all([
+                    db.query("SELECT post_id FROM completed_post_likes WHERE user_id = $1 AND post_id = ANY($2::uuid[])", [userId, postIds]),
+                    db.query("SELECT post_id FROM completed_post_saves WHERE user_id = $1 AND post_id = ANY($2::uuid[])", [userId, postIds])
+                ]);
+                likesRes.rows.forEach(r => likedSet.add(r.post_id));
+                savesRes.rows.forEach(r => savedSet.add(r.post_id));
+            }
+
+            const postsMap = {};
+            res.rows.forEach(post => {
+                const isLiked = likedSet.has(post.id);
+                const isSaved = savedSet.has(post.id);
+                
+                let distanceText = "Nearby";
+                let distanceKm = 0.0;
+                if (userLat && userLng && post.location_lat && post.location_lng) {
+                    distanceKm = this.calculateDistance(userLat, userLng, parseFloat(post.location_lat), parseFloat(post.location_lng));
+                    distanceText = distanceKm < 1.0 ? "Under 1 km away" : `${distanceKm.toFixed(1)} km away`;
+                }
+
+                postsMap[post.id] = {
+                    id: post.id,
+                    jobId: post.job_id,
+                    workerId: post.worker_id,
+                    userId: post.user_id,
+                    category: post.category,
+                    title: post.title || 'Completed Job',
+                    caption: post.caption || 'Job successfully verified and closed!',
+                    address: this.obfuscateAddress(post.address),
+                    imageUrls: post.image_urls || [],
+                    likesCount: parseInt(post.likes_count || 0, 10),
+                    commentsCount: parseInt(post.comments_count || 0, 10),
+                    savesCount: parseInt(post.saves_count || 0, 10),
+                    viewsCount: parseInt(post.views_count || 0, 10),
+                    isLiked,
+                    isSaved,
+                    distanceText,
+                    distanceKm,
+                    completedAt: post.completed_at || post.created_at,
+                    worker: {
+                        name: post.worker_name || 'Verified Pro',
+                        photoUrl: post.worker_photo || '',
+                        rating: parseFloat(post.worker_rating || 4.5),
+                        jobsCompleted: parseInt(post.worker_jobs_completed || 5, 10)
+                    }
+                };
+            });
+
+            return postIds.map(id => postsMap[id]).filter(Boolean);
+        } catch (err) {
+            console.error('❌ [FEED_BATCH_ERROR] Failed batch lookup:', err.message);
+            return [];
+        }
+    }
+
+    /**
+     * Database-driven geo feed candidates selection
      */
     async fetchGeoFeedCandidates(userLat, userLng, maxRadiusKm = 50.0) {
         try {
-            // Haversine geo filter up to maxRadiusKm
             const query = `
                 SELECT 
                     p.*,
@@ -173,96 +261,53 @@ class FeedService {
     }
 
     /**
-     * Compute multi-factor hybrid ranking score for completed posts
+     * Synchronous execution of feed scoring using preloaded user affinity factors (removes query loop N+1 calls)
      */
-    async calculateFeedScore(post, userLat, userLng, userId = null) {
-        // 1. Freshness Score (exponential decay, faster decay curve to make newest items dominate)
+    calculateFeedScoreSync(post, userLat, userLng, userId = null, userHires = 0, preferredCategory = null) {
         const completedTime = new Date(post.completed_at || post.created_at).getTime();
         const hoursAgo = Math.max(0, (Date.now() - completedTime) / (1000 * 60 * 60));
-        const freshnessScore = Math.exp(-hoursAgo / 12.0); // 12-hour half-life makes recent jobs stand out significantly
+        const freshnessScore = Math.exp(-hoursAgo / 12.0);
         
-        // 2. Engagement Score (normalized likes, comments, and saves)
-        const rawLikes = parseInt(post.likes_count || 0);
-        const rawComments = parseInt(post.comments_count || 0);
-        const rawSaves = parseInt(post.saves_count || 0);
+        const rawLikes = parseInt(post.likes_count || 0, 10);
+        const rawComments = parseInt(post.comments_count || 0, 10);
+        const rawSaves = parseInt(post.saves_count || 0, 10);
         const engagementWeight = (rawLikes * 1.0) + (rawComments * 2.0) + (rawSaves * 3.0);
-        const engagementScore = Math.min(1.0, engagementWeight / 200.0); // Cap normalized engagement
+        const engagementScore = Math.min(1.0, engagementWeight / 200.0);
         
-        // 3. Trending Velocity (velocity increase of engagement metrics)
-        const viewsCount = Math.max(1, parseInt(post.views_count || 1));
+        const viewsCount = Math.max(1, parseInt(post.views_count || 1, 10));
         const trendingVelocity = Math.min(1.0, (rawLikes / viewsCount) * (1.0 + rawComments * 0.1));
         
-        // 4. Locality Relevance Score (Strong Geo-Weighting / Distance Priority Buckets)
         const distance = parseFloat(post.distance_km || 0.1);
         let localityScore = 0.0;
         
         if (distance <= 2.0) {
-            // 0–2 km: VERY HIGH priority (0.9 to 1.0)
             localityScore = 1.0 - (distance * 0.05); 
         } else if (distance <= 5.0) {
-            // 2–5 km: HIGH priority (0.7 to 0.9)
             localityScore = 0.9 - ((distance - 2.0) * 0.067);
         } else if (distance <= 10.0) {
-            // 5–10 km: MEDIUM priority (0.4 to 0.7)
             localityScore = 0.7 - ((distance - 5.0) * 0.06);
         } else if (distance <= 25.0) {
-            // 10–25 km: LOWER priority (0.15 to 0.4)
             localityScore = 0.4 - ((distance - 10.0) * 0.0167);
         } else {
-            // 25km+: ONLY if highly viral/trending
             const isViral = trendingVelocity >= 0.6 || rawLikes >= 50;
             if (!isViral) {
-                // Return 0 overall score to suppress far-away posts that aren't trending
-                console.log(`[LOCALITY_MATCH] Suppressing far-away completed_job_post ${post.id} (distance: ${distance.toFixed(1)}km) due to lack of trending velocity.`);
                 return { finalScore: 0.0, freshnessScore: 0.0, engagementScore: 0.0, localityScore: 0.0, completionQualityScore: 0.0, workerReliabilityScore: 0.0, trendingVelocity: 0.0, personalizationScore: 0.0, fraudRiskScore: 0.0 };
             }
-            // If highly viral, give a low base geo-score
             localityScore = 0.15 * trendingVelocity;
         }
         
-        console.log(`[LOCALITY_MATCH] completed_job_post ${post.id} distance: ${distance.toFixed(2)}km, localityScore: ${localityScore.toFixed(3)}`);
-        
-        // 5. Completion Quality Score (worker rating based)
         const ratingVal = parseFloat(post.worker_rating || 4.5);
         const completionQualityScore = Math.min(1.0, ratingVal / 5.0);
+        const workerReliabilityScore = Math.min(1.0, parseFloat(post.worker_reliability || 1.0));
         
-        // 6. Worker Reliability Score
-        const reliabilityVal = parseFloat(post.worker_reliability || 1.0);
-        const workerReliabilityScore = Math.min(1.0, reliabilityVal);
-        
-        // 7. Personalization Score (locality, history, category affinity boosts)
         let personalizationScore = 0.5;
         if (userId) {
-            // A. Check worker affinity (has hired in the past)
-            const affinityRes = await db.query(
-                "SELECT hire_count FROM user_worker_affinity WHERE user_id = $1 AND worker_id = $2",
-                [userId, post.worker_id]
-            );
-            
-            // B. Check user preferred categories from completed job history
-            const prefRes = await db.query(`
-                SELECT category, COUNT(*) as count 
-                FROM jobs 
-                WHERE user_id = $1 AND status = 'COMPLETED' 
-                GROUP BY category 
-                ORDER BY count DESC 
-                LIMIT 1
-            `, [userId]);
-            
-            let preferredCategory = null;
-            if (prefRes.rows.length > 0) {
-                preferredCategory = prefRes.rows[0].category;
-            }
-            
             const categoryMatch = preferredCategory && preferredCategory.toLowerCase() === post.category.toLowerCase();
-            
-            if (affinityRes.rows.length > 0 || categoryMatch) {
+            if (userHires > 0 || categoryMatch) {
                 personalizationScore = 1.0;
-                console.log(`[PERSONALIZATION_SCORE] Category match / worker affinity boost applied for post ${post.id} user ${userId}`);
             }
         }
         
-        // Locality-first Unified Score Formula (Sum to 1.0)
         const finalScore = 
             (localityScore * W_LOCALITY) +
             (freshnessScore * W_FRESHNESS) +
@@ -274,14 +319,12 @@ class FeedService {
             
         const fraudRiskScore = parseFloat(post.fraud_risk_score || 0.0);
         
-        console.log(`[ENGAGEMENT_SCORE] completed_job_post ${post.id} final_score=${finalScore.toFixed(4)} [L=${localityScore.toFixed(2)}, F=${freshnessScore.toFixed(2)}, E=${engagementScore.toFixed(2)}, Q=${completionQualityScore.toFixed(2)}]`);
-        
         return {
             finalScore: Math.min(1.0, finalScore),
             freshnessScore,
             engagementScore,
             localityScore,
-            completionQualityScore: completionQualityScore,
+            completionQualityScore,
             workerReliabilityScore,
             trendingVelocity,
             personalizationScore,
@@ -289,120 +332,39 @@ class FeedService {
         };
     }
 
-    /**
-     * Get a single post detail with user specific contextual fields (like `isLiked`, `isSaved`).
-     */
-    async getPostDetailById(postId, userId = null, userLat = null, userLng = null) {
-        try {
-            const res = await db.query(`
-                SELECT 
-                    p.*,
-                    w.full_name as worker_name,
-                    w.photo_url as worker_photo,
-                    w.rating as worker_rating,
-                    w.jobs_completed as worker_jobs_completed
-                FROM completed_job_posts p
-                LEFT JOIN workers w ON p.worker_id = w.id
-                WHERE p.id = $1 AND p.is_flagged = false
-            `, [postId]);
-            
-            if (res.rows.length === 0) return null;
-            const post = res.rows[0];
-            
-            let isLiked = false;
-            let isSaved = false;
-            
-            if (userId) {
-                const likeCheck = await db.query(
-                    "SELECT 1 FROM completed_post_likes WHERE post_id = $1 AND user_id = $2",
-                    [postId, userId]
-                );
-                isLiked = likeCheck.rows.length > 0;
-                
-                const saveCheck = await db.query(
-                    "SELECT 1 FROM completed_post_saves WHERE post_id = $1 AND user_id = $2",
-                    [postId, userId]
-                );
-                isSaved = saveCheck.rows.length > 0;
-            }
-            
-            // Calculate real distance if GPS provided
-            let distanceText = "Nearby";
-            let distanceKm = 0.0;
-            if (userLat && userLng && post.location_lat && post.location_lng) {
-                const calculateDistance = (lat1, lon1, lat2, lon2) => {
-                    const R = 6371; 
-                    const dLat = (lat2 - lat1) * Math.PI / 180;
-                    const dLon = (lon2 - lon1) * Math.PI / 180;
-                    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                              Math.sin(dLon / 2) * Math.sin(dLon / 2);
-                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                    return R * c;
-                };
-                distanceKm = calculateDistance(userLat, userLng, parseFloat(post.location_lat), parseFloat(post.location_lng));
-                distanceText = distanceKm < 1.0 
-                    ? "Under 1 km away" 
-                    : `${distanceKm.toFixed(1)} km away`;
-            }
-            
-            // Obfuscate exact addresses to protect user privacy (Only show approximate zone/locality)
-            const obfuscateAddress = (addr) => {
-                if (!addr) return 'Nearby Locality';
-                const parts = addr.split(',');
-                if (parts.length > 2) {
-                    const cleanParts = parts
-                        .map(p => p.trim())
-                        .filter(p => {
-                            const low = p.toLowerCase();
-                            const hasDigit = /\d+/.test(p);
-                            const hasAptWord = low.includes('flat') || low.includes('floor') || low.includes('apartment') || low.includes('block') || low.includes('road') || low.includes('street') || low.includes('lane') || low.includes('house');
-                            return !hasDigit && !hasAptWord;
-                        });
-                    if (cleanParts.length >= 2) {
-                        return cleanParts.slice(-2).join(', ');
-                    }
-                    return parts.slice(-2).map(p => p.trim()).join(', ');
-                }
-                return addr;
-            };
-
-            // Format dynamic completion review block
-            return {
-                id: post.id,
-                jobId: post.job_id,
-                workerId: post.worker_id,
-                userId: post.user_id,
-                category: post.category,
-                title: post.title || 'Completed Job',
-                caption: post.caption || 'Job successfully verified and closed!',
-                address: obfuscateAddress(post.address),
-                imageUrls: post.image_urls || [],
-                likesCount: parseInt(post.likes_count),
-                commentsCount: parseInt(post.comments_count),
-                savesCount: parseInt(post.saves_count),
-                viewsCount: parseInt(post.views_count),
-                isLiked,
-                isSaved,
-                distanceText,
-                distanceKm,
-                completedAt: post.completed_at || post.created_at,
-                worker: {
-                    name: post.worker_name || 'Verified Pro',
-                    photoUrl: post.worker_photo || '',
-                    rating: parseFloat(post.worker_rating || 4.5),
-                    jobsCompleted: parseInt(post.worker_jobs_completed || 5)
-                }
-            };
-        } catch (err) {
-            console.error('❌ [FEED_RANKING_ERROR] Failed to fetch post detail:', err.message);
-            return null;
-        }
+    calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371; 
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 
-    /**
-     * Query online active worker profiles within a 15km local radius.
-     */
+    obfuscateAddress(addr) {
+        if (!addr) return 'Nearby Locality';
+        const parts = addr.split(',');
+        if (parts.length > 2) {
+            const cleanParts = parts
+                .map(p => p.trim())
+                .filter(p => {
+                    const low = p.toLowerCase();
+                    const hasDigit = /\d+/.test(p);
+                    const hasAptWord = low.includes('flat') || low.includes('floor') || low.includes('apartment') || 
+                                       low.includes('block') || low.includes('road') || low.includes('street') || 
+                                       low.includes('lane') || low.includes('house');
+                    return !hasDigit && !hasAptWord;
+                });
+            if (cleanParts.length >= 2) {
+                return cleanParts.slice(-2).join(', ');
+            }
+            return parts.slice(-2).map(p => p.trim()).join(', ');
+        }
+        return addr;
+    }
+
     async fetchActiveLocalWorkers(userLat, userLng) {
         try {
             const query = `
@@ -430,43 +392,63 @@ class FeedService {
         }
     }
 
-    /**
-     * Invalidate feed caches matching a coordinates geohash.
-     */
     async invalidateFeedCache(lat, lng) {
-        const uLat = parseFloat(lat);
-        const uLng = parseFloat(lng);
-        if (isNaN(uLat) || isNaN(uLng)) return;
-        
-        // Bust key for precision 5 (~4.9km)
-        const hash = geoHash.encode(uLat, uLng, 5);
-        const cacheKey = `feed_region:${hash}`;
-        await redis.del(cacheKey);
-        console.log(`🧹 [FEED_RANKING] Invalidated cache for region key: ${cacheKey}`);
+        try {
+            if (!lat || !lng) return;
+            const hash = geoHash.encode(parseFloat(lat), parseFloat(lng), 5);
+            const cacheKey = `feed_region:${hash}`;
+            await redis.del(cacheKey);
+            console.log(`[FEED_CACHE] Invalidated feed cache for key ${cacheKey}`);
+        } catch (e) {
+            console.warn('[FEED_CACHE] Invalidation error:', e.message);
+        }
     }
 
     /**
-     * Dynamic like toggle.
+     * Safe cursor-based SCAN loop for Redis global invalidation (does not block Redis)
      */
+    async invalidateAllFeedCaches() {
+        try {
+            let cursor = '0';
+            const keysToDelete = [];
+            
+            do {
+                const reply = await redis.scan(cursor, 'MATCH', 'feed_region:*', 'COUNT', 100);
+                cursor = reply[0];
+                const keys = reply[1];
+                if (keys.length > 0) {
+                    keysToDelete.push(...keys);
+                }
+            } while (cursor !== '0');
+
+            if (keysToDelete.length > 0) {
+                // Delete in small chunk batches of 50 to maintain Redis connection stability
+                for (let i = 0; i < keysToDelete.length; i += 50) {
+                    const chunk = keysToDelete.slice(i, i + 50);
+                    await redis.del(...chunk);
+                }
+            }
+            console.log(`[FEED_CACHE] Safe global invalidation: deleted ${keysToDelete.length} keys`);
+        } catch (e) {
+            console.warn('[FEED_CACHE] Global invalidation error:', e.message);
+        }
+    }
+
     async likePost(postId, userId, io) {
-        // Toggle record in completed_post_likes
         const selectRes = await db.query(
             "SELECT 1 FROM completed_post_likes WHERE post_id = $1 AND user_id = $2",
             [postId, userId]
         );
         
         const liked = selectRes.rows.length > 0;
-        let delta = 0;
+        let delta = liked ? -1 : 1;
         
         if (liked) {
             await db.query("DELETE FROM completed_post_likes WHERE post_id = $1 AND user_id = $2", [postId, userId]);
-            delta = -1;
         } else {
             await db.query("INSERT INTO completed_post_likes (post_id, user_id) VALUES ($1, $2)", [postId, userId]);
-            delta = 1;
         }
         
-        // Update total likes count atomically
         const updateRes = await db.query(
             "UPDATE completed_job_posts SET likes_count = GREATEST(0, likes_count + $1) WHERE id = $2 RETURNING location_lat, location_lng, likes_count",
             [delta, postId]
@@ -476,7 +458,6 @@ class FeedService {
             const row = updateRes.rows[0];
             await this.invalidateFeedCache(row.location_lat, row.location_lng);
             
-            // Broadcast live socket updates to geohash room
             const geohash = geoHash.encode(parseFloat(row.location_lat), parseFloat(row.location_lng), 6);
             if (io) {
                 io.to(`trending:${geohash}`).emit('feed_updated', {
@@ -490,9 +471,6 @@ class FeedService {
         return { success: true, liked: !liked };
     }
 
-    /**
-     * Record dynamic post view.
-     */
     async viewPost(postId, userId) {
         await db.query("INSERT INTO completed_post_views (post_id, user_id) VALUES ($1, $2)", [postId, userId]);
         
@@ -508,9 +486,6 @@ class FeedService {
         return { success: true };
     }
 
-    /**
-     * Toggle bookmark save on post.
-     */
     async savePost(postId, userId) {
         const selectRes = await db.query(
             "SELECT 1 FROM completed_post_saves WHERE post_id = $1 AND user_id = $2",
@@ -518,14 +493,12 @@ class FeedService {
         );
         
         const saved = selectRes.rows.length > 0;
-        let delta = 0;
+        let delta = saved ? -1 : 1;
         
         if (saved) {
             await db.query("DELETE FROM completed_post_saves WHERE post_id = $1 AND user_id = $2", [postId, userId]);
-            delta = -1;
         } else {
             await db.query("INSERT INTO completed_post_saves (post_id, user_id) VALUES ($1, $2)", [postId, userId]);
-            delta = 1;
         }
         
         const updateRes = await db.query(
@@ -542,40 +515,24 @@ class FeedService {
     }
 
     async bootstrapCompletedPosts() {
-        // No-op: production bootstrap uses real completed jobs only
         return;
     }
 
-    /**
-     * Create or update completed job post in the social feed when a job is completed or proof is uploaded.
-     */
     async createOrUpdateCompletedPost(jobId) {
         try {
-            // Fetch job
-            const jobRes = await db.query(
-                "SELECT * FROM jobs WHERE id = $1",
-                [jobId]
-            );
+            const jobRes = await db.query("SELECT * FROM jobs WHERE id = $1", [jobId]);
             if (jobRes.rows.length === 0) return;
             const job = jobRes.rows[0];
-
-            if (job.status !== 'COMPLETED') {
-                console.log(`[FEED_SERVICE] Skipping feed post creation: Job ${jobId} status is ${job.status}`);
-                return;
-            }
-
+ 
+            if (job.status !== 'COMPLETED') return;
+ 
             const imageUrls = job.completion_photo ? [job.completion_photo] : [];
-
-            // Check if post already exists
-            const checkRes = await db.query(
-                "SELECT id FROM completed_job_posts WHERE job_id = $1",
-                [jobId]
-            );
-
+ 
+            const checkRes = await db.query("SELECT id FROM completed_job_posts WHERE job_id = $1", [jobId]);
+ 
             let postId;
             if (checkRes.rows.length > 0) {
                 postId = checkRes.rows[0].id;
-                // Update existing post
                 await db.query(
                     `UPDATE completed_job_posts 
                      SET worker_id = $1, user_id = $2, category = $3, title = $4, caption = $5, 
@@ -583,22 +540,12 @@ class FeedService {
                          completed_at = COALESCE($10, completed_at)
                      WHERE id = $11`,
                     [
-                        job.worker_id,
-                        job.user_id,
-                        job.category,
-                        job.title || `${job.category} Job`,
-                        job.description || 'Job completed successfully!',
-                        job.location_lat,
-                        job.location_lng,
-                        job.address,
-                        JSON.stringify(imageUrls),
-                        job.completed_at || new Date(),
-                        postId
+                        job.worker_id, job.user_id, job.category, job.title || `${job.category} Job`,
+                        job.description || 'Job completed successfully!', job.location_lat, job.location_lng,
+                        job.address, JSON.stringify(imageUrls), job.completed_at || new Date(), postId
                     ]
                 );
-                console.log(`[FEED_SERVICE] Updated completed_job_posts for job ${jobId}`);
             } else {
-                // Insert new post
                 const insertRes = await db.query(
                     `INSERT INTO completed_job_posts (
                         job_id, worker_id, user_id, category, title, caption, 
@@ -606,27 +553,16 @@ class FeedService {
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)
                     RETURNING id`,
                     [
-                        jobId,
-                        job.worker_id,
-                        job.user_id,
-                        job.category,
-                        job.title || `${job.category} Job`,
-                        job.description || 'Job completed successfully!',
-                        job.location_lat,
-                        job.location_lng,
-                        job.address,
-                        JSON.stringify(imageUrls),
-                        job.completed_at || new Date()
+                        jobId, job.worker_id, job.user_id, job.category, job.title || `${job.category} Job`,
+                        job.description || 'Job completed successfully!', job.location_lat, job.location_lng,
+                        job.address, JSON.stringify(imageUrls), job.completed_at || new Date()
                     ]
                 );
                 postId = insertRes.rows[0].id;
-                console.log(`[FEED_SERVICE] Created completed_job_posts for job ${jobId} (Post ID: ${postId})`);
             }
-
-            // Invalidate regional cache
+ 
             await this.invalidateFeedCache(job.location_lat, job.location_lng);
-
-            // Broadcast Socket Event to trending region
+ 
             const geoHash6 = geoHash.encode(parseFloat(job.location_lat), parseFloat(job.location_lng), 6);
             const { getIO } = require('../config/socket');
             const io = getIO();
@@ -635,34 +571,9 @@ class FeedService {
                     postId,
                     action: 'complete'
                 });
-                console.log(`[FEED_SERVICE] Broadcasted feed_updated event to room trending:${geoHash6}`);
             }
         } catch (err) {
             console.error('❌ [FEED_SERVICE] Error in createOrUpdateCompletedPost:', err.message);
-        }
-    }
-
-    async invalidateFeedCache(lat, lng) {
-        try {
-            if (!lat || !lng) return;
-            const hash = geoHash.encode(parseFloat(lat), parseFloat(lng), 5);
-            const cacheKey = `feed_region:${hash}`;
-            await redis.del(cacheKey);
-            console.log(`[FEED_CACHE] Invalidated feed cache for key ${cacheKey}`);
-        } catch (e) {
-            console.warn('[FEED_CACHE] Invalidation error:', e.message);
-        }
-    }
-
-    async invalidateAllFeedCaches() {
-        try {
-            const keys = await redis.keys('feed_region:*');
-            if (keys.length > 0) {
-                await redis.del(...keys);
-            }
-            console.log(`[FEED_CACHE] Global feed invalidation: deleted ${keys.length} keys`);
-        } catch (e) {
-            console.warn('[FEED_CACHE] Global invalidation error:', e.message);
         }
     }
 }

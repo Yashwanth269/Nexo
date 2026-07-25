@@ -9,7 +9,6 @@ import '../../utils/image_utils.dart';
 import '../../services/cache_service.dart';
 import 'job_execution_screen.dart';
 import 'new_job_offer_screen.dart';
-import '../chat/chat_detail_screen.dart';
 
 class ActiveJobsScreen extends StatefulWidget {
   const ActiveJobsScreen({super.key});
@@ -157,38 +156,46 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
 
       if (response.statusCode == 200 && data['success']) {
         if (data['offerId'] != null || (data['message'] != null && data['message'].toString().contains("expressed"))) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("🎉 ${data['message'] ?? 'Interest expressed! Customer will compare & select.'}"),
-              backgroundColor: const Color(0xFF10B981),
-            ),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("🎉 ${data['message'] ?? 'Interest expressed! Customer will compare & select.'}"),
+                backgroundColor: const Color(0xFF10B981),
+              ),
+            );
+          }
           _fetchJobs();
           return;
         }
 
         _fetchJobs();
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => JobExecutionScreen(jobId: job['id'], initialJob: data['job'] ?? job),
-          ),
-        );
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => JobExecutionScreen(jobId: job['id'], initialJob: data['job'] ?? job),
+            ),
+          );
+        }
       } else {
         String errorMsg = data['message'] ?? "Could not accept job";
         if (errorMsg == "WORKER_ALREADY_BUSY") errorMsg = "You already have an active job!";
         if (errorMsg == "JOB_ALREADY_TAKEN") errorMsg = "Sorry, this job was just taken by another worker.";
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMsg), backgroundColor: Colors.redAccent),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(errorMsg), backgroundColor: Colors.redAccent),
+          );
+        }
         _fetchJobs();
       }
     } catch (e) {
       if (mounted) Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Connection error. Please try again."), backgroundColor: Colors.redAccent),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Connection error. Please try again."), backgroundColor: Colors.redAccent),
+        );
+      }
     }
   }
 
@@ -294,7 +301,7 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
     String activeCategory = _filterCategory ?? "All Categories";
     
     // Categories list dynamically calculated
-    final categories = ["All Categories", ..._jobs.map((j) => (j['category'] ?? "General").toString()).toSet().toList()];
+    final categories = ["All Categories", ..._jobs.map((j) => (j['category'] ?? "General").toString()).toSet()];
 
     showDialog(
       context: context,
@@ -318,7 +325,7 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
                 Text("Category", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF475569))),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: activeCategory,
+                  initialValue: activeCategory,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -398,12 +405,19 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
 
     // Sort matching active order
     List<dynamic> targetGigs = [];
-    if (_selectedStatusFilter == "Today") targetGigs = List.from(todayGigs);
-    else if (_selectedStatusFilter == "Upcoming") targetGigs = List.from(upcomingGigs);
-    else if (_selectedStatusFilter == "Completed") targetGigs = List.from(completedGigs);
-    else if (_selectedStatusFilter == "Cancelled") targetGigs = List.from(cancelledGigs);
-    else if (_selectedStatusFilter == "History") targetGigs = List.from(allGigs);
-    else targetGigs = List.from(allGigs);
+    if (_selectedStatusFilter == "Today") {
+      targetGigs = List.from(todayGigs);
+    } else if (_selectedStatusFilter == "Upcoming") {
+      targetGigs = List.from(upcomingGigs);
+    } else if (_selectedStatusFilter == "Completed") {
+      targetGigs = List.from(completedGigs);
+    } else if (_selectedStatusFilter == "Cancelled") {
+      targetGigs = List.from(cancelledGigs);
+    } else if (_selectedStatusFilter == "History") {
+      targetGigs = List.from(allGigs);
+    } else {
+      targetGigs = List.from(allGigs);
+    }
 
     // Apply active filters
     if (_selectedFilterDate != null) {
@@ -605,7 +619,7 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
           boxShadow: [
             if (isSelected)
               BoxShadow(
-                color: const Color(0xFF2563EB).withOpacity(0.15),
+                color: const Color(0xFF2563EB).withValues(alpha: 0.15),
                 blurRadius: 8,
                 offset: const Offset(0, 4),
               )
@@ -671,7 +685,7 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 2),
           )

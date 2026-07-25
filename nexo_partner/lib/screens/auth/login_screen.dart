@@ -4,7 +4,6 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:nexo_partner/utils/network_helper.dart';
 import 'otp_screen.dart';
-import '../../components/glass_components.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -149,7 +148,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     borderRadius: BorderRadius.circular(32),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha: 0.04),
                         blurRadius: 24,
                         offset: const Offset(0, 10),
                       ),
@@ -293,7 +292,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF3B82F6).withOpacity(0.25),
+                              color: const Color(0xFF3B82F6).withValues(alpha: 0.25),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),

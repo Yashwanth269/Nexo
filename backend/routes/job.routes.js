@@ -138,11 +138,58 @@ router.post('/accept', async (req, res) => {
         // Resolve worker UUID if phone number passed
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workerId);
         let resolvedWorkerId = workerId;
+        let workerObj = null;
         if (!isUUID) {
-            const wRes = await db.query("SELECT id FROM workers WHERE phone_number = $1", [workerId]);
+            const wRes = await db.query("SELECT * FROM workers WHERE phone_number = $1", [workerId]);
             if (wRes.rowCount > 0) {
-                resolvedWorkerId = wRes.rows[0].id;
+                workerObj = wRes.rows[0];
+                resolvedWorkerId = workerObj.id;
             }
+        } else {
+            const wRes = await db.query("SELECT * FROM workers WHERE id = $1", [workerId]);
+            if (wRes.rowCount > 0) {
+                workerObj = wRes.rows[0];
+            }
+        }
+
+        if (!workerObj) {
+            return res.status(404).json({ success: false, message: "Worker not found" });
+        }
+
+        // Fetch job details for validation
+        const jobQueryRes = await db.query("SELECT * FROM jobs WHERE id = $1", [jobId]);
+        if (jobQueryRes.rowCount === 0) {
+            return res.status(404).json({ success: false, message: "Job not found" });
+        }
+        const jobObj = jobQueryRes.rows[0];
+
+        // 1. Skill Match validation
+        const { isSkillMatch } = require('../utils/skill_matcher');
+        if (!isSkillMatch(workerObj.skills || [], workerObj.tasks || [], jobObj.category)) {
+            return res.status(400).json({
+                success: false,
+                error: "SKILL_MISMATCH",
+                message: "You are not qualified for this job category."
+            });
+        }
+
+        // 2. Calendar Availability validation
+        const reservationService = require('../services/reservation.service');
+        const duration = await reservationService.predictJobDuration(jobObj.category);
+        const conflictCheck = await reservationService.checkCalendarConflict(
+            resolvedWorkerId,
+            jobObj.scheduled_at || new Date(),
+            duration,
+            jobObj.category,
+            parseFloat(jobObj.location_lat),
+            parseFloat(jobObj.location_lng)
+        );
+        if (conflictCheck.conflict) {
+            return res.status(409).json({
+                success: false,
+                error: "CALENDAR_CONFLICT",
+                message: "This job conflicts with your existing calendar reservations."
+            });
         }
 
         // Check if job is eligible for Scheduled Bidding (> 3 hours out)
@@ -186,6 +233,63 @@ router.post('/negotiate', async (req, res) => {
     try {
         const { jobId, workerId, price, proposedScheduledAt, notes } = req.body;
 
+        // Resolve worker
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workerId);
+        let resolvedWorkerId = workerId;
+        let workerObj = null;
+        if (!isUUID) {
+            const wRes = await db.query("SELECT * FROM workers WHERE phone_number = $1", [workerId]);
+            if (wRes.rowCount > 0) {
+                workerObj = wRes.rows[0];
+                resolvedWorkerId = workerObj.id;
+            }
+        } else {
+            const wRes = await db.query("SELECT * FROM workers WHERE id = $1", [workerId]);
+            if (wRes.rowCount > 0) {
+                workerObj = wRes.rows[0];
+            }
+        }
+
+        if (!workerObj) {
+            return res.status(404).json({ success: false, message: "Worker not found" });
+        }
+
+        // Fetch job details for validation
+        const jobQueryRes = await db.query("SELECT * FROM jobs WHERE id = $1", [jobId]);
+        if (jobQueryRes.rowCount === 0) {
+            return res.status(404).json({ success: false, message: "Job not found" });
+        }
+        const jobObj = jobQueryRes.rows[0];
+
+        // 1. Skill Match validation
+        const { isSkillMatch } = require('../utils/skill_matcher');
+        if (!isSkillMatch(workerObj.skills || [], workerObj.tasks || [], jobObj.category)) {
+            return res.status(400).json({
+                success: false,
+                error: "SKILL_MISMATCH",
+                message: "You are not qualified for this job category."
+            });
+        }
+
+        // 2. Calendar Availability validation
+        const reservationService = require('../services/reservation.service');
+        const duration = await reservationService.predictJobDuration(jobObj.category);
+        const conflictCheck = await reservationService.checkCalendarConflict(
+            resolvedWorkerId,
+            jobObj.scheduled_at || new Date(),
+            duration,
+            jobObj.category,
+            parseFloat(jobObj.location_lat),
+            parseFloat(jobObj.location_lng)
+        );
+        if (conflictCheck.conflict) {
+            return res.status(409).json({
+                success: false,
+                error: "CALENDAR_CONFLICT",
+                message: "This job conflicts with your existing calendar reservations."
+            });
+        }
+
         // Check if job is eligible for Scheduled Bidding (> 3 hours out)
         const jobRes = await db.query("SELECT scheduled_at FROM jobs WHERE id = $1", [jobId]);
         if (jobRes.rowCount > 0 && jobRes.rows[0].scheduled_at) {
@@ -217,6 +321,53 @@ const workerAvailabilityStore = new Map(); // workerId -> schedule object
 router.get('/opportunities', async (req, res) => {
     try {
         const { workerId, category, dateFilter, distanceFilter, minPrice, timeFilter, sortBy, searchQuery } = req.query;
+
+        // Resolve worker
+        if (!workerId) {
+            return res.json({
+                success: true,
+                totalAvailable: 0,
+                dashboard: {
+                    workerName: "Partner",
+                    potentialEarnings: 0,
+                    recommendedCount: 0,
+                    reservedCount: 0,
+                    freeSlots: [],
+                    topPercentile: 0,
+                    reliabilityScore: 100,
+                    acceptanceRate: 100,
+                    onTimeRate: 100
+                },
+                sections: { recommended: [], highDemand: [], highPaying: [], fitsCalendar: [], recentlyPosted: [], saved: [] },
+                opportunities: []
+            });
+        }
+
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workerId);
+        const workerQuery = isUUID 
+            ? "SELECT * FROM workers WHERE id = $1" 
+            : "SELECT * FROM workers WHERE phone_number = $1";
+        const workerRes = await db.query(workerQuery, [workerId]);
+        if (workerRes.rowCount === 0) {
+            return res.json({
+                success: true,
+                totalAvailable: 0,
+                dashboard: {
+                    workerName: "Partner",
+                    potentialEarnings: 0,
+                    recommendedCount: 0,
+                    reservedCount: 0,
+                    freeSlots: [],
+                    topPercentile: 0,
+                    reliabilityScore: 100,
+                    acceptanceRate: 100,
+                    onTimeRate: 100
+                },
+                sections: { recommended: [], highDemand: [], highPaying: [], fitsCalendar: [], recentlyPosted: [], saved: [] },
+                opportunities: []
+            });
+        }
+        const worker = workerRes.rows[0];
 
         let queryText = `
             SELECT j.*, u.full_name as "userName", u.avatar_url as "userPhoto", u.phone_number as "userPhone"
@@ -251,39 +402,95 @@ router.get('/opportunities', async (req, res) => {
             jobs = jobs.filter(j => parseFloat(j.price || 0) >= minP);
         }
 
-        const savedSet = savedJobsStore.get(workerId) || new Set();
+        // 1. Strict Skill Match filter
+        const { isSkillMatch } = require('../utils/skill_matcher');
+        jobs = jobs.filter(job => isSkillMatch(worker.skills || [], worker.tasks || [], job.category));
 
-        const enrichedJobs = jobs.map((job, idx) => {
+        // 2. Strict Calendar Conflict filter
+        const reservationService = require('../services/reservation.service');
+        const workerPreferenceService = require('../services/worker_preference.service');
+        const activeJobs = [];
+        for (const job of jobs) {
+            const duration = await reservationService.predictJobDuration(job.category);
+            const conflictCheck = await reservationService.checkCalendarConflict(
+                worker.id,
+                job.scheduled_at || new Date(),
+                duration,
+                job.category,
+                parseFloat(job.location_lat),
+                parseFloat(job.location_lng)
+            );
+            if (!conflictCheck.conflict) {
+                activeJobs.push(job);
+            }
+        }
+        jobs = activeJobs;
+
+        function getHaversineDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        const savedSet = savedJobsStore.get(workerId) || new Set();
+        const workerReliability = worker.rating ? (parseFloat(worker.rating) / 5.0) * 100 : 95;
+        const enrichedJobs = [];
+
+        for (let idx = 0; idx < jobs.length; idx++) {
+            const job = jobs[idx];
             const price = parseFloat(job.price || 500);
-            const distanceKm = Math.round((2.0 + (idx * 0.8)) * 10) / 10;
+            
+            let distanceKm = Math.round((2.0 + (idx * 0.8)) * 10) / 10;
+            if (worker.current_lat && worker.current_lng && job.location_lat && job.location_lng) {
+                distanceKm = Math.round(getHaversineDistance(
+                    parseFloat(worker.current_lat), parseFloat(worker.current_lng),
+                    parseFloat(job.location_lat), parseFloat(job.location_lng)
+                ) * 10) / 10;
+            }
+
             const fuelCost = Math.round(distanceKm * 8);
             const netProfit = Math.max(100, price - fuelCost);
-            const matchScore = Math.max(75, 96 - (idx * 3));
+            
+            // Calculate real match score using worker preference service
+            const dispatchScoreResult = await workerPreferenceService.calculateDispatchScore(
+                worker.id,
+                job,
+                distanceKm,
+                workerReliability
+            );
+            const matchScore = dispatchScoreResult.compositeScore;
             const isSaved = savedSet.has(job.id.toString());
+            const duration = await reservationService.predictJobDuration(job.category);
+            const durationHrs = (duration / 60.0).toFixed(1);
 
             // Rationale Bullets (WHY)
             const rationale = [
                 `📍 Near your active area (${distanceKm} km away)`,
                 `💰 High earnings potential (Net Profit ₹${netProfit})`,
                 `⭐ ${matchScore}% selection probability for your profile`,
-                `📅 Fits 10:30 AM – 1:00 PM free schedule slot`
+                `📅 Fits your schedule without conflicts`
             ];
 
-            return {
+            enrichedJobs.push({
                 ...job,
                 distanceKm,
                 fuelCost,
                 netProfit,
                 matchScore,
                 isSaved,
-                estimatedDuration: "1.5 Hours",
-                estimatedFinishTime: "12:30 PM",
+                estimatedDuration: `${durationHrs} Hours`,
+                estimatedFinishTime: new Date(new Date(job.scheduled_at || Date.now()).getTime() + duration * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 interestedCount: 3 + (idx % 4),
                 customerRating: "4.9★",
                 rationale,
                 badges: matchScore >= 88 ? ["⭐ Recommended", "⚡ Top Match", "👑 Premium Customer"] : ["📅 Scheduled Bidding"]
-            };
-        });
+            });
+        }
 
         // Curated Section Categorization
         const recommended = enrichedJobs.filter(j => j.matchScore >= 85);
@@ -296,7 +503,7 @@ router.get('/opportunities', async (req, res) => {
             success: true,
             totalAvailable: enrichedJobs.length,
             dashboard: {
-                workerName: "Rahul",
+                workerName: worker.full_name || "Rahul",
                 potentialEarnings: enrichedJobs.reduce((sum, j) => sum + parseFloat(j.price || 0), 0),
                 recommendedCount: recommended.length,
                 reservedCount: 2,
@@ -420,30 +627,63 @@ router.get('/travel-home/status', async (req, res) => {
 // PREFERRED AREAS (PAE) & SERVICES (PSE) APIs
 // ==========================================
 const workerPreferenceService = require('../services/worker_preference.service');
+const zoneEngine = require('../services/zone_engine.service');
 
-router.get('/preferences/:workerId', (req, res) => {
+router.get('/preferences/search', async (req, res) => {
     try {
-        const prefs = workerPreferenceService.getPreferences(req.params.workerId);
-        res.json({ success: true, preferences: prefs });
+        const { lat, lng, query } = req.query;
+        const results = await zoneEngine.suggestZones(
+            lat ? parseFloat(lat) : null,
+            lng ? parseFloat(lng) : null,
+            query
+        );
+        res.json({ success: true, results });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-router.post('/preferences/areas', (req, res) => {
+router.post('/preferences/zone-config', async (req, res) => {
     try {
-        const { workerId, areaRatings } = req.body;
-        const result = workerPreferenceService.updateAreaRatings(workerId, areaRatings);
+        const { workerId, primaryZone, secondaryZones, avoidAreas, workRadius } = req.body;
+        if (!workerId) {
+            return res.status(400).json({ success: false, error: "Missing workerId" });
+        }
+        const result = await workerPreferenceService.updateZonePreferences(workerId, {
+            primaryZone,
+            secondaryZones,
+            avoidAreas,
+            workRadius
+        });
         res.json(result);
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
     }
 });
 
-router.post('/preferences/skills', (req, res) => {
+router.get('/preferences/:workerId', async (req, res) => {
+    try {
+        const prefs = await workerPreferenceService.getPreferences(req.params.workerId);
+        res.json({ success: true, preferences: prefs });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/preferences/areas', async (req, res) => {
+    try {
+        const { workerId, areaRatings } = req.body;
+        const result = await workerPreferenceService.updateAreaRatings(workerId, areaRatings);
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/preferences/skills', async (req, res) => {
     try {
         const { workerId, skillRatings } = req.body;
-        const result = workerPreferenceService.updateSkillRatings(workerId, skillRatings);
+        const result = await workerPreferenceService.updateSkillRatings(workerId, skillRatings);
         res.json(result);
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
@@ -465,19 +705,19 @@ router.get('/daily-brief/:workerId', (req, res) => {
     }
 });
 
-router.get('/calendar/:workerId', (req, res) => {
+router.get('/calendar/:workerId', async (req, res) => {
     try {
-        const timeline = aiCalendarEngine.getWorkerTimeline(req.params.workerId);
+        const timeline = await aiCalendarEngine.getWorkerTimeline(req.params.workerId);
         res.json({ success: true, timeline });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-router.post('/calendar/reserve', (req, res) => {
+router.post('/calendar/reserve', async (req, res) => {
     try {
         const { workerId, job } = req.body;
-        const result = aiCalendarEngine.reserveSlot(workerId, job || {});
+        const result = await aiCalendarEngine.reserveSlot(workerId, job || {});
         res.json(result);
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });

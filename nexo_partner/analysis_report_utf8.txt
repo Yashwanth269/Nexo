@@ -1,0 +1,94 @@
+﻿Analyzing nexo_partner...                                       
+
+   info - Parameter 'key' could be a super parameter - lib\components\glass_components.dart:62:9 - use_super_parameters
+   info - Parameter 'key' could be a super parameter - lib\components\glass_components.dart:135:9 - use_super_parameters
+   info - Parameter 'key' could be a super parameter - lib\components\glass_components.dart:221:9 - use_super_parameters
+   info - Parameter 'key' could be a super parameter - lib\components\glass_components.dart:339:9 - use_super_parameters
+   info - Parameter 'key' could be a super parameter - lib\components\glass_components.dart:375:9 - use_super_parameters
+warning - Unused import: '../../components/glass_components.dart' - lib\screens\auth\login_screen.dart:7:8 - unused_import
+warning - The declaration '_buildSafetyBanner' isn't referenced - lib\screens\auth\otp_screen.dart:301:10 - unused_element
+   info - The prefix 'IO' isn't a lower_case_with_underscores identifier - lib\screens\chat\chat_detail_screen.dart:7:60 - library_prefixes
+   info - The prefix 'IO' isn't a lower_case_with_underscores identifier - lib\screens\chat\chat_list_screen.dart:6:60 - library_prefixes
+warning - Unused import: 'package:socket_io_client/socket_io_client.dart' - lib\screens\home\home_screen.dart:13:8 - unused_import
+   info - The prefix 'IO' isn't a lower_case_with_underscores identifier - lib\screens\home\home_screen.dart:13:60 - library_prefixes
+warning - Unused import: '../../widgets/job_request_modal.dart' - lib\screens\home\home_screen.dart:19:8 - unused_import
+warning - Unused import: '../../components/glass_components.dart' - lib\screens\home\home_screen.dart:23:8 - unused_import
+warning - Unused import: '../settings/settings_screen.dart' - lib\screens\home\home_screen.dart:28:8 - unused_import
+warning - Unused import: '../earnings/earnings_history_screen.dart' - lib\screens\home\home_screen.dart:30:8 - unused_import
+warning - Unused import: '../profile/worker_preferences_screen.dart' - lib\screens\home\home_screen.dart:32:8 - unused_import
+warning - Unused import: '../chat/chat_list_screen.dart' - lib\screens\home\home_screen.dart:35:8 - unused_import
+warning - Unused import: 'dart:ui' - lib\screens\home\home_screen.dart:41:8 - unused_import
+warning - The value of the field '_shownJobIds' isn't used - lib\screens\home\home_screen.dart:55:21 - unused_field
+warning - The value of the field '_workerName' isn't used - lib\screens\home\home_screen.dart:69:10 - unused_field
+   info - The private field _locationStatus could be 'final' - lib\screens\home\home_screen.dart:71:10 - prefer_final_fields
+warning - The value of the field '_locationStatus' isn't used - lib\screens\home\home_screen.dart:71:10 - unused_field
+   info - The private field _mySkills could be 'final' - lib\screens\home\home_screen.dart:76:16 - prefer_final_fields
+warning - The value of the field '_mySkills' isn't used - lib\screens\home\home_screen.dart:76:16 - unused_field
+   info - Don't use 'BuildContext's across async gaps - lib\screens\home\home_screen.dart:120:30 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\home\home_screen.dart:143:28 - use_build_context_synchronously
+warning - The declaration '_showPostJobNextStepSheet' isn't referenced - lib\screens\home\home_screen.dart:149:8 - unused_element
+warning - The declaration '_getInitials' isn't referenced - lib\screens\home\home_screen.dart:361:10 - unused_element
+   info - Don't use 'BuildContext's across async gaps - lib\screens\home\home_screen.dart:369:30 - use_build_context_synchronously
+   info - 'desiredAccuracy' is deprecated and shouldn't be used. use settings parameter with AndroidSettings, AppleSettings, WebSettings, or LocationSettings - lib\screens\home\home_screen.dart:513:9 - deprecated_member_use
+   info - 'timeLimit' is deprecated and shouldn't be used. use settings parameter with AndroidSettings, AppleSettings, WebSettings, or LocationSettings - lib\screens\home\home_screen.dart:514:9 - deprecated_member_use
+warning - The operand can't be 'null', so the condition is always 'true' - lib\screens\home\home_screen.dart:516:20 - unnecessary_null_comparison
+warning - Dead code - lib\screens\home\home_screen.dart:521:14 - dead_code
+   info - 'desiredAccuracy' is deprecated and shouldn't be used. use settings parameter with AndroidSettings, AppleSettings, WebSettings, or LocationSettings - lib\screens\home\home_screen.dart:745:13 - deprecated_member_use
+   info - 'timeLimit' is deprecated and shouldn't be used. use settings parameter with AndroidSettings, AppleSettings, WebSettings, or LocationSettings - lib\screens\home\home_screen.dart:746:13 - deprecated_member_use
+   info - The private field _searchRadius could be 'final' - lib\screens\home\home_screen.dart:798:10 - prefer_final_fields
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\home\home_screen.dart:1073:48 - use_build_context_synchronously
+   info - Use a function declaration rather than a variable assignment to bind a function to a name - lib\screens\home\home_screen.dart:1157:13 - prefer_function_declarations_over_variables
+warning - The declaration '_buildModernJobDialog' isn't referenced - lib\screens\home\home_screen.dart:1354:10 - unused_element
+   info - 'WillPopScope' is deprecated and shouldn't be used. Use PopScope instead. The Android predictive back feature will not work with WillPopScope. This feature was deprecated after v3.12.0-1.0.pre - lib\screens\home\home_screen.dart:1369:16 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps - lib\screens\home\home_screen.dart:1511:30 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\home\home_screen.dart:1536:30 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\home\home_screen.dart:1543:7 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\home\home_screen.dart:1565:32 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\home\home_screen.dart:1584:24 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\home\home_screen.dart:1599:30 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\home\home_screen.dart:1609:28 - use_build_context_synchronously
+warning - The declaration '_submitCounterOffer' isn't referenced - lib\screens\home\home_screen.dart:1615:16 - unused_element
+   info - 'desiredAccuracy' is deprecated and shouldn't be used. use settings parameter with AndroidSettings, AppleSettings, WebSettings, or LocationSettings - lib\screens\home\home_screen.dart:1653:9 - deprecated_member_use
+   info - 'timeLimit' is deprecated and shouldn't be used. use settings parameter with AndroidSettings, AppleSettings, WebSettings, or LocationSettings - lib\screens\home\home_screen.dart:1654:9 - deprecated_member_use
+warning - The operand can't be 'null', so the condition is always 'true' - lib\screens\home\home_screen.dart:1656:19 - unnecessary_null_comparison
+warning - The declaration '_logout' isn't referenced - lib\screens\home\home_screen.dart:1723:16 - unused_element
+   info - 'WillPopScope' is deprecated and shouldn't be used. Use PopScope instead. The Android predictive back feature will not work with WillPopScope. This feature was deprecated after v3.12.0-1.0.pre - lib\screens\home\home_screen.dart:1749:12 - deprecated_member_use
+warning - The value of the local variable 'primaryColor' isn't used - lib\screens\home\home_screen.dart:1910:11 - unused_local_variable
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre - lib\screens\home\home_screen.dart:2086:27 - deprecated_member_use
+   info - Statements in an if should be enclosed in a block - lib\screens\home\home_screen.dart:2232:54 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\screens\home\home_screen.dart:2233:58 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\screens\home\home_screen.dart:2234:59 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\screens\home\home_screen.dart:2235:58 - curly_braces_in_flow_control_structures
+warning - The declaration '_buildActiveJobCard' isn't referenced - lib\screens\home\home_screen.dart:2735:10 - unused_element
+   info - Parameter 'key' could be a super parameter - lib\screens\home\incoming_job_screen.dart:13:9 - use_super_parameters
+warning - The value of the field '_mapController' isn't used - lib\screens\home\incoming_job_screen.dart:24:24 - unused_field
+   info - Parameter 'key' could be a super parameter - lib\screens\home\incoming_job_screen.dart:456:9 - use_super_parameters
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\job\active_jobs_screen.dart:153:42 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\job\active_jobs_screen.dart:160:34 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\job\active_jobs_screen.dart:174:13 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\job\active_jobs_screen.dart:186:32 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\job\active_jobs_screen.dart:193:42 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\job\active_jobs_screen.dart:195:30 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\job\active_jobs_screen.dart:232:32 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\job\active_jobs_screen.dart:239:32 - use_build_context_synchronously
+warning - Unused import: 'package:dotted_line/dotted_line.dart' - lib\screens\job\new_job_offer_screen.dart:3:8 - unused_import
+   info - The private field _selectedDateFilter could be 'final' - lib\screens\job\opportunities_screen.dart:38:10 - prefer_final_fields
+warning - The value of the field '_selectedDateFilter' isn't used - lib\screens\job\opportunities_screen.dart:38:10 - unused_field
+   info - The private field _selectedDistanceFilter could be 'final' - lib\screens\job\opportunities_screen.dart:39:10 - prefer_final_fields
+warning - The value of the field '_selectedDistanceFilter' isn't used - lib\screens\job\opportunities_screen.dart:39:10 - unused_field
+   info - The private field _selectedPriceFilter could be 'final' - lib\screens\job\opportunities_screen.dart:40:10 - prefer_final_fields
+   info - The private field _selectedCategoryFilter could be 'final' - lib\screens\job\opportunities_screen.dart:41:10 - prefer_final_fields
+   info - The private field _selectedSortFilter could be 'final' - lib\screens\job\opportunities_screen.dart:42:10 - prefer_final_fields
+warning - The value of the field '_selectedSortFilter' isn't used - lib\screens\job\opportunities_screen.dart:42:10 - unused_field
+   info - Don't use 'BuildContext's across async gaps - lib\screens\job\opportunities_screen.dart:188:28 - use_build_context_synchronously
+   info - The import of 'package:flutter_background_service_android/flutter_background_service_android.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter_background_service/flutter_background_service.dart' - lib\services\background_service.dart:6:8 - unnecessary_import
+   info - The imported package 'flutter_background_service_android' isn't a dependency of the importing package - lib\services\background_service.dart:6:8 - depend_on_referenced_packages
+   info - Don't invoke 'print' in production code - lib\services\maps_service.dart:17:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\maps_service.dart:30:11 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\maps_service.dart:39:11 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\maps_service.dart:43:7 - avoid_print
+   info - Unnecessary use of multiple underscores - lib\services\worker_eligibility_manager.dart:346:37 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\utils\image_utils.dart:61:31 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\utils\image_utils.dart:61:35 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\utils\image_utils.dart:128:35 - unnecessary_underscores
+

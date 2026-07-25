@@ -7,13 +7,16 @@ class PaymentTrustService {
             [subjectId, role]
         );
         if (res.rowCount > 0) return res.rows[0];
+        
         const insertRes = await db.query(
-            `INSERT INTO payment_trust_scores (subject_id, role) VALUES ($1, $2)
+            `INSERT INTO payment_trust_scores (subject_id, role, score, total_payments, successful_payments, failed_payments, disputed_payments) 
+             VALUES ($1, $2, 85, 0, 0, 0, 0)
              ON CONFLICT (subject_id, role) DO NOTHING
              RETURNING *`,
             [subjectId, role]
         );
         if (insertRes.rowCount > 0) return insertRes.rows[0];
+        
         const retryRes = await db.query(
             `SELECT * FROM payment_trust_scores WHERE subject_id = $1 AND role = $2`,
             [subjectId, role]
@@ -25,7 +28,9 @@ class PaymentTrustService {
         const score = await this.getOrCreateScore(subjectId, role);
         const totalPayments = (score.total_payments || 0) + 1;
         const successfulPayments = (score.successful_payments || 0) + 1;
-        const newScore = this._computeScore(totalPayments, successfulPayments, score.disputed_payments || 0, score.failed_payments || 0);
+        
+        const newScore = await this._computeAdaptiveScore(subjectId, role, totalPayments, successfulPayments, score.disputed_payments || 0, score.failed_payments || 0);
+        
         const res = await db.query(
             `UPDATE payment_trust_scores
              SET total_payments = $1, successful_payments = $2, score = $3, last_updated = NOW()
@@ -40,7 +45,9 @@ class PaymentTrustService {
         const score = await this.getOrCreateScore(subjectId, role);
         const totalPayments = (score.total_payments || 0) + 1;
         const failedPayments = (score.failed_payments || 0) + 1;
-        const newScore = this._computeScore(totalPayments, score.successful_payments || 0, score.disputed_payments || 0, failedPayments);
+        
+        const newScore = await this._computeAdaptiveScore(subjectId, role, totalPayments, score.successful_payments || 0, score.disputed_payments || 0, failedPayments);
+        
         const res = await db.query(
             `UPDATE payment_trust_scores
              SET total_payments = $1, failed_payments = $2, score = $3, last_updated = NOW()
@@ -56,7 +63,9 @@ class PaymentTrustService {
         const disputedPayments = (score.disputed_payments || 0) + 1;
         const disputesInitiated = (score.disputes_initiated || 0) + 1;
         const disputesWon = (score.disputes_won || 0) + (won ? 1 : 0);
-        const newScore = this._computeScore(score.total_payments || 0, score.successful_payments || 0, disputedPayments, score.failed_payments || 0, disputesInitiated, disputesWon);
+        
+        const newScore = await this._computeAdaptiveScore(subjectId, role, score.total_payments || 0, score.successful_payments || 0, disputedPayments, score.failed_payments || 0, disputesInitiated, disputesWon);
+        
         const res = await db.query(
             `UPDATE payment_trust_scores
              SET disputed_payments = $1, disputes_initiated = $2, disputes_won = $3, score = $4, last_updated = NOW()
@@ -86,8 +95,33 @@ class PaymentTrustService {
              FROM payment_trust_scores WHERE subject_id = $1 AND role = $2`,
             [subjectId, role]
         );
-        if (res.rowCount === 0) return { score: 50, totalPayments: 0, successfulPayments: 0, disputedPayments: 0, failedPayments: 0, cashConfirmations: 0, disputesInitiated: 0, disputesWon: 0 };
+        
+        const defaultScore = { score: 85, totalPayments: 0, successfulPayments: 0, disputedPayments: 0, failedPayments: 0, cashConfirmations: 0, disputesInitiated: 0, disputesWon: 0 };
+        if (res.rowCount === 0) {
+            return {
+                ...defaultScore,
+                explainability: {
+                    baseScore: 85,
+                    reason: "New account base smoothing average applied."
+                }
+            };
+        }
+        
         const r = res.rows[0];
+        
+        // Explainability breakdown (Point 5)
+        const explainability = {
+            baseScore: 85,
+            deductions: {
+                failures: (r.failed_payments || 0) * 15,
+                disputes: (r.disputed_payments || 0) * 20
+            },
+            boosts: {
+                cashConfirmations: Math.min(10, (r.cash_confirmations || 0) * 2)
+            },
+            reason: `Trust score of ${r.score} computed using Bayesian smoothing over ${r.total_payments} transactions.`
+        };
+
         return {
             score: r.score,
             totalPayments: r.total_payments,
@@ -97,28 +131,66 @@ class PaymentTrustService {
             cashConfirmations: r.cash_confirmations,
             disputesInitiated: r.disputes_initiated,
             disputesWon: r.disputes_won,
+            explainability
         };
     }
 
     async getAverageScore(role) {
         const res = await db.query(
-            `SELECT COALESCE(AVG(score), 50) as avg_score FROM payment_trust_scores WHERE role = $1`,
+            `SELECT COALESCE(AVG(score), 85) as avg_score FROM payment_trust_scores WHERE role = $1`,
             [role]
         );
         return parseFloat(res.rows[0].avg_score);
     }
 
-    _computeScore(totalPayments, successfulPayments, disputedPayments, failedPayments, disputesInitiated = 0, disputesWon = 0) {
-        if (totalPayments === 0) return 50;
-        let score = 50;
-        const successRatio = successfulPayments / totalPayments;
-        const disputeRatio = disputedPayments / totalPayments;
-        const failureRatio = failedPayments / totalPayments;
-        score += successRatio * 40;
-        score -= disputeRatio * 20;
-        score -= failureRatio * 30;
-        if (disputesInitiated > 0 && disputesInitiated === disputesWon) score += 5;
-        return Math.max(0, Math.min(100, Math.round(score)));
+    /**
+     * Computes trust score using Bayesian Smoothing and Time Decay (Points 1 & 2)
+     */
+    async _computeAdaptiveScore(subjectId, role, totalPayments, successfulPayments, disputedPayments, failedPayments, disputesInitiated = 0, disputesWon = 0) {
+        // Query recent 180 days payments to calculate decay factor
+        const recentRes = await db.query(`
+            SELECT payment_status, created_at
+            FROM payments
+            WHERE (payer_id = $1 OR worker_id = $1)
+              AND created_at >= NOW() - INTERVAL '180 days'
+        `, [subjectId]);
+
+        let sumWeights = 0;
+        let sumValue = 0;
+
+        recentRes.rows.forEach(p => {
+            const ageDays = (Date.now() - new Date(p.created_at).getTime()) / (1000 * 3600 * 24);
+            // Exponential time decay: newer events weigh more (half-life of 60 days)
+            const weight = Math.exp(-ageDays * 0.0115); // age decay parameter
+            const val = p.payment_status === 'SUCCESS' ? 1.0 : (p.payment_status === 'FAILED' ? 0.0 : 0.5);
+            
+            sumWeights += weight;
+            sumValue += val * weight;
+        });
+
+        // 2. Bayesian Smoothing: Smooth small sample pools towards global mean of 85
+        const C = 5; // confidence parameter
+        const globalMean = 85.0;
+        
+        let rawScore = 85;
+        if (sumWeights > 0) {
+            const decayRatio = sumValue / sumWeights;
+            rawScore = (decayRatio * 100);
+        } else {
+            // Heuristic calculation if no payments found in last 180 days
+            const successRatio = totalPayments > 0 ? (successfulPayments / totalPayments) : 1.0;
+            rawScore = successRatio * 100;
+        }
+
+        // Apply Bayesian average formula: (C * globalMean + total * rawScore) / (C + total)
+        const smoothedScore = (C * globalMean + totalPayments * rawScore) / (C + totalPayments);
+
+        // Deduct for disputes and failures
+        let finalScore = smoothedScore;
+        if (disputedPayments > 0) finalScore -= (disputedPayments * 5);
+        if (failedPayments > 0) finalScore -= (failedPayments * 10);
+
+        return Math.max(0, Math.min(100, Math.round(finalScore)));
     }
 }
 

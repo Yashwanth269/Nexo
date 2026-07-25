@@ -11,15 +11,39 @@ class ReservationService {
         console.log(`📅 [RESERVATION] Creating time block for Worker ${workerId} on Job ${jobId}`);
         const start = new Date(scheduledStart);
 
-        // 1. Calculate dynamic travel and buffers
-        const travelTime = await this.calculateTravelTimeMinutes(workerId, lat, lng);
-        const bufferBefore = dispatchConfig.reservations.categoryBuffers[category] || dispatchConfig.reservations.defaultBufferMinutes;
-        const bufferAfter = bufferBefore;
-        const duration = await this.predictJobDuration(category);
-
         const client = txClient || await db.pool.connect();
         try {
             if (!txClient) await client.query('BEGIN');
+
+            // 1. Concurrency Calendar Locking (Point 2)
+            // Acquire row-level write locks on the worker's calendar entries for this day to prevent concurrent double-bookings
+            const startOfDay = new Date(start);
+            startOfDay.setHours(0,0,0,0);
+            const endOfDay = new Date(start);
+            endOfDay.setHours(23,59,59,999);
+
+            await client.query(`
+                SELECT id FROM worker_calendar 
+                WHERE worker_id = $1 
+                  AND scheduled_start BETWEEN $2 AND $3
+                FOR UPDATE
+            `, [workerId, startOfDay, endOfDay]);
+
+            // 2. Predict Job Duration using ML helper predictions (Point 3)
+            const optService = require('./marketplace_optimization.service');
+            const durationRes = optService.predictJobDuration(category, 'default');
+            const duration = durationRes.estimatedDurationMins;
+
+            // 3. Calculate dynamic travel and buffers using Routing Engine calculations (Point 1)
+            const travelTime = await this.calculateTravelTimeMinutes(workerId, lat, lng);
+            const bufferBefore = dispatchConfig.reservations.categoryBuffers[category] || dispatchConfig.reservations.defaultBufferMinutes;
+            const bufferAfter = bufferBefore;
+
+            // Check final conflict within transaction locks
+            const conflict = await this._checkLockedConflict(client, workerId, start, duration, category, travelTime, bufferBefore, bufferAfter);
+            if (conflict.conflict) {
+                throw new Error(`CONCURRENT_BOOKING_CONFLICT: ${conflict.reason}`);
+            }
 
             // Insert into calendar
             const insertQuery = `
@@ -35,7 +59,7 @@ class ReservationService {
             ];
             const calendarRes = await client.query(insertQuery, params);
 
-            // Update worker state to RESERVED (if they are online, else keep offline/reserved flag)
+            // Update worker state to RESERVED
             await client.query(
                 `UPDATE workers 
                  SET availability_state = CASE 
@@ -58,6 +82,28 @@ class ReservationService {
         }
     }
 
+    async _checkLockedConflict(client, workerId, start, durationMinutes, category, travelTime, bufferBefore, bufferAfter) {
+        const totalJobTime = durationMinutes + travelTime * 2 + bufferBefore + bufferAfter;
+        const startAdjusted = new Date(start.getTime() - (travelTime + bufferBefore) * 60000);
+        const endAdjusted = new Date(start.getTime() + (durationMinutes + travelTime + bufferAfter) * 60000);
+
+        const queryText = `
+            SELECT * FROM worker_calendar
+            WHERE worker_id = $1 
+              AND status = 'CONFIRMED'
+              AND (
+                (scheduled_start - (travel_time_before_minutes + buffer_before_minutes) * INTERVAL '1 minute' < $3)
+                AND
+                (scheduled_start + (estimated_duration_minutes + travel_time_after_minutes + buffer_after_minutes) * INTERVAL '1 minute' > $2)
+              )`;
+        
+        const conflictRes = await client.query(queryText, [workerId, startAdjusted, endAdjusted]);
+        if (conflictRes.rowCount > 0) {
+            return { conflict: true, reason: 'OVERLAPPING_RESERVATION' };
+        }
+        return { conflict: false };
+    }
+
     /**
      * Checks if a worker has an overlapping booking or exceeds daily limits
      */
@@ -71,13 +117,12 @@ class ReservationService {
         const startAdjusted = new Date(start.getTime() - (travelTime + bufferBefore) * 60000);
         const endAdjusted = new Date(start.getTime() + (durationMinutes + travelTime + bufferAfter) * 60000);
 
-        // 1. Check for overlapping blocks
+        // Check for overlapping blocks
         const queryText = `
             SELECT * FROM worker_calendar
             WHERE worker_id = $1 
               AND status = 'CONFIRMED'
               AND (
-                -- Check if new block overlaps with reserved slots (adjusted for their buffer & travel)
                 (scheduled_start - (travel_time_before_minutes + buffer_before_minutes) * INTERVAL '1 minute' < $3)
                 AND
                 (scheduled_start + (estimated_duration_minutes + travel_time_after_minutes + buffer_after_minutes) * INTERVAL '1 minute' > $2)
@@ -88,7 +133,7 @@ class ReservationService {
             return { conflict: true, reason: 'OVERLAPPING_RESERVATION' };
         }
 
-        // 2. Check daily work hour limits (burnout prevention)
+        // Check daily work hour limits (burnout prevention)
         const dailyStats = await this.getDailyWorkStats(workerId, start);
         if (dailyStats.totalHours + (totalJobTime / 60.0) > dispatchConfig.reservations.maxDailyWorkingHours) {
             return { conflict: true, reason: 'EXCEEDS_DAILY_WORKING_HOURS' };
@@ -101,7 +146,6 @@ class ReservationService {
      * Smart Gap Filling: checks if an instant job fits before the next scheduled reservation
      */
     async evaluateGapFilling(workerId, durationMinutes, jobLat, jobLng) {
-        // Find next confirmed reservation after now
         const queryText = `
             SELECT scheduled_start, travel_time_before_minutes, buffer_before_minutes, location_lat, location_lng
             FROM worker_calendar
@@ -109,17 +153,15 @@ class ReservationService {
             ORDER BY scheduled_start ASC LIMIT 1`;
         
         const nextRes = await db.query(queryText, [workerId]);
-        if (nextRes.rowCount === 0) return true; // No future bookings, instant dispatch is safe
+        if (nextRes.rowCount === 0) return true;
 
         const nextBooking = nextRes.rows[0];
         const nextStart = new Date(nextBooking.scheduled_start);
 
-        // Travel time from instant job location to next reservation location
         const travelToNextBooking = await this.calculateTravelBetweenPoints(
             jobLat, jobLng, parseFloat(nextBooking.location_lat), parseFloat(nextBooking.location_lng)
         );
 
-        // Required time: now + duration + travel + buffer
         const timeNeededMs = (durationMinutes + travelToNextBooking + nextBooking.buffer_before_minutes) * 60000;
         const deadline = new Date(nextStart.getTime() - timeNeededMs);
 
@@ -132,7 +174,7 @@ class ReservationService {
     }
 
     /**
-     * Dynamic Travel Time Estimation (base: 20m + 2m per km, scalable using traffic/speed)
+     * Dynamic Travel Time Estimation
      */
     async calculateTravelTimeMinutes(workerId, destLat, destLng) {
         const workerRes = await db.query("SELECT current_lat, current_lng FROM workers WHERE id = $1", [workerId]);
@@ -153,22 +195,7 @@ class ReservationService {
             [lat1, lng1, lat2, lng2]
         );
         const distanceKm = parseFloat(dRes.rows[0].distance || 0);
-        return Math.round(20 + distanceKm * 2.0); // 20m base prep + 2 minutes per km travel
-    }
-
-    /**
-     * ML Heuristic Job Duration Predictor
-     */
-    async predictJobDuration(category) {
-        const categoryDurations = {
-            'Simple Cleaning': 90,
-            'Cleaning': 120,
-            'AC Installation': 180,
-            'Plumbing': 90,
-            'Moving Service': 240,
-            'Emergency': 60
-        };
-        return categoryDurations[category] || 90;
+        return Math.round(20 + distanceKm * 2.0); 
     }
 
     /**
@@ -199,7 +226,6 @@ class ReservationService {
     async monitorActiveReservations() {
         console.log("🔍 [RESERVATION-MONITOR] Checking upcoming bookings progress...");
         
-        // Find all reservations starting within 45 minutes that are still CONFIRMED
         const queryText = `
             SELECT c.*, w.is_online, w.current_lat, w.current_lng, w.phone_number
             FROM worker_calendar c
@@ -214,20 +240,17 @@ class ReservationService {
             const start = new Date(entry.scheduled_start);
             const minutesLeft = Math.round((start.getTime() - Date.now()) / 60000);
 
-            // Prediction: 1. Offline Check
             if (!entry.is_online) {
                 console.warn(`⚠️ [LATE-ARRIVAL-ALERT] Worker ${entry.worker_id} offline for reservation starting in ${minutesLeft}m. Reassigning.`);
                 await this.triggerProactiveReassignment(entry, 'WORKER_OFFLINE');
                 continue;
             }
 
-            // Prediction: 2. Distance/ETA Check
             const travelMin = await this.calculateTravelBetweenPoints(
                 parseFloat(entry.current_lat), parseFloat(entry.current_lng),
                 parseFloat(entry.location_lat), parseFloat(entry.location_lng)
             );
 
-            // If ETA > minutes left + buffer, they'll arrive late!
             const buffer = entry.buffer_before_minutes;
             if (travelMin > minutesLeft + buffer) {
                 console.warn(`⚠️ [LATE-ARRIVAL-ALERT] Worker ETA (${travelMin} mins) exceeds remaining time (${minutesLeft} mins + ${buffer}m buffer). Reassigning.`);
@@ -237,7 +260,7 @@ class ReservationService {
     }
 
     /**
-     * Automatically release the worker and re-queue the job in Scheduled Recovery Queue (Step 12)
+     * Automatically release the worker and re-queue the job in Scheduled Recovery Queue
      */
     async triggerProactiveReassignment(calendarEntry, reason) {
         const jobId = calendarEntry.booking_id;
@@ -247,19 +270,16 @@ class ReservationService {
         try {
             await client.query('BEGIN');
 
-            // 1. Cancel Calendar Entry
             await client.query(
                 "UPDATE worker_calendar SET status = 'CANCELLED' WHERE id = $1",
                 [calendarEntry.id]
             );
 
-            // 2. Clear Worker state
             await client.query(
                 "UPDATE workers SET availability_state = 'AVAILABLE' WHERE id = $1 AND availability_state = 'RESERVED'",
                 [workerId]
             );
 
-            // 3. Set Job status to REDISTRIBUTING and log event
             await client.query(
                 "UPDATE jobs SET worker_id = NULL, status = 'REDISTRIBUTING', updated_at = NOW() WHERE id = $1",
                 [jobId]
@@ -267,16 +287,13 @@ class ReservationService {
 
             await client.query('COMMIT');
 
-            // 4. Trigger Emergency socket alerts to user and re-assign standby workers
             const io = getIO();
             if (io) {
                 io.to(`worker:${calendarEntry.phone_number}`).emit('job_cancelled', { jobId, reason });
             }
 
-            // Sync Redis status
             await redis.set(`job:${jobId}:status`, 'REDISTRIBUTING');
 
-            // Step 12: Trigger Recovery Dispatch via dispatchQueue handleEmergencyRecovery
             const dispatchQueue = require('./dispatch_queue.service');
             await dispatchQueue.handleEmergencyRecovery(jobId);
 
@@ -288,15 +305,21 @@ class ReservationService {
         }
     }
 
-    /**
-     * Cancel time block (upon customer cancellation)
-     */
+    async predictJobDuration(category) {
+        try {
+            const optService = require('./marketplace_optimization.service');
+            const res = optService.predictJobDuration(category, 'default');
+            return res.estimatedDurationMins;
+        } catch (err) {
+            return 90; // safe default
+        }
+    }
+
     async releaseTimeBlock(jobId) {
         await db.query(
             "UPDATE worker_calendar SET status = 'CANCELLED' WHERE booking_id = $1",
             [jobId]
         );
-        // Reset worker state
         const cal = await db.query("SELECT worker_id FROM worker_calendar WHERE booking_id = $1 LIMIT 1", [jobId]);
         if (cal.rowCount > 0) {
             await db.query(

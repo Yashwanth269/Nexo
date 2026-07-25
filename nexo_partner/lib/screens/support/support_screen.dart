@@ -99,7 +99,7 @@ class _SupportScreenState extends State<SupportScreen> {
           Positioned(
             right: -20,
             top: -20,
-            child: Icon(Icons.support_agent, size: 140, color: Colors.white.withOpacity(0.1)),
+            child: Icon(Icons.support_agent, size: 140, color: Colors.white.withValues(alpha: 0.1)),
           ),
           Padding(
             padding: const EdgeInsets.all(24),
@@ -108,7 +108,7 @@ class _SupportScreenState extends State<SupportScreen> {
               children: [
                 Text("We're here to help", style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
                 const SizedBox(height: 8),
-                Text("Find solutions to your issues or contact our dedicated support team.", style: GoogleFonts.inter(color: Colors.white.withOpacity(0.9), height: 1.5)),
+                Text("Find solutions to your issues or contact our dedicated support team.", style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.9), height: 1.5)),
               ],
             ),
           ),

@@ -2,7 +2,7 @@
  * Nexo Scheduled Job Protection Engine
  * 
  * Continuous monitoring engine for scheduled bookings:
- * - Pre-job health checks (24h, 12h, 6h, 3h, 1h, 30m, 15m)
+ * - Pre-job health checks
  * - Hidden standby worker pool reservation & refresh
  * - No-Show watch and automatic replacement at scheduled_at
  * - Emergency reassignment without customer service disruption
@@ -17,23 +17,26 @@ const { getIO } = require('../config/socket');
 
 class ScheduledJobProtectionService {
     /**
-     * Continuous cron monitor loop (runs every 2 minutes).
+     * Continuous cron monitor loop (runs based on scheduled frequency).
      */
     async monitorScheduledJobs() {
         try {
             const now = new Date();
             
-            // Query upcoming active scheduled jobs (within next 48 hours or overdue by < 2 hours)
+            // Query upcoming active scheduled jobs using configured windows
+            const lookAheadTime = new Date(now.getTime() + scheduledConfig.monitoring.lookAheadHours * 60 * 60 * 1000);
+            const overdueTime = new Date(now.getTime() - scheduledConfig.monitoring.overdueGraceHours * 60 * 60 * 1000);
+
             const scheduledJobsRes = await db.query(`
                 SELECT id, user_id, worker_id, status, category, location_lat, location_lng,
                        scheduled_at, created_at, price
                 FROM jobs
                 WHERE scheduled_at IS NOT NULL
-                  AND scheduled_at <= NOW() + INTERVAL '48 hours'
-                  AND scheduled_at >= NOW() - INTERVAL '2 hours'
-                  AND status IN ('ACCEPTED', 'RESERVED', 'CONFIRMED', 'REDISTRIBUTING', 'OPEN')
+                  AND scheduled_at <= $1
+                  AND scheduled_at >= $2
+                  AND status = ANY($3)
                 ORDER BY scheduled_at ASC
-            `);
+            `, [lookAheadTime, overdueTime, scheduledConfig.monitoring.statuses]);
 
             const jobs = scheduledJobsRes.rows;
             if (jobs.length === 0) return;
@@ -74,7 +77,7 @@ class ScheduledJobProtectionService {
                 jobId,
                 job.worker_id,
                 job.user_id,
-                'scheduled_health_check',
+                scheduledConfig.eventTypes.healthCheck,
                 JSON.stringify({
                     minutesUntilStart,
                     riskScore: riskEval.riskScore,
@@ -92,28 +95,29 @@ class ScheduledJobProtectionService {
                     
                     const io = getIO();
                     if (io && job.worker_id) {
-                        io.to(`worker:${job.worker_id}`).emit('scheduled_job_reminder', {
+                        const reminder = scheduledConfig.messaging.workerReminder;
+                        io.to(`worker:${job.worker_id}`).emit(reminder.eventName, {
                             jobId,
                             scheduledAt: job.scheduled_at,
                             minutesUntilStart,
-                            urgent: true,
-                            message: `⚠️ Action Required: Please turn ONLINE and confirm your upcoming job scheduled in ${minutesUntilStart} mins.`
+                            urgent: reminder.urgent,
+                            message: reminder.getMessage(minutesUntilStart)
                         });
                     }
                 }
             }
 
             // 4. Overdue / No-Show Auto-Replacement at Start Time
-            if (minutesUntilStart <= 0 && ['ACCEPTED', 'RESERVED', 'CONFIRMED'].includes(job.status)) {
+            if (minutesUntilStart <= 0 && scheduledConfig.overdueReplacementStatuses.includes(job.status)) {
                 console.log(`🚨 [NO-SHOW-TRIGGERED] Job ${jobId} reached scheduled time (${job.scheduled_at}) without worker starting navigation. Executing auto-replacement!`);
-                await this.executeEmergencyReplacement(job, 'WORKER_NO_SHOW');
+                await this.executeEmergencyReplacement(job, scheduledConfig.reasons.workerNoShow);
                 return;
             }
 
-            // 5. Proactive Replacement for RED Risk Level (>70%)
-            if (riskEval.tier === 'RED' && ['ACCEPTED', 'RESERVED'].includes(job.status)) {
-                console.warn(`🚨 [PROACTIVE-REPLACEMENT] Job ${jobId} Risk Level RED (${riskEval.riskScore}). Triggering silent replacement!`);
-                await this.executeEmergencyReplacement(job, 'PROACTIVE_HIGH_RISK');
+            // 5. Proactive Replacement for configured high risk level tier (e.g. RED)
+            if (riskEval.tier === scheduledConfig.proactiveReplacementTier && scheduledConfig.proactiveReplacementStatuses.includes(job.status)) {
+                console.warn(`🚨 [PROACTIVE-REPLACEMENT] Job ${jobId} Risk Level ${riskEval.tier} (${riskEval.riskScore}). Triggering silent replacement!`);
+                await this.executeEmergencyReplacement(job, scheduledConfig.reasons.proactiveHighRisk);
                 return;
             }
 
@@ -128,17 +132,20 @@ class ScheduledJobProtectionService {
     async executeEmergencyReplacement(job, reason) {
         const io = getIO();
 
-        // Inform customer seamlessly: "We're finding another professional..."
+        // Inform customer seamlessly
         if (io) {
-            io.to(`user:${job.user_id}`).emit('searching_status', {
-                status: 'SEARCHING_NEARBY',
-                message: "Finding another professional for your scheduled booking...",
-                isReplacement: true
+            const searching = scheduledConfig.messaging.searchingStatus;
+            const updated = scheduledConfig.messaging.jobStatusUpdated;
+
+            io.to(`user:${job.user_id}`).emit(searching.eventName, {
+                status: searching.status,
+                message: searching.message,
+                isReplacement: searching.isReplacement
             });
-            io.to(`user:${job.user_id}`).emit('job_status_updated', {
+            io.to(`user:${job.user_id}`).emit(updated.eventName, {
                 jobId: job.id,
-                status: 'REDISTRIBUTING',
-                message: "Finding another professional..."
+                status: updated.status,
+                message: updated.message
             });
         }
 

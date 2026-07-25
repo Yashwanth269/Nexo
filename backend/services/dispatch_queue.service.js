@@ -244,17 +244,32 @@ class DispatchQueueService {
             ORDER BY distance ASC`;
 
         const dbWorkers = await db.query(queryText, [job.location_lat, job.location_lng, radiusLimit]);
-        const candidates = [];
-
+        
+        // Cheap in-memory filters and cheap score calculation first (prevents sequential N+1 query loop on database)
+        const matchedWorkers = [];
         for (const worker of dbWorkers.rows) {
-            // Check Skill Match
             if (!isSkillMatch(worker.skills, worker.tasks, job.category)) continue;
 
-            // Check Cooldown (Step 9): Did they recently reject or time out this job?
             const cooldownValue = await redis.get(`dispatch_lock:${job.id}:${worker.id}`);
             if (cooldownValue === 'rejected') continue;
 
-            // Check Active Work Status (Not already busy)
+            const cheapScore = (1.0 / (1.0 + parseFloat(worker.distance || 0))) * 0.5 + 
+                              (parseFloat(worker.rep_overall_score || 50) / 100.0) * 0.5;
+
+            matchedWorkers.push({
+                ...worker,
+                cheapScore,
+                distance: parseFloat(worker.distance || 0)
+            });
+        }
+
+        // Sort matched candidates and evaluate only the top 15 to reduce load
+        matchedWorkers.sort((a, b) => b.cheapScore - a.cheapScore);
+        const topWorkers = matchedWorkers.slice(0, 15);
+
+        const candidates = [];
+        for (const worker of topWorkers) {
+            // Expensive check 1: Active busy job check
             const activeJobCheck = await db.query(
                 `SELECT id FROM jobs 
                  WHERE worker_id = $1 
@@ -263,7 +278,7 @@ class DispatchQueueService {
             );
             if (activeJobCheck.rowCount > 0) continue;
 
-            // Step 26: Conflict Detection &smart gap filling
+            // Expensive check 2: Calendar conflict verification
             const duration = await reservationService.predictJobDuration(job.category);
             const conflictCheck = await reservationService.checkCalendarConflict(
                 worker.id, 
@@ -278,7 +293,7 @@ class DispatchQueueService {
                 continue;
             }
 
-            // Smart Gap Filling for instant jobs
+            // Expensive check 3: Smart gap filling
             if (!job.scheduled_at) {
                 const gapCheck = await reservationService.evaluateGapFilling(
                     worker.id, 
@@ -292,12 +307,11 @@ class DispatchQueueService {
                 }
             }
 
-            // Score and Rank
+            // Full Ranking score calculation (fatigue checks & ML models)
             const score = await this.calculateRankingScore(worker, job);
             candidates.push({
                 ...worker,
-                score,
-                distance: parseFloat(worker.distance || 0)
+                score
             });
         }
 

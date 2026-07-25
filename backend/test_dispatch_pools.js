@@ -17,6 +17,8 @@ async function testPoolDispatch() {
     console.log("🧪 Starting Pool Dispatch Queue Integration Test...");
     
     // Pre-test cleanup
+    await db.query("UPDATE jobs SET status = 'CANCELLED' WHERE status NOT IN ('COMPLETED', 'CANCELLED')");
+    await db.query("UPDATE workers SET availability_state = 'AVAILABLE', is_available = true");
     await db.query("DELETE FROM job_offers WHERE worker_id IN (SELECT id FROM workers WHERE phone_number IN ('9999999991', '9999999992', '9999999993'))");
     await db.query("DELETE FROM jobs WHERE user_id IN (SELECT id FROM users WHERE phone_number = '9999999990')");
     await db.query("DELETE FROM workers WHERE phone_number IN ('9999999991', '9999999992', '9999999993')");
@@ -94,6 +96,9 @@ async function testPoolDispatch() {
         const winningPhone = wRes.rows[0].phone_number;
         console.log(`Worker accepting offer ${winningOffer.id} with phone ${winningPhone}...`);
         const acceptResult = await dispatchQueue.acceptOfferAtomically(winningOffer.id, winningPhone);
+        if (!acceptResult.success) {
+            console.error("DEBUG: acceptOfferAtomically failed:", acceptResult);
+        }
         assert.ok(acceptResult.success);
         console.log("✅ Atomic acceptance transaction verified successfully.");
 

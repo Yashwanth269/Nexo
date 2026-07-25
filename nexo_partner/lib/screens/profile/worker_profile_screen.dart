@@ -5,9 +5,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../utils/network_helper.dart';
-import '../../utils/image_utils.dart';
 import '../settings/settings_screen.dart';
-import 'profile_setup_screen.dart';
 import '../auth/login_screen.dart';
 
 class WorkerProfileScreen extends StatefulWidget {
@@ -96,12 +94,14 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
         final String photoUrl = data['photoUrl'];
         await _updateProfilePhoto(photoUrl);
       } else {
+        if (!mounted) return;
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Failed to upload image to server."), backgroundColor: Colors.redAccent),
         );
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error picking image: $e"), backgroundColor: Colors.redAccent),
@@ -123,17 +123,20 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
       if (response.statusCode == 200) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('workerPhoto', photoUrl);
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Profile picture updated successfully!"), backgroundColor: Color(0xFF10B981)),
         );
         _fetchProfile();
       } else {
+        if (!mounted) return;
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Failed to update profile picture database record."), backgroundColor: Colors.redAccent),
         );
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error updating photo: $e"), backgroundColor: Colors.redAccent),
@@ -430,7 +433,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
                           isVerified 
                               ? "You are a verified Nexo partner." 
                               : "Submit your KYC details to verify.",
-                          style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF1E3A8A).withOpacity(0.7)),
+                          style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF1E3A8A).withValues(alpha: 0.7)),
                         ),
                       ],
                     ),
@@ -612,7 +615,7 @@ class _WorkerProfileScreenState extends State<WorkerProfileScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.08),
+              color: color.withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 20),

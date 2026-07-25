@@ -1,0 +1,98 @@
+{
+  "version": "1.2.0",
+  "migrations": [
+    { "version": "1.0.0", "name": "initial_schema" },
+    { "version": "1.1.0", "name": "ml_tables" },
+    { "version": "1.2.0", "name": "commission_history" }
+  ],
+  "tables": {
+    "users": {
+      "required": true,
+      "columns": {
+        "id": { "type": "uuid", "nullable": false },
+        "phone_number": { "type": "text", "nullable": false },
+        "full_name": { "type": "text", "nullable": true },
+        "reliability_score": { "type": "integer", "nullable": true, "optional": true }
+      },
+      "constraints": {
+        "primary_key": ["id"],
+        "unique": [["phone_number"]]
+      }
+    },
+    "workers": {
+      "required": true,
+      "columns": {
+        "id": { "type": "uuid", "nullable": false },
+        "phone_number": { "type": "text", "nullable": false },
+        "full_name": { "type": "text", "nullable": true },
+        "rating": { "type": "numeric", "nullable": true },
+        "is_online": { "type": "boolean", "nullable": true },
+        "is_available": { "type": "boolean", "nullable": true },
+        "availability_state": { "type": "character varying", "nullable": true }
+      },
+      "constraints": {
+        "primary_key": ["id"],
+        "unique": [["phone_number"]]
+      }
+    },
+    "jobs": {
+      "required": true,
+      "columns": {
+        "id": { "type": "uuid", "nullable": false },
+        "user_id": { "type": "uuid", "nullable": true },
+        "worker_id": { "type": "uuid", "nullable": true },
+        "category": { "type": "text", "nullable": false },
+        "status": { "type": "text", "nullable": true },
+        "price": { "type": "integer", "nullable": false },
+        "scheduled_at": { "type": "timestamp with time zone", "nullable": true }
+      },
+      "constraints": {
+        "primary_key": ["id"]
+      },
+      "foreign_keys": [
+        { "columns": ["user_id"], "referenced_table": "users", "referenced_columns": ["id"] },
+        { "columns": ["worker_id"], "referenced_table": "workers", "referenced_columns": ["id"] }
+      ]
+    },
+    "worker_calendar": {
+      "required": true,
+      "columns": {
+        "id": { "type": "uuid", "nullable": false },
+        "worker_id": { "type": "uuid", "nullable": true },
+        "booking_id": { "type": "uuid", "nullable": true },
+        "scheduled_start": { "type": "timestamp with time zone", "nullable": false },
+        "estimated_duration_minutes": { "type": "integer", "nullable": false }
+      },
+      "constraints": {
+        "primary_key": ["id"]
+      },
+      "foreign_keys": [
+        { "columns": ["worker_id"], "referenced_table": "workers", "referenced_columns": ["id"] },
+        { "columns": ["booking_id"], "referenced_table": "jobs", "referenced_columns": ["id"] }
+      ]
+    },
+    "disputes": {
+      "required": true,
+      "columns": {
+        "id": { "type": "uuid", "nullable": false },
+        "payment_id": { "type": "uuid", "nullable": true },
+        "job_id": { "type": "uuid", "nullable": true },
+        "evidence": { "type": "jsonb", "nullable": true, "optional": true },
+        "sla_deadline": { "type": "timestamp without time zone", "nullable": true, "optional": true }
+      }
+    },
+    "advanced_fatigue_scores": {
+      "required": true,
+      "columns": {
+        "worker_id": { "type": "uuid", "nullable": false },
+        "composite_fatigue_score": { "type": "numeric", "nullable": true },
+        "fatigue_score": { "type": "numeric", "nullable": true, "optional": true }
+      }
+    }
+  },
+  "indexes": {
+    "idx_job_offers_pending_unique": { "table": "job_offers", "columns": ["job_id", "worker_id"], "unique": true },
+    "idx_workers_location_cube": { "table": "workers", "type": "gist" },
+    "idx_jobs_location_cube": { "table": "jobs", "type": "gist" }
+  }
+}

@@ -33,15 +33,15 @@ class GlassTheme {
 
   static Color surfaceBorder(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
-        ? Colors.white.withOpacity(0.18)
-        : Colors.black.withOpacity(0.12);
+        ? Colors.white.withValues(alpha: 0.18)
+        : Colors.black.withValues(alpha: 0.12);
   }
 
   static Color glassBackground(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return isDark
-        ? Colors.black.withOpacity(0.92)
-        : Colors.white.withOpacity(0.90);
+        ? Colors.black.withValues(alpha: 0.92)
+        : Colors.white.withValues(alpha: 0.90);
   }
 }
 
@@ -60,7 +60,7 @@ class GlassContainer extends StatelessWidget {
   final Gradient? gradient;
 
   const GlassContainer({
-    Key? key,
+    super.key,
     required this.child,
     this.borderRadius = 20.0,
     this.customBorderRadius,
@@ -73,7 +73,7 @@ class GlassContainer extends StatelessWidget {
     this.width,
     this.height,
     this.gradient,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -90,14 +90,14 @@ class GlassContainer extends StatelessWidget {
         boxShadow: shadow ?? [
           BoxShadow(
             color: isDark
-                ? Colors.black.withOpacity(0.4)
-                : Colors.black.withOpacity(0.08),
+                ? Colors.black.withValues(alpha: 0.4)
+                : Colors.black.withValues(alpha: 0.08),
             blurRadius: 25,
             offset: const Offset(0, 8),
           ),
           if (!isDark)
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 12,
               offset: const Offset(0, 2),
             ),
@@ -116,8 +116,8 @@ class GlassContainer extends StatelessWidget {
               border: border ??
                   Border.all(
                     color: isDark
-                        ? Colors.white.withOpacity(0.15)
-                        : Colors.white.withOpacity(0.6),
+                        ? Colors.white.withValues(alpha: 0.15)
+                        : Colors.white.withValues(alpha: 0.6),
                     width: 1.5,
                   ),
             ),
@@ -132,7 +132,7 @@ class GlassContainer extends StatelessWidget {
 class PremiumBackground extends StatelessWidget {
   final Widget child;
 
-  const PremiumBackground({Key? key, required this.child}) : super(key: key);
+  const PremiumBackground({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -162,7 +162,7 @@ class PremiumBackground extends StatelessWidget {
             height: 200,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFFEA580C).withOpacity(isDark ? 0.06 : 0.08),
+              color: const Color(0xFFEA580C).withValues(alpha: isDark ? 0.06 : 0.08),
             ),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
@@ -179,7 +179,7 @@ class PremiumBackground extends StatelessWidget {
             height: 180,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFFF59E0B).withOpacity(isDark ? 0.04 : 0.06),
+              color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.04 : 0.06),
             ),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
@@ -196,7 +196,7 @@ class PremiumBackground extends StatelessWidget {
             height: 120,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFF6366F1).withOpacity(isDark ? 0.03 : 0.04),
+              color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.03 : 0.04),
             ),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
@@ -219,14 +219,14 @@ class GlassButton extends StatelessWidget {
   final double height;
 
   const GlassButton({
-    Key? key,
+    super.key,
     required this.text,
     this.onPressed,
     this.isPrimary = true,
     this.icon,
     this.width,
     this.height = 48,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -240,7 +240,7 @@ class GlassButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(height / 2),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFEA580C).withOpacity(isDark ? 0.35 : 0.25),
+              color: const Color(0xFFEA580C).withValues(alpha: isDark ? 0.35 : 0.25),
               blurRadius: 15,
               offset: const Offset(0, 6),
             ),
@@ -290,12 +290,12 @@ class GlassButton extends StatelessWidget {
         blur: 12,
         padding: EdgeInsets.zero,
         color: isDark
-            ? Colors.white.withOpacity(0.12)
-            : Colors.white.withOpacity(0.35),
+            ? Colors.white.withValues(alpha: 0.12)
+            : Colors.white.withValues(alpha: 0.35),
         border: Border.all(
           color: isDark
-              ? Colors.white.withOpacity(0.25)
-              : Colors.black.withOpacity(0.12),
+              ? Colors.white.withValues(alpha: 0.25)
+              : Colors.black.withValues(alpha: 0.12),
           width: 1.2,
         ),
         child: TextButton(
@@ -337,13 +337,13 @@ class GlassIconButton extends StatelessWidget {
   final double? containerSize;
 
   const GlassIconButton({
-    Key? key,
+    super.key,
     required this.icon,
     this.onPressed,
     this.iconColor,
     this.size = 20,
     this.containerSize,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -373,11 +373,11 @@ class DynamicIslandPulse extends StatefulWidget {
   final Color pulseColor;
 
   const DynamicIslandPulse({
-    Key? key,
+    super.key,
     required this.text,
     required this.icon,
     this.pulseColor = Colors.greenAccent,
-  }) : super(key: key);
+  });
 
   @override
   State<DynamicIslandPulse> createState() => _DynamicIslandPulseState();
@@ -418,10 +418,10 @@ class _DynamicIslandPulseState extends State<DynamicIslandPulse>
           child: GlassContainer(
             borderRadius: 30,
             blur: 18,
-            color: Colors.black.withOpacity(0.88),
+            color: Colors.black.withValues(alpha: 0.88),
             border: Border.all(
               color: widget.pulseColor
-                  .withOpacity(0.2 + (pulseValue * 0.3)),
+                  .withValues(alpha: 0.2 + (pulseValue * 0.3)),
               width: 1.5,
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -436,7 +436,7 @@ class _DynamicIslandPulseState extends State<DynamicIslandPulse>
                     color: widget.pulseColor,
                     boxShadow: [
                       BoxShadow(
-                        color: widget.pulseColor.withOpacity(0.5),
+                        color: widget.pulseColor.withValues(alpha: 0.5),
                         blurRadius: 6 * pulseValue,
                         spreadRadius: 2 * pulseValue,
                       ),
@@ -449,7 +449,7 @@ class _DynamicIslandPulseState extends State<DynamicIslandPulse>
                 Text(
                   widget.text,
                   style: GoogleFonts.inter(
-                    color: Colors.white.withOpacity(0.95),
+                    color: Colors.white.withValues(alpha: 0.95),
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.2,

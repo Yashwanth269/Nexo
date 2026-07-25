@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:dotted_line/dotted_line.dart';
 import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import '../../utils/image_utils.dart';
@@ -173,9 +172,9 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                     GlassContainer(
                       borderRadius: 28,
                       blur: 20,
-                      color: isDark ? Colors.black.withOpacity(0.65) : Colors.white.withOpacity(0.85),
+                      color: isDark ? Colors.black.withValues(alpha: 0.65) : Colors.white.withValues(alpha: 0.85),
                       border: Border.all(
-                        color: isDark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.08),
+                        color: isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.08),
                         width: 1.5,
                       ),
                       padding: EdgeInsets.zero,
@@ -193,8 +192,8 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                                   gradient: LinearGradient(
                                     colors: isUrgent
                                         ? [
-                                            const Color(0xFFEF4444).withOpacity(pulseValue),
-                                            const Color(0xFFB91C1C).withOpacity(pulseValue),
+                                            const Color(0xFFEF4444).withValues(alpha: pulseValue),
+                                            const Color(0xFFB91C1C).withValues(alpha: pulseValue),
                                           ]
                                         : [const Color(0xFFFF8C00), const Color(0xFFFF6A00)],
                                     begin: Alignment.topLeft,
@@ -206,7 +205,7 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: (isUrgent ? const Color(0xFFEF4444) : const Color(0xFFFF6A00)).withOpacity(0.3 * pulseValue),
+                                      color: (isUrgent ? const Color(0xFFEF4444) : const Color(0xFFFF6A00)).withValues(alpha: 0.3 * pulseValue),
                                       blurRadius: 15 * pulseValue,
                                       offset: const Offset(0, 4),
                                     )
@@ -224,7 +223,7 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                                     Text(
                                       isUrgent ? "URGENT REDISTRIBUTION" : "PRIORITY DISPATCH",
                                       style: GoogleFonts.inter(
-                                        color: Colors.white.withOpacity(0.85),
+                                        color: Colors.white.withValues(alpha: 0.85),
                                         fontSize: 10,
                                         fontWeight: FontWeight.w900,
                                         letterSpacing: 1.5,
@@ -244,7 +243,7 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.2),
+                                    color: Colors.white.withValues(alpha: 0.2),
                                     borderRadius: BorderRadius.circular(30),
                                     border: Border.all(color: Colors.white30),
                                   ),
@@ -276,9 +275,9 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                                 GlassContainer(
                                   borderRadius: 20,
                                   blur: 14,
-                                  color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03),
+                                  color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
                                   border: Border.all(
-                                    color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
+                                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.04),
                                     width: 1,
                                   ),
                                   padding: const EdgeInsets.all(16),
@@ -311,9 +310,9 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                                   decoration: BoxDecoration(
-                                                    color: const Color(0xFF4F46E5).withOpacity(0.12),
+                                                    color: const Color(0xFF4F46E5).withValues(alpha: 0.12),
                                                     borderRadius: BorderRadius.circular(6),
-                                                    border: Border.all(color: const Color(0xFF4F46E5).withOpacity(0.3)),
+                                                    border: Border.all(color: const Color(0xFF4F46E5).withValues(alpha: 0.3)),
                                                   ),
                                                   child: Text(
                                                     "VERIFIED",
@@ -340,9 +339,9 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                                       ),
                                       Container(
                                         decoration: BoxDecoration(
-                                          color: primaryColor.withOpacity(0.12),
+                                          color: primaryColor.withValues(alpha: 0.12),
                                           shape: BoxShape.circle,
-                                          border: Border.all(color: primaryColor.withOpacity(0.2)),
+                                          border: Border.all(color: primaryColor.withValues(alpha: 0.2)),
                                         ),
                                         child: IconButton(
                                           icon: Icon(Icons.phone_in_talk_rounded, color: primaryColor, size: 20),
@@ -415,7 +414,7 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                                       style: GoogleFonts.outfit(
                                         fontSize: 15,
                                         fontWeight: FontWeight.bold,
-                                        color: isDark ? Colors.white70 : Colors.black.withOpacity(0.7),
+                                        color: isDark ? Colors.white70 : Colors.black.withValues(alpha: 0.7),
                                       ),
                                     ),
                                   ],
@@ -432,7 +431,7 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                                           boxShadow: [
                                             if (isFocused)
                                               BoxShadow(
-                                                color: primaryColor.withOpacity(0.12),
+                                                color: primaryColor.withValues(alpha: 0.12),
                                                 blurRadius: 10,
                                                 spreadRadius: 1,
                                               )
@@ -442,10 +441,10 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                                           borderRadius: 16,
                                           blur: 12,
                                           color: isFocused
-                                              ? (isDark ? Colors.black.withOpacity(0.55) : Colors.white.withOpacity(0.95))
-                                              : (isDark ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.6)),
+                                              ? (isDark ? Colors.black.withValues(alpha: 0.55) : Colors.white.withValues(alpha: 0.95))
+                                              : (isDark ? Colors.black.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.6)),
                                           border: Border.all(
-                                            color: isFocused ? primaryColor : (isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.06)),
+                                            color: isFocused ? primaryColor : (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06)),
                                             width: 1.5,
                                           ),
                                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -493,9 +492,9 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                 child: GlassContainer(
                   borderRadius: 24,
                   blur: 20,
-                  color: isDark ? Colors.black.withOpacity(0.82) : Colors.white.withOpacity(0.88),
+                  color: isDark ? Colors.black.withValues(alpha: 0.82) : Colors.white.withValues(alpha: 0.88),
                   border: Border.all(
-                    color: isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.08),
+                    color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08),
                     width: 1.5,
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
@@ -513,8 +512,8 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                           width: 52,
                           height: 52,
                           padding: EdgeInsets.zero,
-                          color: Colors.redAccent.withOpacity(0.15),
-                          border: Border.all(color: Colors.redAccent.withOpacity(0.3), width: 1.2),
+                          color: Colors.redAccent.withValues(alpha: 0.15),
+                          border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3), width: 1.2),
                           child: const Center(
                             child: Icon(Icons.close_rounded, color: Colors.redAccent, size: 24),
                           ),
@@ -530,7 +529,7 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
                             borderRadius: BorderRadius.circular(26),
                             boxShadow: [
                               BoxShadow(
-                                color: (_isNegotiating ? primaryColor : const Color(0xFF10B981)).withOpacity(0.35),
+                                color: (_isNegotiating ? primaryColor : const Color(0xFF10B981)).withValues(alpha: 0.35),
                                 blurRadius: 15,
                                 offset: const Offset(0, 6),
                               ),
@@ -599,9 +598,9 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: bgColor.withOpacity(0.12),
+        color: bgColor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: bgColor.withOpacity(0.3), width: 1),
+        border: Border.all(color: bgColor.withValues(alpha: 0.3), width: 1),
       ),
       child: Text(
         text,
@@ -622,9 +621,9 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
       borderRadius: 14,
       blur: 10,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      color: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.02),
+      color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02),
       border: Border.all(
-        color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04),
+        color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
         width: 1,
       ),
       child: Row(
@@ -632,7 +631,7 @@ class _NewJobOfferScreenState extends State<NewJobOfferScreen> with SingleTicker
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: primaryColor.withOpacity(0.12),
+              color: primaryColor.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: primaryColor, size: 16),

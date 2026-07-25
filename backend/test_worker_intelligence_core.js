@@ -52,14 +52,14 @@ async function runWorkerIntelligenceCoreTests() {
     'Koramangala': 4,
     'Airport': 0, // Avoided
   };
-  workerPreferenceService.updateAreaRatings(testWorkerId, areaRatings);
+  await workerPreferenceService.updateAreaRatings(testWorkerId, areaRatings);
   console.log(`✅ Updated Worker Area Ratings:`, areaRatings);
 
   const testJobHSR = { title: "AC Service", category: "AC", price: 1200, address: "HSR Layout Sector 1" };
   const testJobAirport = { title: "AC Service", category: "AC", price: 2000, address: "Airport Terminal 1" };
 
-  const scoreHSR = workerPreferenceService.calculateDispatchScore(testWorkerId, testJobHSR, 2.0, 95);
-  const scoreAirport = workerPreferenceService.calculateDispatchScore(testWorkerId, testJobAirport, 25.0, 95);
+  const scoreHSR = await workerPreferenceService.calculateDispatchScore(testWorkerId, testJobHSR, 2.0, 95);
+  const scoreAirport = await workerPreferenceService.calculateDispatchScore(testWorkerId, testJobAirport, 25.0, 95);
 
   console.log(`   HSR Job Dispatch Score (5★ Area): ${scoreHSR.compositeScore} (Breakdown: Area Score ${scoreHSR.breakdown.areaScore})`);
   console.log(`   Airport Job Dispatch Score (0★ Avoided Area): ${scoreAirport.compositeScore} (Is Avoided: ${scoreAirport.isAvoidedArea})`);
@@ -73,14 +73,14 @@ async function runWorkerIntelligenceCoreTests() {
     'Switch Board Repair': 5,
     'Solar Installation': 1,
   };
-  workerPreferenceService.updateSkillRatings(testWorkerId, skillRatings);
+  await workerPreferenceService.updateSkillRatings(testWorkerId, skillRatings);
   console.log(`✅ Updated Sub-Skill Confidence Ratings:`, skillRatings);
 
   const testJobFan = { title: "Ceiling Fan Repair", category: "Electrical", price: 700, address: "HSR Layout" };
   const testJobSolar = { title: "Solar Installation", category: "Electrical", price: 1500, address: "HSR Layout" };
 
-  const scoreFan = workerPreferenceService.calculateDispatchScore(testWorkerId, testJobFan, 2.0, 95);
-  const scoreSolar = workerPreferenceService.calculateDispatchScore(testWorkerId, testJobSolar, 2.0, 95);
+  const scoreFan = await workerPreferenceService.calculateDispatchScore(testWorkerId, testJobFan, 2.0, 95);
+  const scoreSolar = await workerPreferenceService.calculateDispatchScore(testWorkerId, testJobSolar, 2.0, 95);
 
   console.log(`   Fan Repair Dispatch Score (5★ Skill): ${scoreFan.compositeScore} (Skill Score ${scoreFan.breakdown.skillScore})`);
   console.log(`   Solar Install Dispatch Score (1★ Skill): ${scoreSolar.compositeScore} (Skill Score ${scoreSolar.breakdown.skillScore})`);

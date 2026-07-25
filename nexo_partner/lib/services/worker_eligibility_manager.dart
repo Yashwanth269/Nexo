@@ -311,7 +311,7 @@ class _EligibilityModalState extends State<_EligibilityModal> with WidgetsBindin
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.15),
+                  color: Colors.amber.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.shield_outlined, color: Colors.amber, size: 28),
@@ -343,23 +343,23 @@ class _EligibilityModalState extends State<_EligibilityModal> with WidgetsBindin
             child: ListView.separated(
               shrinkWrap: true,
               itemCount: _report.items.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              separatorBuilder: (context, index) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
                 final item = _report.items[index];
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
                     color: item.isGranted
-                        ? const Color(0xFF1E293B).withOpacity(0.4)
+                        ? const Color(0xFF1E293B).withValues(alpha: 0.4)
                         : item.isMandatory
                             ? const Color(0xFF2D1515)
                             : const Color(0xFF1E1E2A),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: item.isGranted
-                          ? Colors.green.withOpacity(0.3)
+                          ? Colors.green.withValues(alpha: 0.3)
                           : item.isMandatory
-                              ? Colors.redAccent.withOpacity(0.4)
+                              ? Colors.redAccent.withValues(alpha: 0.4)
                               : Colors.white12,
                     ),
                   ),

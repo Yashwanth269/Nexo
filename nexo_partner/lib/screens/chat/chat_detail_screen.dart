@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/network_helper.dart';
 
@@ -30,7 +30,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final ImagePicker _picker = ImagePicker();
   final List<dynamic> _messages = [];
   List<String> _quickReplies = [];
-  late IO.Socket _socket;
+  late io.Socket _socket;
   bool _isLoading = true;
   String _token = "";
 
@@ -85,7 +85,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _initSocket() {
-    _socket = IO.io(NetworkHelper.baseUrl, IO.OptionBuilder()
+    _socket = io.io(NetworkHelper.baseUrl, io.OptionBuilder()
       .setTransports(['websocket'])
       .setAuth({'token': _token})
       .setQuery({'token': _token})
@@ -204,6 +204,7 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (e) {
       debugPrint("Error picking image: $e");
     }
+    if (!mounted) return;
     Navigator.pop(context);
   }
 
@@ -240,7 +241,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
             child: Icon(icon, color: color, size: 28),
           ),
           const SizedBox(height: 8),
@@ -416,8 +417,8 @@ class _ChatScreenState extends State<ChatScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFFF6A00).withOpacity(0.2)),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+              border: Border.all(color: const Color(0xFFFF6A00).withValues(alpha: 0.2)),
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
             ),
             child: Text(_quickReplies[index], style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFFFF6A00))),
           ),
@@ -454,7 +455,7 @@ class _ChatScreenState extends State<ChatScreen> {
             bottomRight: isMe ? const Radius.circular(0) : const Radius.circular(20),
             bottomLeft: !isMe ? const Radius.circular(0) : const Radius.circular(20),
           ),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

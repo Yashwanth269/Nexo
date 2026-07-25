@@ -4,12 +4,50 @@ const https = require('https');
 const http = require('http');
 const routeDeviationService = require('./route_deviation.service');
 const backupWorkerService = require('./backup_worker.service');
+const executionConfig = require('../config/execution.config');
 
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+async function callMLService(endpoint, bodyData) {
+    const body = JSON.stringify(bodyData);
+    let attempts = 0;
+    const maxRetries = executionConfig.mlMaxRetries;
+    const timeout = executionConfig.mlTimeoutMs;
 
-// =============================================================
-// EXECUTION SERVICE — Production Grade State Machine
-// =============================================================
+    while (attempts < maxRetries) {
+        attempts++;
+        try {
+            return await new Promise((resolve, reject) => {
+                const urlObj = new URL(`${executionConfig.mlServiceUrl}${endpoint}`);
+                const transport = urlObj.protocol === 'https:' ? https : http;
+                const options = {
+                    hostname: urlObj.hostname,
+                    port: urlObj.port,
+                    path: urlObj.pathname,
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+                    timeout,
+                };
+                const req = transport.request(options, (res) => {
+                    let data = '';
+                    res.on('data', (chunk) => data += chunk);
+                    res.on('end', () => {
+                        try { resolve(JSON.parse(data)); }
+                        catch { reject(new Error("Invalid JSON response from ML")); }
+                    });
+                });
+                req.on('error', (err) => reject(err));
+                req.on('timeout', () => { req.destroy(); reject(new Error("Timeout")); });
+                req.write(body);
+                req.end();
+            });
+        } catch (err) {
+            console.warn(`[EXECUTION-ML-CLIENT-WARN] Attempt ${attempts} failed: ${err.message}`);
+            if (attempts >= maxRetries) {
+                throw err;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, attempts)));
+        }
+    }
+}
 
 class ExecutionService {
     constructor() {
@@ -24,36 +62,19 @@ class ExecutionService {
 
     /**
      * Validates and transitions job status.
-     * Uses SELECT FOR UPDATE row lock for strict concurrency control.
+     * Keeps non-critical notifications, cache writes, and event publishes outside the DB transaction.
      */
     async transitionStatus(jobId, workerId, newStatus, metadata = {}) {
-        // Resolve worker profile (handles both UUID and phone number formats)
         const matchingService = require('./matching.service');
         const worker = await matchingService.resolveWorker(workerId);
         if (!worker) {
             return { success: false, error: "Worker not found in database" };
         }
 
-        const client = await db.pool.connect();
+        // 1. Run external ML Checks BEFORE starting the DB transaction (avoids holding locks during HTTP calls)
+        let gpsCheck = { gpsTrustScore: 100, alerts: [], isSuspicious: false };
         try {
-            await client.query('BEGIN');
-
-            // Row-level lock prevents concurrent status updates
-            const jobResult = await client.query(
-                "SELECT status, location_lat, location_lng, scheduled_at, user_id FROM jobs WHERE id = $1::uuid AND worker_id = $2::uuid FOR UPDATE",
-                [jobId, worker.id]
-            );
-
-            if (jobResult.rowCount === 0) throw new Error("Job not found or worker unauthorized");
-                       const currentStatus = jobResult.rows[0].status;
-            
-            const jobStateMachine = require('./job_state_machine.service');
-            if (!jobStateMachine.isValidTransition(currentStatus, newStatus)) {
-                throw new Error(`Invalid transition: ${currentStatus} -> ${newStatus}`);
-            }
-
-            // GPS Spoof Detection — Rule engine in production, ML in shadow mode
-            const gpsCheck = await this._checkGpsSpoof({
+            gpsCheck = await this._checkGpsSpoof({
                 lat: metadata.lat || 0,
                 lng: metadata.lng || 0,
                 prevLat: metadata.prevLat || null,
@@ -63,16 +84,42 @@ class ExecutionService {
                 headingChange: metadata.headingChange || 0,
                 signalStrength: metadata.signalStrength || -70,
             });
+        } catch (err) {
+            console.warn("[EXECUTION-GPS-ML-WARN] GPS Check fallback to heuristics:", err.message);
+        }
 
-            const ruleBasedSuspicious = gpsCheck.alerts && gpsCheck.alerts.length > 0;
-            if (gpsCheck.mlScore !== undefined) {
-                console.log(`[SHADOW-GPS] Worker=${worker.id} rule=${gpsCheck.ruleScore} ml=${gpsCheck.mlScore} final=${gpsCheck.gpsTrustScore} alerts=${JSON.stringify(gpsCheck.alerts)}`);
+        const client = await db.pool.connect();
+        let userToNotify = null;
+        let jobCategory = '';
+        let originalLat = 0;
+        let originalLng = 0;
+        let distanceMeters = null;
+
+        try {
+            await client.query('BEGIN');
+
+            const jobResult = await client.query(
+                "SELECT status, location_lat, location_lng, scheduled_at, user_id, category FROM jobs WHERE id = $1::uuid AND worker_id = $2::uuid FOR UPDATE",
+                [jobId, worker.id]
+            );
+
+            if (jobResult.rowCount === 0) throw new Error("Job not found or worker unauthorized");
+            
+            const currentStatus = jobResult.rows[0].status;
+            userToNotify = jobResult.rows[0].user_id;
+            jobCategory = jobResult.rows[0].category;
+            originalLat = jobResult.rows[0].location_lat;
+            originalLng = jobResult.rows[0].location_lng;
+            
+            const jobStateMachine = require('./job_state_machine.service');
+            if (!jobStateMachine.isValidTransition(currentStatus, newStatus)) {
+                throw new Error(`Invalid transition: ${currentStatus} -> ${newStatus}`);
             }
 
             const gpsScore = gpsCheck.gpsTrustScore;
             let gpsStatus = 'SAFE';
-            if (gpsScore < 40) gpsStatus = 'FRAUD_ALERT';
-            else if (gpsScore < 60) gpsStatus = 'SUSPICIOUS';
+            if (gpsScore < executionConfig.gpsTrustThresholds.fraudAlert) gpsStatus = 'FRAUD_ALERT';
+            else if (gpsScore < executionConfig.gpsTrustThresholds.suspicious) gpsStatus = 'SUSPICIOUS';
             else if (gpsScore < 80) gpsStatus = 'MONITOR';
 
             await client.query(`
@@ -86,8 +133,8 @@ class ExecutionService {
                     last_anomaly_at = CASE WHEN EXCLUDED.gps_trust_score < 60 THEN NOW() ELSE worker_gps_risk.last_anomaly_at END
             `, [worker.id, gpsScore, gpsCheck.alerts || [], gpsStatus]);
 
+            const ruleBasedSuspicious = gpsCheck.alerts && gpsCheck.alerts.length > 0;
             if (ruleBasedSuspicious) {
-                console.warn(`🚨 [GPS_RULE_ENGINE] Rule-based alert for worker: ${worker.id}. Score: ${gpsCheck.gpsTrustScore}`);
                 await client.query(
                     "INSERT INTO event_logs (job_id, worker_id, event_type, metadata) VALUES ($1, $2, $3, $4)",
                     [jobId, worker.id, 'GPS_SPOOFING_DETECTED', JSON.stringify({ ...gpsCheck, timestamp: new Date() })]
@@ -98,42 +145,31 @@ class ExecutionService {
                 );
             }
 
-            // Radius limits (100 meters)
-            const ARRIVAL_RADIUS_METERS = 100;
-            let distanceMeters = null;
-
             if (newStatus === 'ARRIVED' || newStatus === 'FORCE_ARRIVAL_PENDING_CONFIRMATION') {
                 const { lat, lng } = metadata;
                 if (!lat || !lng) {
                     throw new Error("GPS coordinates are required to mark arrival");
                 }
-                const distanceKm = this.calculateDistance(
-                    lat, lng, 
-                    jobResult.rows[0].location_lat, 
-                    jobResult.rows[0].location_lng
-                );
+                const distanceKm = this.calculateDistance(lat, lng, originalLat, originalLng);
                 distanceMeters = Math.round(distanceKm * 1000);
-                console.log(`[ARRIVAL_DISTANCE] Worker distance from destination: ${distanceMeters}m`);
 
-                // Check speed and stationary time eligibility in Redis
                 const lowSpeedSince = await redis.get(`worker:${worker.id}:low_speed_since`);
-                const isStationary20s = (metadata.isMocked === true) || (metadata.customerConfirmed === true) || (lowSpeedSince && (Date.now() - parseInt(lowSpeedSince) >= 20000));
+                const isStationary = (metadata.isMocked === true) || (metadata.customerConfirmed === true) || 
+                                     (lowSpeedSince && (Date.now() - parseInt(lowSpeedSince) >= executionConfig.stationaryDurationSeconds * 1000));
 
                 if (newStatus === 'ARRIVED') {
-                    if (distanceMeters > ARRIVAL_RADIUS_METERS || !isStationary20s) {
+                    if (distanceMeters > executionConfig.arrivalRadiusMeters || !isStationary) {
                         if (metadata.force === true) {
                             newStatus = 'FORCE_ARRIVAL_PENDING_CONFIRMATION';
-                            console.log(`[GPS_OVERRIDE] Worker not fully eligible but force-marking arrival. Status set to FORCE_ARRIVAL_PENDING_CONFIRMATION.`);
                         } else {
-                            const detailErr = distanceMeters > ARRIVAL_RADIUS_METERS ? "TOO_FAR" : "SPEED_NOT_STATIONARY";
-                            console.log(`[GPS_VALIDATION_FAILED] Worker not eligible for ARRIVED status (${detailErr}). Distance: ${distanceMeters}m`);
+                            const detailErr = distanceMeters > executionConfig.arrivalRadiusMeters ? "TOO_FAR" : "SPEED_NOT_STATIONARY";
                             await client.query('ROLLBACK');
                             return { 
                                 success: false, 
                                 error: detailErr, 
-                                message: distanceMeters > ARRIVAL_RADIUS_METERS ? 
+                                message: distanceMeters > executionConfig.arrivalRadiusMeters ? 
                                     "You are too far from the destination." : 
-                                    "You must remain stationary (< 5 km/h) near destination for 20 seconds before marking arrival.",
+                                    `You must remain stationary near destination for ${executionConfig.stationaryDurationSeconds} seconds before marking arrival.`,
                                 distance: distanceMeters 
                             };
                         }
@@ -141,10 +177,9 @@ class ExecutionService {
                 }
             }
 
-            // Perform Update
             await jobStateMachine.transition(jobId, newStatus, {
                 workerId: worker.id,
-                userId: jobResult.rows[0].user_id,
+                userId: userToNotify,
                 client,
                 metadata
             });
@@ -165,117 +200,101 @@ class ExecutionService {
                 );
             }
 
-            // Log Event
             await client.query(
                 "INSERT INTO event_logs (job_id, worker_id, event_type, metadata) VALUES ($1, $2, $3, $4)",
                 [jobId, worker.id, `status_change_${newStatus}`, JSON.stringify({ ...metadata, distanceMeters })]
             );
 
             await client.query('COMMIT');
-
-            if (newStatus === 'COMPLETED') {
-                try {
-                    const { invalidateAllHomeServicesCaches } = require('../routes/home.routes');
-                    await invalidateAllHomeServicesCaches().catch(() => {});
-                    
-                    const feedService = require('./feed.service');
-                    await feedService.invalidateFeedCache(jobResult.rows[0].location_lat, jobResult.rows[0].location_lng).catch(() => {});
-                    
-                    const eventStream = require('../utils/event_stream');
-                    await eventStream.publish('job_completed', {
-                        jobId,
-                        workerId: worker.id,
-                        lat: jobResult.rows[0].location_lat,
-                        lng: jobResult.rows[0].location_lng,
-                        category: jobResult.rows[0].category,
-                        userId: jobResult.rows[0].user_id
-                    });
-
-                    // Log completed dispatch event and worker response for analytics
-                    const matchingService = require('./matching.service');
-                    matchingService.logDispatchEvent(jobId, 'job_completed', { workerId: worker.id }).catch(() => {});
-
-                    // Update search analytics to mark is_completed
-                    try {
-                        await db.query(
-                            "UPDATE search_analytics_logs SET is_completed = true WHERE job_id = $1",
-                            [jobId]
-                        );
-                    } catch (_) {}
-                } catch (streamErr) {
-                    console.error("⚠️ [EXECUTION_SERVICE] Failed to publish job_completed event:", streamErr.message);
-                }
-            }
-
-            // Automatically create a completed job post in the social feed if the status transitions to COMPLETED
-            if (newStatus === 'COMPLETED') {
-                try {
-                    const feedService = require('./feed.service');
-                    await feedService.createOrUpdateCompletedPost(jobId);
-                } catch (feedErr) {
-                    console.error("⚠️ [EXECUTION_SERVICE] Failed to create completed job post:", feedErr.message);
-                }
-            }
-
-            // Update Redis status cache
-            await redis.set(`job:${jobId}:status`, newStatus, 'EX', 3600);
-
-            // Broadcast Status Change
-            const { getIO } = require('../config/socket');
-            const io = getIO();
-            const userId = jobResult.rows[0].user_id;
-            
-            // Core standard state updates
-            io.to(`user:${userId}`).emit('job_status_updated', {
-                jobId,
-                status: newStatus,
-                metadata: { ...metadata, distanceMeters }
-            });
-            io.to(`job:${jobId}`).emit('job_status_updated', {
-                jobId,
-                status: newStatus,
-                metadata: { ...metadata, distanceMeters }
-            });
-
-            // Emit to both formats to be 100% robust for worker
-            io.to(`worker:${worker.phone_number}`).emit('active_job_updated', {
-                jobId,
-                status: newStatus,
-                metadata: { ...metadata, distanceMeters }
-            });
-            io.to(`worker:${worker.id}`).emit('active_job_updated', {
-                jobId,
-                status: newStatus,
-                metadata: { ...metadata, distanceMeters }
-            });
-
-            // Specific event emission for forced arrivals
-            if (newStatus === 'FORCE_ARRIVAL_PENDING_CONFIRMATION') {
-                console.log(`[FORCE_ARRIVAL_TRIGGERED] Worker ${worker.id} force marked arrival at ${distanceMeters}m`);
-                
-                const forcePayload = {
-                    jobId,
-                    workerId: worker.id,
-                    distance: distanceMeters,
-                    message: "The worker marked arrival but appears away from your location."
-                };
-                
-                io.to(`user:${userId}`).emit('WORKER_FORCE_MARKED_ARRIVAL', forcePayload);
-                io.to(`job:${jobId}`).emit('WORKER_FORCE_MARKED_ARRIVAL', forcePayload);
-            }
-
-            return { success: true, status: newStatus };
         } catch (error) {
-            if (client) await client.query('ROLLBACK');
+            await client.query('ROLLBACK');
             return { success: false, error: error.message };
         } finally {
-            if (client) client.release();
+            client.release();
         }
+
+        // 2. Execute POST-COMMIT non-blocking tasks outside transaction (saves database locks)
+        if (newStatus === 'COMPLETED') {
+            try {
+                const { invalidateAllHomeServicesCaches } = require('../routes/home.routes');
+                await invalidateAllHomeServicesCaches().catch(() => {});
+                
+                const feedService = require('./feed.service');
+                await feedService.invalidateFeedCache(originalLat, originalLng).catch(() => {});
+                await feedService.createOrUpdateCompletedPost(jobId).catch(() => {});
+                
+                const eventStream = require('../utils/event_stream');
+                await eventStream.publish('job_completed', {
+                    jobId,
+                    workerId: worker.id,
+                    lat: originalLat,
+                    lng: originalLng,
+                    category: jobCategory,
+                    userId: userToNotify
+                });
+
+                const matchingService = require('./matching.service');
+                matchingService.logDispatchEvent(jobId, 'job_completed', { workerId: worker.id }).catch(() => {});
+
+                await db.query(
+                    "UPDATE search_analytics_logs SET is_completed = true WHERE job_id = $1",
+                    [jobId]
+                ).catch(() => {});
+            } catch (postErr) {
+                console.error("⚠️ [EXECUTION] Post-commit completion tasks failed:", postErr.message);
+            }
+        }
+
+        // Update Redis status cache
+        await redis.set(`job:${jobId}:status`, newStatus, 'EX', 3600).catch(() => {});
+
+        // Broadcast Status Change
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            if (io) {
+                io.to(`user:${userToNotify}`).emit('job_status_updated', {
+                    jobId,
+                    status: newStatus,
+                    metadata: { ...metadata, distanceMeters }
+                });
+                io.to(`job:${jobId}`).emit('job_status_updated', {
+                    jobId,
+                    status: newStatus,
+                    metadata: { ...metadata, distanceMeters }
+                });
+                io.to(`worker:${worker.phone_number}`).emit('active_job_updated', {
+                    jobId,
+                    status: newStatus,
+                    metadata: { ...metadata, distanceMeters }
+                });
+                io.to(`worker:${worker.id}`).emit('active_job_updated', {
+                    jobId,
+                    status: newStatus,
+                    metadata: { ...metadata, distanceMeters }
+                });
+
+                if (newStatus === 'FORCE_ARRIVAL_PENDING_CONFIRMATION') {
+                    const forcePayload = {
+                        jobId,
+                        workerId: worker.id,
+                        distance: distanceMeters,
+                        message: "The worker marked arrival but appears away from your location."
+                    };
+                    io.to(`user:${userToNotify}`).emit('WORKER_FORCE_MARKED_ARRIVAL', forcePayload);
+                    io.to(`job:${jobId}`).emit('WORKER_FORCE_MARKED_ARRIVAL', forcePayload);
+                }
+            }
+        } catch (socketErr) {
+            console.warn("[EXECUTION-SOCKET-WARN] Broadcast failed:", socketErr.message);
+        }
+
+        return { success: true, status: newStatus };
     }
 
     async _checkGpsSpoof(params) {
         try {
-            const body = JSON.stringify({
+            const response = await callMLService('/predict/gps-spoof', {
                 lat: params.lat,
                 lng: params.lng,
                 prev_lat: params.prevLat,
@@ -284,30 +303,6 @@ class ExecutionService {
                 gps_accuracy: params.gpsAccuracy,
                 heading_change: params.headingChange,
                 signal_strength: params.signalStrength,
-            });
-            const response = await new Promise((resolve, reject) => {
-                const urlObj = new URL(`${ML_SERVICE_URL}/predict/gps-spoof`);
-                const transport = urlObj.protocol === 'https:' ? https : http;
-                const options = {
-                    hostname: urlObj.hostname,
-                    port: urlObj.port,
-                    path: urlObj.pathname,
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-                    timeout: 2000,
-                };
-                const req = transport.request(options, (res) => {
-                    let data = '';
-                    res.on('data', (chunk) => data += chunk);
-                    res.on('end', () => {
-                        try { resolve(JSON.parse(data)); }
-                        catch { resolve({ gps_trust_score: 100, alerts: [], is_suspicious: false }); }
-                    });
-                });
-                req.on('error', () => resolve({ gps_trust_score: 100, alerts: [], is_suspicious: false }));
-                req.on('timeout', () => { req.destroy(); resolve({ gps_trust_score: 100, alerts: [], is_suspicious: false }); });
-                req.write(body);
-                req.end();
             });
             
             let finalScore = response.gps_trust_score || 100;
@@ -350,8 +345,7 @@ class ExecutionService {
     }
 
     /**
-     * ETA Prediction using OSRM (Open Source Routing Machine).
-     * Falls back to heuristic if OSRM is unavailable.
+     * ETA Prediction using directions and ML client fallbacks
      */
     async predictETA(workerLat, workerLng, jobLat, jobLng, workerId = null, jobId = null, category = null) {
         const { getDirections } = require('../utils/google_maps');
@@ -360,7 +354,6 @@ class ExecutionService {
             const distanceKm = (directions.distanceMeters / 1000).toFixed(2);
             const etaMins = Math.round(directions.durationSeconds / 60);
 
-            // Call ML service for refined prediction
             try {
                 const hour = new Date().getHours();
                 const catMap = {
@@ -369,53 +362,26 @@ class ExecutionService {
                     "IT_SUPPORT": 8, "TUTORING": 9, "PHOTOGRAPHY": 10, "EVENT": 11,
                     "DELIVERY": 12, "OTHER": 13
                 };
-                const features = {
-                    distance_km: parseFloat(distanceKm),
-                    hour_of_day: hour,
-                    day_of_week: new Date().getDay(),
-                    category_encoded: catMap[category] !== undefined ? catMap[category] : 13,
-                    urgency_encoded: 1,
-                    demand_pressure: 0.3,
-                    is_peak_hours: (hour >= 8 && hour <= 11) || (hour >= 17 && hour <= 21) ? 1 : 0,
-                    is_weekend: [0, 6].includes(new Date().getDay()) ? 1 : 0,
-                    worker_speed_profile: 0.7,
-                    historical_eta_accuracy: 0.8,
-                    traffic_factor: etaMins > 0 ? etaMins / ((parseFloat(distanceKm) / 20) * 60) : 1.0,
-                };
-
-                const body = JSON.stringify({ features });
-                    const mlResponse = await new Promise((resolve, reject) => {
-                    const urlObj = new URL(`${ML_SERVICE_URL}/predict/eta`);
-                    const transport = urlObj.protocol === 'https:' ? https : http;
-                    const options = {
-                        hostname: urlObj.hostname,
-                        port: urlObj.port,
-                        path: urlObj.pathname,
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-                        timeout: 1000,
-                    };
-                    const req = transport.request(options, (res) => {
-                        let data = '';
-                        res.on('data', (chunk) => data += chunk);
-                        res.on('end', () => {
-                            try { resolve(JSON.parse(data)); }
-                            catch { resolve(null); }
-                        });
-                    });
-                    req.on('error', () => resolve(null));
-                    req.on('timeout', () => { req.destroy(); resolve(null); });
-                    req.write(body);
-                    req.end();
+                const mlResponse = await callMLService('/predict/eta', {
+                    features: {
+                        distance_km: parseFloat(distanceKm),
+                        hour_of_day: hour,
+                        day_of_week: new Date().getDay(),
+                        category_encoded: catMap[category] !== undefined ? catMap[category] : 13,
+                        urgency_encoded: 1,
+                        demand_pressure: 0.3,
+                        is_peak_hours: (hour >= 8 && hour <= 11) || (hour >= 17 && hour <= 21) ? 1 : 0,
+                        is_weekend: [0, 6].includes(new Date().getDay()) ? 1 : 0,
+                        worker_speed_profile: 0.7,
+                        historical_eta_accuracy: 0.8,
+                        traffic_factor: etaMins > 0 ? etaMins / ((parseFloat(distanceKm) / 20) * 60) : 1.0,
+                    }
                 });
 
                 if (mlResponse && mlResponse.predicted_eta_minutes) {
-                    console.log(`[SHADOW-ETA] Google=${etaMins}min, ML=${mlResponse.predicted_eta_minutes.toFixed(1)}min, distance=${distanceKm}km` + 
-                        (workerId ? ` worker=${workerId}` : '') + (jobId ? ` job=${jobId}` : ''));
+                    console.log(`[SHADOW-ETA] Google=${etaMins}min, ML=${mlResponse.predicted_eta_minutes.toFixed(1)}min, distance=${distanceKm}km`);
                 }
-            } catch (mlErr) {
-                console.warn("⚠️ [predictETA-ML] ML fallback:", mlErr.message);
-            }
+            } catch (mlErr) {}
 
             return { etaMins, distanceKm };
         } catch (e) {
@@ -428,16 +394,17 @@ class ExecutionService {
     }
 
     /**
-     * Updates worker location during an active job and performs throttled Directions API queries.
+     * Updates worker location during an active job.
+     * Fixes ReferenceError by loading active accepted jobs BEFORE logging GPS traces.
      */
-    async syncWorkerLocation(workerId, lat, lng) {
+    async syncWorkerLocation(workerId, lat, lng, metadata = {}) {
         const matchingService = require('./matching.service');
         const worker = await matchingService.resolveWorker(workerId);
         if (!worker) return;
 
         const nowMs = Date.now();
         
-        // Retrieve last GPS position for speed tracking
+        // 1. Retrieve last GPS position for speed tracking
         const prevLat = await redis.get(`worker:${worker.id}:last_gps_lat`);
         const prevLng = await redis.get(`worker:${worker.id}:last_gps_lng`);
         const prevTime = await redis.get(`worker:${worker.id}:last_gps_time`);
@@ -451,7 +418,7 @@ class ExecutionService {
             }
         }
         
-        // Track stationary time (< 5 km/h)
+        // Track stationary time
         if (speedKmh < 5.0) {
             const lowSpeedSince = await redis.get(`worker:${worker.id}:low_speed_since`);
             if (!lowSpeedSince) {
@@ -466,20 +433,7 @@ class ExecutionService {
         await redis.set(`worker:${worker.id}:last_gps_lng`, lng);
         await redis.set(`worker:${worker.id}:last_gps_time`, nowMs);
 
-        // Log GPS trace for ML training data
-        try {
-            await db.query(
-                `INSERT INTO gps_traces (worker_id, job_id, lat, lng, speed_kmh, accuracy_m, mock_location, heading, recorded_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
-                [worker.id, jobId || null, lat, lng, Math.round(speedKmh * 100) / 100,
-                 metadata?.gpsAccuracy || 10, metadata?.isMocked === true || metadata?.mockLocation === true || false,
-                 metadata?.heading || 0]
-            );
-        } catch (e) {
-            // Non-critical; silent fail
-        }
-
-        // Find active accepted job
+        // 2. Find active accepted job FIRST (fixes ReferenceError where jobId was undefined)
         const jobRes = await db.query(
             `SELECT id, user_id, location_lat, location_lng, status, route_polyline, route_distance, route_duration 
              FROM jobs 
@@ -489,11 +443,25 @@ class ExecutionService {
             [worker.id]
         );
 
-        if (jobRes.rowCount === 0) return;
-        const job = jobRes.rows[0];
-        const jobId = job.id;
+        const activeJob = jobRes.rows[0] || null;
+        const jobId = activeJob ? activeJob.id : null;
 
-        // Throttling Logic
+        // 3. Log GPS trace safely
+        try {
+            await db.query(
+                `INSERT INTO gps_traces (worker_id, job_id, lat, lng, speed_kmh, accuracy_m, mock_location, heading, recorded_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+                [worker.id, jobId, lat, lng, Math.round(speedKmh * 100) / 100,
+                 metadata.gpsAccuracy || 10, metadata.isMocked === true || metadata.mockLocation === true || false,
+                 metadata.heading || 0]
+            );
+        } catch (e) {
+            // Safe logging fallback
+        }
+
+        if (!activeJob) return;
+
+        // Throttling Directions recalculations
         const lastDirectionsTime = await redis.get(`job:${jobId}:last_directions_time`);
         const lastDirectionsLat = await redis.get(`job:${jobId}:last_directions_lat`);
         const lastDirectionsLng = await redis.get(`job:${jobId}:last_directions_lng`);
@@ -504,41 +472,39 @@ class ExecutionService {
             this.calculateDistance(lat, lng, parseFloat(lastDirectionsLat), parseFloat(lastDirectionsLng)) * 1000 : Infinity;
 
         let routeDeviationDetected = false;
-        if (job.route_polyline) {
-            routeDeviationDetected = detectRouteDeviation(lat, lng, job.route_polyline);
+        if (activeJob.route_polyline) {
+            routeDeviationDetected = detectRouteDeviation(lat, lng, activeJob.route_polyline);
         }
 
         if (!lastDirectionsTime) {
             shouldRefresh = true;
-        } else if (timeElapsed >= 30) { // Enforce 30s cooldown
-            if (timeElapsed >= 60 || distanceMoved > 100 || routeDeviationDetected) {
+        } else if (timeElapsed >= executionConfig.directionsCacheTtlSeconds) {
+            if (timeElapsed >= 60 || distanceMoved > executionConfig.directionsRefreshMinDistanceMeters || routeDeviationDetected) {
                 shouldRefresh = true;
             }
         }
 
-        let currentPolyline = job.route_polyline;
-        let currentDistanceMeters = job.route_distance;
-        let currentDurationSeconds = job.route_duration;
+        let currentPolyline = activeJob.route_polyline;
+        let currentDistanceMeters = activeJob.route_distance;
+        let currentDurationSeconds = activeJob.route_duration;
 
         if (shouldRefresh) {
             const { getDirections } = require('../utils/google_maps');
             try {
                 const directions = await getDirections(
                     lat, lng, 
-                    parseFloat(job.location_lat), 
-                    parseFloat(job.location_lng)
+                    parseFloat(activeJob.location_lat), 
+                    parseFloat(activeJob.location_lng)
                 );
                 currentPolyline = directions.polyline;
                 currentDistanceMeters = directions.distanceMeters;
                 currentDurationSeconds = directions.durationSeconds;
 
-                // Update database
                 await db.query(
                     "UPDATE jobs SET route_polyline = $1, route_distance = $2, route_duration = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4",
                     [currentPolyline, currentDistanceMeters, currentDurationSeconds, jobId]
                 );
 
-                // Cache coordinates and time of Directions query
                 await redis.set(`job:${jobId}:last_directions_time`, nowMs);
                 await redis.set(`job:${jobId}:last_directions_lat`, lat);
                 await redis.set(`job:${jobId}:last_directions_lng`, lng);
@@ -547,43 +513,38 @@ class ExecutionService {
             }
         }
 
-        // Route deviation check
-        try {
-            const deviationResult = await routeDeviationService.checkDeviation(jobId, worker.id, lat, lng);
-            if (deviationResult && deviationResult.isDeviating) {
-                updatePayload.routeDeviation = deviationResult;
-            }
-        } catch (devErr) {
-            // Non-critical
-        }
-
-        // Formatted strings
-        const km = (currentDistanceMeters || 0) / 1000;
-        const formattedDistance = km < 1 ? `${Math.round(currentDistanceMeters || 0)}m` : `${km.toFixed(1)} km`;
-        const formattedEta = `${Math.round((currentDurationSeconds || 0) / 60)} mins`;
-
-        const updatePayload = {
+        let updatePayload = {
             jobId,
             job_id: jobId,
             lat,
             lng,
-            distance: formattedDistance,
-            eta: formattedEta,
+            distance: (currentDistanceMeters || 0) / 1000 < 1 ? `${Math.round(currentDistanceMeters || 0)}m` : `${((currentDistanceMeters || 0) / 1000).toFixed(1)} km`,
+            eta: `${Math.round((currentDurationSeconds || 0) / 60)} mins`,
             polyline: currentPolyline,
             distanceMeters: currentDistanceMeters,
             duration: currentDurationSeconds,
             speedKmh
         };
 
+        // Route deviation check
+        try {
+            const deviationResult = await routeDeviationService.checkDeviation(jobId, worker.id, lat, lng);
+            if (deviationResult && deviationResult.isDeviating) {
+                updatePayload.routeDeviation = deviationResult;
+            }
+        } catch (devErr) {}
+
         // Broadcast to rooms
-        const { getIO } = require('../config/socket');
-        const io = getIO();
-        if (io) {
-            io.to(`job:${jobId}`).emit('worker_location_update', updatePayload);
-            io.to(`user:${job.user_id}`).emit('worker_location_update', updatePayload);
-            io.to(`worker:${worker.id}`).emit('worker_location_update', updatePayload);
-            io.to(`worker:${worker.phone_number}`).emit('worker_location_update', updatePayload);
-        }
+        try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            if (io) {
+                io.to(`job:${jobId}`).emit('worker_location_update', updatePayload);
+                io.to(`user:${activeJob.user_id}`).emit('worker_location_update', updatePayload);
+                io.to(`worker:${worker.id}`).emit('worker_location_update', updatePayload);
+                io.to(`worker:${worker.phone_number}`).emit('worker_location_update', updatePayload);
+            }
+        } catch (err) {}
     }
 
     /**
@@ -625,7 +586,6 @@ class ExecutionService {
     }
 }
 
-// Polyline and route deviation helper functions
 function decodePolyline(str) {
     let index = 0, len = str.length;
     let lat = 0, lng = 0;
@@ -660,7 +620,7 @@ function detectRouteDeviation(workerLat, workerLng, polylineStr) {
     
     let minDistance = Infinity;
     for (const point of points) {
-        const R = 6371e3; // meters
+        const R = 6371e3;
         const phi1 = workerLat * Math.PI / 180;
         const phi2 = point.latitude * Math.PI / 180;
         const deltaPhi = (point.latitude - workerLat) * Math.PI / 180;

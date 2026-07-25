@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nexo_partner/utils/network_helper.dart';
 import '../profile/profile_setup_screen.dart';
 import '../home/home_screen.dart';
-import '../../components/glass_components.dart';
 
 class OtpScreen extends StatefulWidget {
   final String phoneNumber;
@@ -189,6 +188,7 @@ class _OtpScreenState extends State<OtpScreen> {
           await prefs.setBool('isProfileComplete', isComplete);
           debugPrint("Is Profile Complete: $isComplete");
           
+          if (!mounted) return;
           if (isComplete) {
             Navigator.pushAndRemoveUntil(
               context,
@@ -297,50 +297,6 @@ class _OtpScreenState extends State<OtpScreen> {
     );
   }
 
-  Widget _buildSafetyBanner() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return GlassContainer(
-      borderRadius: 20,
-      blur: 12,
-      padding: const EdgeInsets.all(16),
-      color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03),
-      border: Border.all(
-        color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
-        width: 1,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Safety First", 
-                  style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.bold, 
-                    color: isDark ? Colors.white : Colors.black87
-                  )
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  "Never share your OTP with anyone.", 
-                  style: GoogleFonts.inter(
-                    color: isDark ? Colors.white60 : Colors.black54, 
-                    fontSize: 12
-                  )
-                ),
-              ],
-            ),
-          ),
-          CircleAvatar(
-            backgroundColor: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
-            radius: 20,
-            child: const Icon(Icons.security, color: Color(0xFFFF6A00), size: 20),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -386,7 +342,7 @@ class _OtpScreenState extends State<OtpScreen> {
                     borderRadius: BorderRadius.circular(32),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha: 0.04),
                         blurRadius: 24,
                         offset: const Offset(0, 10),
                       ),
@@ -488,7 +444,7 @@ class _OtpScreenState extends State<OtpScreen> {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF3B82F6).withOpacity(0.25),
+                              color: const Color(0xFF3B82F6).withValues(alpha: 0.25),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),

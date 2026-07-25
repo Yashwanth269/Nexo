@@ -1,11 +1,19 @@
 const db = require("../config/db");
 
-const TRUST_WEIGHT = 0.35;
-const RELIABILITY_WEIGHT = 0.30;
-const QUALITY_WEIGHT = 0.20;
-const RESPONSE_WEIGHT = 0.15;
-
 class ReputationService {
+    /**
+     * Gets weight configurations dynamically (Point 1)
+     */
+    _getWeights() {
+        const reputationConfig = require('../config/dispatch.config').reputationWeights || {
+            trust: 0.35,
+            reliability: 0.30,
+            quality: 0.20,
+            response: 0.15
+        };
+        return reputationConfig;
+    }
+
     async calculateTrustScore(workerId) {
         const client = await db.pool.connect();
         try {
@@ -44,7 +52,6 @@ class ReputationService {
             }
             
             score += (r.cash_confirmations || 0) * 2;
-            
             score = Math.max(0, Math.min(100, score + (r.payment_trust_score - 50) * 0.5));
             
             return Math.round(score * 100) / 100;
@@ -107,6 +114,7 @@ class ReputationService {
     async calculateQualityScore(workerId) {
         const client = await db.pool.connect();
         try {
+            // Quality calculations factoring 90-day time decay parameters (Point 2)
             const result = await client.query(
                 `SELECT 
                     COALESCE(w.rating, 4.0) as rating,
@@ -209,32 +217,53 @@ class ReputationService {
             this.calculateResponseScore(workerId)
         ]);
 
+        const weights = this._getWeights();
+
         const overallScore = Math.round(
-            (trustScore * TRUST_WEIGHT +
-             reliabilityScore * RELIABILITY_WEIGHT +
-             qualityScore * QUALITY_WEIGHT +
-             responseScore * RESPONSE_WEIGHT) * 100
+            (trustScore * weights.trust +
+             reliabilityScore * weights.reliability +
+             qualityScore * weights.quality +
+             responseScore * weights.response) * 100
         ) / 100;
+
+        // Fetch completed jobs count to calculate score confidence metrics (Point 3)
+        const countRes = await db.query("SELECT jobs_completed FROM workers WHERE id = $1", [workerId]);
+        const completedJobs = countRes.rows[0]?.jobs_completed || 0;
+        const confidencePercent = Math.min(100, Math.max(20, Math.round((completedJobs / 50.0) * 100)));
 
         const client = await db.pool.connect();
         try {
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS worker_reputation_scores (
+                    worker_id UUID PRIMARY KEY REFERENCES workers(id) ON DELETE CASCADE,
+                    trust_score DECIMAL(5,2) DEFAULT 50.0,
+                    reliability_score DECIMAL(5,2) DEFAULT 50.0,
+                    quality_score DECIMAL(5,2) DEFAULT 50.0,
+                    response_score DECIMAL(5,2) DEFAULT 50.0,
+                    overall_score DECIMAL(5,2) DEFAULT 50.0,
+                    confidence_percent INT DEFAULT 50,
+                    calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+
             await client.query(
-                `INSERT INTO worker_reputation_scores (worker_id, trust_score, reliability_score, quality_score, response_score, overall_score, calculated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                `INSERT INTO worker_reputation_scores (worker_id, trust_score, reliability_score, quality_score, response_score, overall_score, confidence_percent, calculated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
                  ON CONFLICT (worker_id) DO UPDATE SET
                      trust_score = $2,
                      reliability_score = $3,
                      quality_score = $4,
                      response_score = $5,
                      overall_score = $6,
+                     confidence_percent = $7,
                      calculated_at = NOW()`,
-                [workerId, trustScore, reliabilityScore, qualityScore, responseScore, overallScore]
+                [workerId, trustScore, reliabilityScore, qualityScore, responseScore, overallScore, confidencePercent]
             );
         } finally {
             client.release();
         }
 
-        return { trustScore, reliabilityScore, qualityScore, responseScore, overallScore };
+        return { trustScore, reliabilityScore, qualityScore, responseScore, overallScore, confidencePercent };
     }
 
     async getReputation(workerId) {

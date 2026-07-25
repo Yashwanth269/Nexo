@@ -10,7 +10,7 @@ class IncomingJobScreen extends StatefulWidget {
   final Map<dynamic, dynamic> jobData;
   final bool playSound;
 
-  const IncomingJobScreen({Key? key, required this.jobData, this.playSound = true}) : super(key: key);
+  const IncomingJobScreen({super.key, required this.jobData, this.playSound = true});
 
   @override
   State<IncomingJobScreen> createState() => _IncomingJobScreenState();
@@ -21,7 +21,6 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
   late AnimationController _pulseController;
 
   // Map settings
-  GoogleMapController? _mapController;
   LatLng? _jobLocation;
 
   Function(dynamic)? _cancelListener;
@@ -185,7 +184,6 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
                     icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
                   ),
                 },
-                onMapCreated: (controller) => _mapController = controller,
               ),
             )
           else
@@ -201,10 +199,10 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(0.6),
+                    Colors.black.withValues(alpha: 0.6),
                     Colors.transparent,
-                    Colors.black.withOpacity(0.7),
-                    Colors.black.withOpacity(0.95),
+                    Colors.black.withValues(alpha: 0.7),
+                    Colors.black.withValues(alpha: 0.95),
                   ],
                   stops: const [0.0, 0.3, 0.6, 1.0],
                 ),
@@ -261,11 +259,11 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
                   // 3. Expected Earnings Card
                   Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E1E).withOpacity(0.85),
+                      color: const Color(0xFF1E1E1E).withValues(alpha: 0.85),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: Colors.white24),
                       boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10, offset: const Offset(0, 4))
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 10, offset: const Offset(0, 4))
                       ],
                     ),
                     child: Column(
@@ -360,11 +358,11 @@ class _IncomingJobScreenState extends State<IncomingJobScreen> with TickerProvid
                   Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E1E).withOpacity(0.85),
+                      color: const Color(0xFF1E1E1E).withValues(alpha: 0.85),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: Colors.white24),
                       boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10, offset: const Offset(0, 4))
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 10, offset: const Offset(0, 4))
                       ],
                     ),
                     child: Column(
@@ -454,10 +452,10 @@ class SlideActionBtn extends StatefulWidget {
   final String text;
   
   const SlideActionBtn({
-    Key? key,
+    super.key,
     required this.onSlideSuccess,
     required this.text,
-  }) : super(key: key);
+  });
 
   @override
   State<SlideActionBtn> createState() => _SlideActionBtnState();

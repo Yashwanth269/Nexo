@@ -15,7 +15,6 @@ class EarningsHistoryScreen extends StatefulWidget {
 
 class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with SingleTickerProviderStateMixin {
   late TabController _subTabController;
-  bool _isLoading = true;
   bool _hideEarnings = false;
   String _selectedTimeframe = "Month"; // Today, Week, Month, Year, Custom
   
@@ -61,7 +60,6 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
     if (cachedHistory != null && mounted) {
       setState(() {
         _history = cachedHistory;
-        _isLoading = false;
       });
     }
   }
@@ -97,15 +95,11 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
           setState(() {
             _summary = decodedSummary ?? _summary;
             _history = decodedHistory;
-            _isLoading = false;
           });
         }
-      } else {
-        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
       debugPrint("Error fetching earnings: $e");
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -132,6 +126,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
       );
 
       final data = json.decode(response.body);
+      if (!mounted) return;
       if (response.statusCode == 200 && data['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Withdrawal request submitted successfully!"), backgroundColor: Color(0xFF10B981)),
@@ -143,6 +138,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Withdrawal connection error: $e"), backgroundColor: Colors.redAccent),
       );
@@ -414,7 +410,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF2563EB).withOpacity(0.2),
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.2),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   )
@@ -603,7 +599,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> with Sing
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.08),
+              color: color.withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 18),
@@ -977,8 +973,8 @@ class LineChartPainter extends CustomPainter {
     final rect = Rect.fromLTWH(0, 0, size.width, size.height);
     fillPaint.shader = LinearGradient(
       colors: [
-        const Color(0xFF2563EB).withOpacity(0.2),
-        const Color(0xFF2563EB).withOpacity(0.0),
+        const Color(0xFF2563EB).withValues(alpha: 0.2),
+        const Color(0xFF2563EB).withValues(alpha: 0.0),
       ],
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,

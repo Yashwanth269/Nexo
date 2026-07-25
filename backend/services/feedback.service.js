@@ -1,6 +1,6 @@
 const db = require('../config/db');
 const redis = require('../config/redis');
-const rankingService = require('./ranking.service');
+const eventStream = require('../utils/event_stream');
 
 const FEEDBACK_EVENTS = {
     CLICK: 'click',
@@ -14,7 +14,34 @@ const FEEDBACK_EVENTS = {
 };
 
 class FeedbackService {
+    /**
+     * Record a ranking or feedback interaction.
+     * Enforces idempotency via eventId and runs asynchronously.
+     */
     async recordEvent(userId, workerId, jobId, actionType, metadata = {}) {
+        const eventId = metadata.eventId || `${jobId}:${actionType}:${Date.now()}`;
+        const idempotencyKey = `feedback:event:${eventId}`;
+
+        // 1. Idempotency Check
+        const isDuplicate = await redis.get(idempotencyKey);
+        if (isDuplicate) {
+            console.log(`[FEEDBACK-IDEMPOTENCY] Suppressed duplicate feedback event: ${eventId}`);
+            return { success: true, duplicated: true };
+        }
+
+        // Apply idempotency TTL (24 hours)
+        await redis.set(idempotencyKey, '1', 'EX', 86400);
+
+        // 2. Click Spam / Abuse Protection Check
+        const limitKey = `feedback:abuse:${userId || 'anon'}:${workerId}:${actionType}`;
+        const clickCount = await redis.incr(limitKey);
+        await redis.expire(limitKey, 60); // 1-minute window
+        if (clickCount > 10) {
+            console.warn(`[FEEDBACK-ABUSE-PREVENTION] Suppressed click spam from user ${userId} on worker ${workerId}`);
+            return { success: false, reason: "RATE_LIMITED_ABUSE" };
+        }
+
+        // Persist the interaction record
         await db.query(
             `INSERT INTO ranking_clicks (user_id, worker_id, job_id, action_type, action_value, session_id, metadata)
              VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -25,13 +52,30 @@ class FeedbackService {
             ]
         );
 
+        // Redis cache counters increment
         const pipeline = redis.pipeline();
         pipeline.incr(`feedback:${actionType}:count`);
         pipeline.incr(`feedback:worker:${workerId}:${actionType}:count`);
         pipeline.expire(`feedback:${actionType}:count`, 86400);
         await pipeline.exec();
 
-        await this.processFeedbackAction(userId, workerId, jobId, actionType, metadata);
+        // 3. Asynchronous execution (Publish to event stream instead of sequential blocking updates)
+        eventStream.publish('feedback_received', {
+            userId,
+            workerId,
+            jobId,
+            actionType,
+            metadata
+        }).catch(err => {
+            console.error("[FEEDBACK-EVENT-WARN] Stream publish failed:", err.message);
+        });
+
+        // Trigger processing in background
+        this.processFeedbackAction(userId, workerId, jobId, actionType, metadata).catch(err => {
+            console.error("[FEEDBACK-PROCESSING-WARN] Background action failed:", err.message);
+        });
+
+        return { success: true };
     }
 
     async processFeedbackAction(userId, workerId, jobId, actionType, metadata) {
@@ -78,8 +122,10 @@ class FeedbackService {
         await workerService.updateLastJobEventAt(workerId);
 
         await db.query(
-            `UPDATE user_worker_affinity SET hire_count = hire_count + 1, last_hired_at = CURRENT_TIMESTAMP
-             WHERE user_id = $1 AND worker_id = $2`,
+            `INSERT INTO user_worker_affinity (user_id, worker_id, hire_count, last_hired_at)
+             VALUES ($1, $2, 1, CURRENT_TIMESTAMP)
+             ON CONFLICT (user_id, worker_id) 
+             DO UPDATE SET hire_count = user_worker_affinity.hire_count + 1, last_hired_at = CURRENT_TIMESTAMP`,
             [userId, workerId]
         );
     }
@@ -97,7 +143,6 @@ class FeedbackService {
     }
 
     async onRate(userId, workerId, jobId, metadata) {
-        const rating = metadata.rating || 0;
         await db.query(
             `UPDATE worker_features SET
                 avg_rating = (

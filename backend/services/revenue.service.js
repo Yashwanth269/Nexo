@@ -1,8 +1,5 @@
 /**
  * Nexo Revenue Streams & Surcharge Engine
- * 
- * Implements customer memberships, cancellation charge splits, urgent booking fees,
- * and night surcharges (10 PM - 6 AM) based on incentives.config.js.
  */
 
 const db = require('../config/db');
@@ -19,20 +16,30 @@ class RevenueService {
         let workerUrgentBonus = 0;
         let workerNightBonus = 0;
 
+        // Load surcharges dynamically from centralized configuration (Point 2)
+        const surchargesConfig = incentivesConfig.surcharges || {
+            urgentBookingFee: 150,
+            urgentWorkerBonusPct: 80,
+            nightStartHour: 22,
+            nightEndHour: 6,
+            nightMultiplier: 1.25,
+            nightWorkerBonusPct: 60
+        };
+
         // 1. Urgent Booking Surcharge
         if (isUrgent) {
-            urgentFee = incentivesConfig.surcharges.urgentBookingFee;
-            workerUrgentBonus = (urgentFee * incentivesConfig.surcharges.urgentWorkerBonusPct) / 100.0;
+            urgentFee = surchargesConfig.urgentBookingFee;
+            workerUrgentBonus = (urgentFee * surchargesConfig.urgentWorkerBonusPct) / 100.0;
             finalPrice += urgentFee;
         }
 
         // 2. Night Surcharge (10 PM - 6 AM)
         const hour = bookingTime.getHours();
-        const isNight = hour >= incentivesConfig.surcharges.nightStartHour || hour < incentivesConfig.surcharges.nightEndHour;
+        const isNight = hour >= surchargesConfig.nightStartHour || hour < surchargesConfig.nightEndHour;
         
         if (isNight) {
-            nightSurcharge = basePrice * (incentivesConfig.surcharges.nightMultiplier - 1.0);
-            workerNightBonus = (nightSurcharge * incentivesConfig.surcharges.nightWorkerBonusPct) / 100.0;
+            nightSurcharge = basePrice * (surchargesConfig.nightMultiplier - 1.0);
+            workerNightBonus = (nightSurcharge * surchargesConfig.nightWorkerBonusPct) / 100.0;
             finalPrice += nightSurcharge;
         }
 
@@ -54,12 +61,19 @@ class RevenueService {
         let totalFee = 0;
         let workerSharePct = 0;
 
+        const cancellationConfig = incentivesConfig.cancellation || {
+            acceptedFee: 100,
+            workerSharePctAccepted: 70,
+            onTheWayFee: 200,
+            workerSharePctOnWay: 80
+        };
+
         if (jobStatus === 'ACCEPTED' || jobStatus === 'RESERVED') {
-            totalFee = incentivesConfig.cancellation.acceptedFee;
-            workerSharePct = incentivesConfig.cancellation.workerSharePctAccepted;
+            totalFee = cancellationConfig.acceptedFee;
+            workerSharePct = cancellationConfig.workerSharePctAccepted;
         } else if (jobStatus === 'ON_THE_WAY' || jobStatus === 'ARRIVED') {
-            totalFee = incentivesConfig.cancellation.onTheWayFee;
-            workerSharePct = incentivesConfig.cancellation.workerSharePctOnWay;
+            totalFee = cancellationConfig.onTheWayFee;
+            workerSharePct = cancellationConfig.workerSharePctOnWay;
         }
 
         const workerCompensation = (totalFee * workerSharePct) / 100.0;
@@ -74,6 +88,7 @@ class RevenueService {
 
     /**
      * Subscribes customer to a membership tier.
+     * Table creation removed from runtime business logic (Point 1).
      */
     async subscribeCustomerMembership(userId, tier) {
         const membershipInfo = incentivesConfig.memberships[tier];
@@ -82,21 +97,6 @@ class RevenueService {
         }
 
         const durationDays = tier === 'MONTHLY' ? 30 : tier === 'QUARTERLY' ? 90 : 365;
-
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS customer_memberships (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                tier VARCHAR(50) NOT NULL,
-                price DECIMAL(10,2) NOT NULL,
-                fee_discount_pct DECIMAL(5,2) NOT NULL,
-                free_cancellations_remaining INT NOT NULL,
-                starts_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                expires_at TIMESTAMP NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
         const expiresAt = new Date(Date.now() + durationDays * 86400000);
 
         const res = await db.query(`

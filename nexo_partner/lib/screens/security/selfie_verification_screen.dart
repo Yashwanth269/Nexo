@@ -22,7 +22,6 @@ class SelfieVerificationScreen extends StatefulWidget {
 
 class _SelfieVerificationScreenState extends State<SelfieVerificationScreen> with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
-  bool _isCapturing = false;
   bool _isVerifying = false;
   bool _isVerified = false;
   String _statusText = "Align your face inside the guide";
@@ -57,7 +56,6 @@ class _SelfieVerificationScreenState extends State<SelfieVerificationScreen> wit
   Future<void> _captureAndVerify() async {
     if (_isVerifying) return;
     setState(() {
-      _isCapturing = true;
       _isVerifying = true;
       _statusText = "Verifying identity & face match...";
     });
@@ -168,7 +166,7 @@ class _SelfieVerificationScreenState extends State<SelfieVerificationScreen> wit
                             border: Border.all(
                               color: _isVerified
                                   ? const Color(0xFF10B981)
-                                  : const Color(0xFFF97316).withOpacity(0.6),
+                                  : const Color(0xFFF97316).withValues(alpha: 0.6),
                               width: 3,
                             ),
                           ),
@@ -195,11 +193,11 @@ class _SelfieVerificationScreenState extends State<SelfieVerificationScreen> wit
                           Icon(
                             Icons.person,
                             size: 140,
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                           ),
                           if (_isVerified)
                             Container(
-                              color: const Color(0xFF10B981).withOpacity(0.9),
+                              color: const Color(0xFF10B981).withValues(alpha: 0.9),
                               child: const Center(
                                 child: Icon(Icons.check_circle_rounded, color: Colors.white, size: 80),
                               ),

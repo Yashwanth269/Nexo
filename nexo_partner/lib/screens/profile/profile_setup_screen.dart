@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nexo_partner/utils/network_helper.dart';
 import 'package:nexo_partner/utils/skill_data.dart';
+// ignore: depend_on_referenced_packages
 import 'package:http_parser/http_parser.dart';
 import '../home/home_screen.dart';
 import '../auth/login_screen.dart';
@@ -88,8 +89,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
       setState(() {
-        if (isId) _idImage = File(pickedFile.path);
-        else _image = File(pickedFile.path);
+        if (isId) {
+          _idImage = File(pickedFile.path);
+        } else {
+          _image = File(pickedFile.path);
+        }
       });
       await _uploadPhoto(isId: isId);
     }
@@ -113,8 +117,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       
       if (data['success']) {
         setState(() {
-          if (isId) _uploadedIdUrl = data['photoUrl'];
-          else _uploadedPhotoUrl = data['photoUrl'];
+          if (isId) {
+            _uploadedIdUrl = data['photoUrl'];
+          } else {
+            _uploadedPhotoUrl = data['photoUrl'];
+          }
         });
         debugPrint(isId ? "ID Uploaded: $_uploadedIdUrl" : "Photo Uploaded: $_uploadedPhotoUrl");
       }
@@ -165,6 +172,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           if (_uploadedPhotoUrl != null) await prefs.setString('workerPhoto', _uploadedPhotoUrl!);
           await prefs.setString('workerPhone', widget.phoneNumber);
           
+          if (!mounted) return;
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (context) => const HomeScreen()),
@@ -186,11 +194,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        if (widget.isEdit) {
-          return true; // pop normally
-        }
+    return PopScope(
+      canPop: widget.isEdit,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
         final prefs = await SharedPreferences.getInstance();
         await prefs.clear(); // Clear token to allow new login
         if (context.mounted) {
@@ -200,7 +207,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             (route) => false,
           );
         }
-        return false;
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFFAF9F6),
@@ -238,7 +244,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: Colors.grey[200],
-                        border: Border.all(color: const Color(0xFFFF6A00).withOpacity(0.3), width: 2),
+                        border: Border.all(color: const Color(0xFFFF6A00).withValues(alpha: 0.3), width: 2),
                         image: _image != null 
                           ? DecorationImage(image: FileImage(_image!), fit: BoxFit.cover)
                           : (_uploadedPhotoUrl != null 
@@ -426,7 +432,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     min: 5,
                     max: 25,
                     activeColor: const Color(0xFFFF6A00),
-                    inactiveColor: const Color(0xFFFF6A00).withOpacity(0.1),
+                    inactiveColor: const Color(0xFFFF6A00).withValues(alpha: 0.1),
                     onChanged: (val) => setState(() => _workRadius = val),
                   ),
                   Row(
@@ -538,8 +544,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     return GestureDetector(
       onTap: () {
         setState(() {
-          if (isSelected) _selectedTasks.remove(task);
-          else _selectedTasks.add(task);
+          if (isSelected) {
+            _selectedTasks.remove(task);
+          } else {
+            _selectedTasks.add(task);
+          }
         });
       },
       child: Container(
@@ -570,8 +579,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     return GestureDetector(
       onTap: () {
         setState(() {
-          if (isSelected) _selectedLanguages.remove(lang);
-          else _selectedLanguages.add(lang);
+          if (isSelected) {
+            _selectedLanguages.remove(lang);
+          } else {
+            _selectedLanguages.add(lang);
+          }
         });
       },
       child: Container(

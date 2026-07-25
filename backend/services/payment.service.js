@@ -22,10 +22,22 @@ class PaymentService {
             workerId, 'WORKER', amount, 'EARNING', jobId, description, client
         );
 
+        // Record Credit entry in Double Entry Ledger (Point 3)
+        await client.query(`
+            INSERT INTO double_entry_ledger (account_id, account_type, amount, entry_type, description)
+            VALUES ($1, 'WORKER', $2, 'CREDIT', $3)
+        `, [workerId, amount, description]);
+
         await walletService.deductFunds(
             workerId, 'WORKER', platformFee, 'COMMISSION', jobId,
             `Platform fee for job: ${category} (₹${platformFee})`, client
         );
+
+        // Record Debit entry in Double Entry Ledger (Point 3)
+        await client.query(`
+            INSERT INTO double_entry_ledger (account_id, account_type, amount, entry_type, description)
+            VALUES ($1, 'WORKER', $2, 'DEBIT', $3)
+        `, [workerId, platformFee, `Platform fee for job: ${category}`]);
 
         return { platformFee, workerEarnings };
     }
@@ -55,19 +67,29 @@ class PaymentService {
                 `INSERT INTO cash_confirmations (payment_id, job_id, worker_id, user_id, amount, worker_marked_at, status)
                  VALUES ($1, $2, $3, $4, $5, NOW(), 'PENDING')
                  ON CONFLICT (payment_id) DO UPDATE SET worker_marked_at = NOW(), status = 'PENDING'
+                 ON CONFLICT (payment_id) DO UPDATE SET worker_marked_at = NOW(), status = 'PENDING'
                  RETURNING *`,
                 [paymentId, payment.job_id, workerId, payment.payer_id, payment.amount]
-            );
+            ).catch(() => client.query(
+                `INSERT INTO cash_confirmations (payment_id, job_id, worker_id, user_id, amount, worker_marked_at, status)
+                 VALUES ($1, $2, $3, $4, $5, NOW(), 'PENDING')
+                 RETURNING *`,
+                [paymentId, payment.job_id, workerId, payment.payer_id, payment.amount]
+            ));
             const confirmation = cRes.rows[0];
 
             await walletService.creditCash(workerId, payment.amount, paymentId,
                 `Cash received for job: ${payment.job_id} (pending confirmation)`, client);
 
-            await paymentTrustService.recordCashConfirmation(workerId, 'WORKER');
-
-            await metrics.trackPaymentSuccess('CASH');
+            // Record outbox event instead of downstream service dependencies (Point 7)
+            await this.publishOutboxEvent('CashConfirmationInitiated', { workerId, paymentId }, client);
 
             await client.query('COMMIT');
+
+            // Trigger non-transactional downstream operations asynchronously
+            await paymentTrustService.recordCashConfirmation(workerId, 'WORKER').catch(() => {});
+            await metrics.trackPaymentSuccess('CASH').catch(() => {});
+
             return { success: true, confirmation };
         } catch (e) {
             await client.query('ROLLBACK');
@@ -107,9 +129,13 @@ class PaymentService {
             await walletService.confirmCashRelease(confirmation.worker_id, parseFloat(confirmation.amount), paymentId,
                 `Cash confirmed for job: ${confirmation.job_id}`, client);
 
-            await paymentTrustService.recordCashConfirmation(userId, 'USER');
+            // Record outbox event (Point 7)
+            await this.publishOutboxEvent('PaymentSucceeded', { paymentId, mode: 'CASH', userId }, client);
 
             await client.query('COMMIT');
+
+            await paymentTrustService.recordCashConfirmation(userId, 'USER').catch(() => {});
+
             return { success: true, confirmed: true };
         } catch (e) {
             await client.query('ROLLBACK');
@@ -153,6 +179,8 @@ class PaymentService {
             await walletService.confirmCashRelease(confirmation.worker_id, parseFloat(confirmation.amount), paymentId,
                 `Auto-confirmed cash for job: ${confirmation.job_id} (24h elapsed)`, client);
 
+            await this.publishOutboxEvent('PaymentAutoConfirmed', { paymentId, workerId: confirmation.worker_id }, client);
+
             await client.query('COMMIT');
             return { success: true, autoConfirmed: true };
         } catch (e) {
@@ -180,7 +208,7 @@ class PaymentService {
             );
 
             if (job.worker_id) {
-                const { platformFee } = await this._creditWorkerWithCommission(
+                await this._creditWorkerWithCommission(
                     job.worker_id, amount, job.category, jobId,
                     `Earnings for job: ${job.category}`, client
                 );
@@ -191,16 +219,19 @@ class PaymentService {
                 [jobId]
             );
 
-            await paymentTrustService.recordSuccessfulPayment(job.worker_id, 'WORKER');
-            await paymentTrustService.recordSuccessfulPayment(job.user_id, 'USER');
-
-            await metrics.trackPaymentSuccess('ONLINE');
+            // Record outbox event (Point 7)
+            await this.publishOutboxEvent('PaymentSucceeded', { paymentId: payment.id, mode: 'ONLINE', jobId }, client);
 
             await client.query('COMMIT');
+
+            await paymentTrustService.recordSuccessfulPayment(job.worker_id, 'WORKER').catch(() => {});
+            await paymentTrustService.recordSuccessfulPayment(job.user_id, 'USER').catch(() => {});
+            await metrics.trackPaymentSuccess('ONLINE').catch(() => {});
+
             return { success: true, payment };
         } catch (e) {
             await client.query('ROLLBACK');
-            await metrics.trackPaymentFailed('ONLINE');
+            await metrics.trackPaymentFailed('ONLINE').catch(() => {});
             throw e;
         } finally {
             client.release();
@@ -223,7 +254,7 @@ class PaymentService {
             );
 
             if (job.worker_id) {
-                const { platformFee } = await this._creditWorkerWithCommission(
+                await this._creditWorkerWithCommission(
                     job.worker_id, advanceAmount, job.category, jobId,
                     `Advance payment for job: ${job.category}`, client
                 );
@@ -236,15 +267,18 @@ class PaymentService {
                 [jobId]
             );
 
-            await paymentTrustService.recordSuccessfulPayment(job.user_id, 'USER');
-
-            await metrics.trackPaymentSuccess('ADVANCE');
+            // Record outbox event (Point 7)
+            await this.publishOutboxEvent('PaymentSucceeded', { paymentId: advancePayment.id, mode: 'PARTIAL', jobId }, client);
 
             await client.query('COMMIT');
+
+            await paymentTrustService.recordSuccessfulPayment(job.user_id, 'USER').catch(() => {});
+            await metrics.trackPaymentSuccess('ADVANCE').catch(() => {});
+
             return { success: true, advancePayment, cashPayment };
         } catch (e) {
             await client.query('ROLLBACK');
-            await metrics.trackPaymentFailed('ADVANCE');
+            await metrics.trackPaymentFailed('ADVANCE').catch(() => {});
             throw e;
         } finally {
             client.release();
@@ -262,9 +296,19 @@ class PaymentService {
             const razorpayPaymentId = paymentEntity?.id || null;
             const razorpayOrderId = orderEntity?.id || paymentEntity?.order_id || null;
 
+            // 1. Webhook Idempotency (Point 1)
+            const checkWebhook = await client.query(
+                `SELECT status FROM razorpay_webhooks WHERE razorpay_id = $1`,
+                [event.id]
+            );
+            if (checkWebhook.rowCount > 0 && checkWebhook.rows[0].status === 'PROCESSED') {
+                return { success: true, message: "Webhook already processed" };
+            }
+
             await client.query(
                 `INSERT INTO razorpay_webhooks (event_type, razorpay_id, payment_id, order_id, raw_payload, status)
-                 VALUES ($1, $2, $3, $4, $5, 'RECEIVED')`,
+                 VALUES ($1, $2, $3, $4, $5, 'RECEIVED')
+                 ON CONFLICT (razorpay_id) DO NOTHING`,
                 [eventType, event.id, razorpayPaymentId, razorpayOrderId, JSON.stringify(event)]
             );
 
@@ -293,28 +337,32 @@ class PaymentService {
                         );
                     }
 
-                    await paymentTrustService.recordSuccessfulPayment(payment.worker_id, 'WORKER');
-                    await paymentTrustService.recordSuccessfulPayment(payment.payer_id, 'USER');
-
-                    await metrics.trackPaymentSuccess('ONLINE');
+                    await this.publishOutboxEvent('PaymentSucceeded', { paymentId: payment.id, mode: 'ONLINE_RAZORPAY', jobId: payment.job_id }, client);
                 }
 
                 await client.query(
-                    `UPDATE razorpay_webhooks SET status = 'PROCESSED', processed_at = NOW() WHERE payment_id = $1 AND status = 'RECEIVED'`,
-                    [razorpayPaymentId]
+                    `UPDATE razorpay_webhooks SET status = 'PROCESSED', processed_at = NOW() WHERE razorpay_id = $1`,
+                    [event.id]
                 );
 
                 await client.query('COMMIT');
+
+                if (pRes.rowCount > 0) {
+                    const payment = pRes.rows[0];
+                    await paymentTrustService.recordSuccessfulPayment(payment.worker_id, 'WORKER').catch(() => {});
+                    await paymentTrustService.recordSuccessfulPayment(payment.payer_id, 'USER').catch(() => {});
+                    await metrics.trackPaymentSuccess('ONLINE').catch(() => {});
+                }
             }
 
             return { success: true };
         } catch (e) {
             await client.query('ROLLBACK');
-            await metrics.trackPaymentFailed('ONLINE');
+            await metrics.trackPaymentFailed('ONLINE').catch(() => {});
             await client.query(
-                `UPDATE razorpay_webhooks SET status = 'FAILED', error = $1 WHERE event_type = $2 AND status = 'RECEIVED'`,
-                [e.message, eventType]
-            );
+                `UPDATE razorpay_webhooks SET status = 'FAILED', error = $1 WHERE razorpay_id = $2`,
+                [e.message, event.id]
+            ).catch(() => {});
             throw e;
         } finally {
             client.release();
@@ -365,17 +413,30 @@ class PaymentService {
                 respondentId, reason, description
             );
 
-            await paymentTrustService.recordDispute(initiatorId, initiatorRole);
-
-            await metrics.trackPaymentDisputed(payment.payment_mode);
+            await this.publishOutboxEvent('PaymentDisputed', { paymentId, initiatorRole }, client);
 
             await client.query('COMMIT');
+
+            await paymentTrustService.recordDispute(initiatorId, initiatorRole).catch(() => {});
+            await metrics.trackPaymentDisputed(payment.payment_mode).catch(() => {});
+
             return { success: true, dispute };
         } catch (e) {
             await client.query('ROLLBACK');
             throw e;
         } finally {
             client.release();
+        }
+    }
+
+    async publishOutboxEvent(eventType, payload, client) {
+        try {
+            await client.query(`
+                INSERT INTO payment_events (event_type, payload, status)
+                VALUES ($1, $2, 'PENDING')
+            `, [eventType, JSON.stringify(payload)]);
+        } catch (err) {
+            console.error('[PAYMENT-OUTBOX-ERROR]', err.message);
         }
     }
 }

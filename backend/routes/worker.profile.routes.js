@@ -21,7 +21,7 @@ function mapWorker(w) {
         idUrl: w.id_url,
         isProfileComplete: w.is_profile_complete,
         verificationStatus: w.verification_status,
-        rating: parseFloat(w.rating) || 4.5,
+        rating: w.rating ? parseFloat(w.rating) : null,
         isOnline: w.is_online,
         isAvailable: w.is_available,
         jobsCompleted: w.jobs_completed,
@@ -104,15 +104,112 @@ router.get('/details/:phoneNumber', async (req, res) => {
         }
 
         const worker = mapWorker(result.rows[0]);
+        const workerId = worker.id;
+
+        // Run achievements evaluation
+        const gamificationService = require('../services/gamification.service');
+        await gamificationService.evaluateWorker(workerId).catch(err => {
+            console.error("⚠️ [ACHIEVEMENTS-EVAL-ERROR]", err.message);
+        });
+
+        const achievements = await gamificationService.getWorkerAchievements(workerId);
+
+        // Calculate performance metrics from real DB data
+        const [
+            ratingsRes,
+            offersRes,
+            responseRes,
+            jobsRes,
+            cancellationsRes,
+            onTimeRes
+        ] = await Promise.all([
+            // Ratings (USER_TO_WORKER)
+            db.query("SELECT COUNT(*) as count, AVG(rating) as avg FROM ratings WHERE to_id = $1 AND rating_type = 'USER_TO_WORKER'", [workerId]),
+            // Total offers received
+            db.query("SELECT COUNT(*) as count FROM job_offers WHERE worker_id = $1", [workerId]),
+            // Response time
+            db.query("SELECT COUNT(*) as count, AVG(EXTRACT(EPOCH FROM (accepted_at - created_at))) as avg_sec FROM job_offers WHERE worker_id = $1 AND status = 'ACCEPTED' AND accepted_at IS NOT NULL", [workerId]),
+            // Completed jobs
+            db.query("SELECT COUNT(*) as count FROM jobs WHERE worker_id = $1 AND status = 'COMPLETED'", [workerId]),
+            // Worker cancellations
+            db.query("SELECT COUNT(*) as count FROM jobs WHERE worker_id = $1 AND status = 'CANCELLED' AND cancelled_by = 'WORKER'", [workerId]),
+            // On-time arrivals among completed jobs
+            db.query(
+                `SELECT COUNT(*) as count FROM jobs j
+                 LEFT JOIN job_slas s ON j.id = s.job_id
+                 WHERE j.worker_id = $1 AND j.status = 'COMPLETED' AND j.arrived_at IS NOT NULL
+                   AND (
+                     (j.scheduled_at IS NOT NULL AND j.arrived_at <= j.scheduled_at)
+                     OR (j.scheduled_at IS NULL AND s.arrival_deadline IS NOT NULL AND j.arrived_at <= s.arrival_deadline)
+                     OR (j.scheduled_at IS NULL AND s.arrival_deadline IS NULL AND j.arrived_at <= j.accepted_at + INTERVAL '30 minutes')
+                   )`,
+                [workerId]
+            )
+        ]);
+
+        const ratingsCount = parseInt(ratingsRes.rows[0]?.count || 0);
+        const avgRating = parseFloat(ratingsRes.rows[0]?.avg || 0);
+        const totalOffers = parseInt(offersRes.rows[0]?.count || 0);
+        const responsesCount = parseInt(responseRes.rows[0]?.count || 0);
+        const avgResponseSec = parseFloat(responseRes.rows[0]?.avg_sec || 0);
+        const completedJobs = parseInt(jobsRes.rows[0]?.count || 0);
+        const workerCancelledJobs = parseInt(cancellationsRes.rows[0]?.count || 0);
+        const onTimeArrivals = parseInt(onTimeRes.rows[0]?.count || 0);
+
+        // Fetch accepted offers count to calculate completion/cancellation rates
+        const acceptedRes = await db.query("SELECT COUNT(*) as count FROM job_offers WHERE worker_id = $1 AND status = 'ACCEPTED'", [workerId]);
+        const acceptedJobs = parseInt(acceptedRes.rows[0]?.count || 0);
+
+        // Threshold checks
+        const hasRating = ratingsCount >= 5;
+        const hasAcceptanceRate = totalOffers >= 10;
+        const hasResponseTime = responsesCount >= 10;
+
+        const isNewProfessional = !hasRating || !hasAcceptanceRate || !hasResponseTime;
+
+        // Formats
+        let ratingText = "New Professional";
+        if (ratingsCount === 0) {
+            ratingText = "No ratings yet";
+        } else if (ratingsCount >= 5) {
+            ratingText = avgRating.toFixed(1);
+        }
+
+        const acceptanceRate = hasAcceptanceRate ? `${Math.round((acceptedJobs / totalOffers) * 100)}%` : "New Professional";
+        const completionRate = acceptedJobs > 0 ? `${Math.round((completedJobs / acceptedJobs) * 100)}%` : "100%";
         
-        // Performance aggregation
+        let cancellationRate = "0%";
+        if (completedJobs > 0 && acceptedJobs > 0) {
+            cancellationRate = `${Math.round((workerCancelledJobs / acceptedJobs) * 100)}%`;
+        }
+
+        const onTimeRate = completedJobs > 0 ? `${Math.round((onTimeArrivals / completedJobs) * 100)}%` : "New Professional";
+
+        let responseTimeStr = "New Professional";
+        if (hasResponseTime) {
+            if (avgResponseSec < 60) {
+                responseTimeStr = `${Math.round(avgResponseSec)}s`;
+            } else if (avgResponseSec < 3600) {
+                responseTimeStr = `${Math.round(avgResponseSec / 60)}m`;
+            } else {
+                responseTimeStr = `${(avgResponseSec / 3600).toFixed(1)}h`;
+            }
+        }
+
         const performance = {
-            totalJobs: worker.jobsCompleted || 0,
-            completionRate: `${result.rows[0].completion_rate || 100}%`,
-            cancellationRate: "0%",
-            avgResponseTime: "N/A",
-            rating: worker.rating || 4.5,
-            totalReviews: 0,
+            totalJobs: completedJobs,
+            completedJobs,
+            completionRate,
+            cancellationRate,
+            avgResponseTime: responseTimeStr,
+            responseTime: responseTimeStr,
+            rating: hasRating ? avgRating : null,
+            ratingText,
+            hasRating,
+            acceptanceRate,
+            hasAcceptanceRate,
+            onTimeRate,
+            isNewProfessional,
             isVerified: worker.verificationStatus === 'VERIFIED'
         };
 
@@ -121,6 +218,7 @@ router.get('/details/:phoneNumber', async (req, res) => {
             worker: {
                 ...worker,
                 performance,
+                achievements,
                 recentReviews: []
             }
         });

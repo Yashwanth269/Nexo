@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+// ignore: depend_on_referenced_packages
 import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../home/home_screen.dart';
@@ -43,6 +44,7 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
         imageQuality: 70,
         maxWidth: 1080,
       );
+      if (!mounted) return;
       if (pickedFile != null) {
         setState(() {
           _proofImage = File(pickedFile.path);
@@ -52,6 +54,7 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
       }
     } catch (e) {
       debugPrint("Error picking image: $e");
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Failed to access camera/gallery"), backgroundColor: Colors.redAccent),
       );
@@ -78,6 +81,7 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
       var responseData = await response.stream.bytesToString();
       var data = json.decode(responseData);
       
+      if (!mounted) return;
       if (data['success'] && data['photoUrl'] != null) {
         setState(() {
           _uploadedPhotoUrl = data['photoUrl'];
@@ -92,6 +96,7 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
       }
     } catch (e) {
       debugPrint("Upload Error: $e");
+      if (!mounted) return;
       setState(() => _isUploadingPhoto = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Error uploading photo"), backgroundColor: Colors.redAccent),
@@ -130,7 +135,7 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
           blur: 25,
           padding: const EdgeInsets.all(24),
           margin: const EdgeInsets.all(16),
-          color: Colors.black.withOpacity(0.9),
+          color: Colors.black.withValues(alpha: 0.9),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -173,9 +178,9 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFFF97316).withOpacity(0.12),
+              color: const Color(0xFFF97316).withValues(alpha: 0.12),
               shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFFF97316).withOpacity(0.3)),
+              border: Border.all(color: const Color(0xFFF97316).withValues(alpha: 0.3)),
             ),
             child: Icon(icon, color: const Color(0xFFF97316), size: 28),
           ),
@@ -262,16 +267,16 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
                         GlassContainer(
                           blur: 25,
                           padding: const EdgeInsets.all(24),
-                          color: Colors.black.withOpacity(0.65),
-                          border: Border.all(color: Colors.white.withOpacity(0.12)),
+                          color: Colors.black.withValues(alpha: 0.65),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
                           child: Column(
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(20),
                                 decoration: BoxDecoration(
-                                  color: primaryColor.withOpacity(0.2),
+                                  color: primaryColor.withValues(alpha: 0.2),
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: primaryColor.withOpacity(0.3)),
+                                  border: Border.all(color: primaryColor.withValues(alpha: 0.3)),
                                 ),
                                 child: const Icon(Icons.check_rounded, color: primaryColor, size: 40),
                               ),
@@ -295,8 +300,8 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
                         GlassContainer(
                           blur: 25,
                           padding: const EdgeInsets.all(24),
-                          color: Colors.black.withOpacity(0.7),
-                          border: Border.all(color: Colors.white.withOpacity(0.15)),
+                          color: Colors.black.withValues(alpha: 0.7),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -324,9 +329,9 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 decoration: BoxDecoration(
-                                  color: Colors.greenAccent.withOpacity(0.08),
+                                  color: Colors.greenAccent.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.greenAccent.withOpacity(0.2)),
+                                  border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.2)),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -373,8 +378,8 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
                         GlassContainer(
                           blur: 25,
                           padding: const EdgeInsets.all(20),
-                          color: Colors.black.withOpacity(0.7),
-                          border: Border.all(color: Colors.white.withOpacity(0.12)),
+                          color: Colors.black.withValues(alpha: 0.7),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -390,14 +395,14 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
                                     height: 120,
                                     width: double.infinity,
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.03),
+                                      color: Colors.white.withValues(alpha: 0.03),
                                       borderRadius: BorderRadius.circular(16),
                                       border: Border.all(color: Colors.white12, style: BorderStyle.solid),
                                     ),
                                     child: Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
-                                        Icon(Icons.add_a_photo_outlined, color: primaryColor.withOpacity(0.8), size: 32),
+                                        Icon(Icons.add_a_photo_outlined, color: primaryColor.withValues(alpha: 0.8), size: 32),
                                         const SizedBox(height: 8),
                                         Text(
                                           "Add Completion Photo",
@@ -463,7 +468,7 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
                                         child: Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                           decoration: BoxDecoration(
-                                            color: Colors.green.withOpacity(0.85),
+                                            color: Colors.green.withValues(alpha: 0.85),
                                             borderRadius: BorderRadius.circular(20),
                                           ),
                                           child: Row(
@@ -490,8 +495,8 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
                         GlassContainer(
                           blur: 25,
                           padding: const EdgeInsets.all(20),
-                          color: Colors.black.withOpacity(0.75),
-                          border: Border.all(color: Colors.white.withOpacity(0.12)),
+                          color: Colors.black.withValues(alpha: 0.75),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
                           child: Column(
                             children: [
                               Row(
@@ -581,7 +586,7 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
                             await _saveCompletionProof();
                           }
                           HomeScreen.pendingTabIndex = 2; // Switch to Earnings tab
-                          if (mounted) {
+                          if (context.mounted) {
                             Navigator.of(context).popUntil((route) => route.isFirst);
                           }
                         },
@@ -590,7 +595,7 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 18),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                           elevation: 4,
-                          shadowColor: primaryColor.withOpacity(0.4),
+                          shadowColor: primaryColor.withValues(alpha: 0.4),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -619,8 +624,8 @@ class _JobCompletionScreenState extends State<JobCompletionScreen> {
     return GlassContainer(
       blur: 20,
       padding: const EdgeInsets.all(16),
-      color: Colors.black.withOpacity(0.65),
-      border: Border.all(color: Colors.white.withOpacity(0.12)),
+      color: Colors.black.withValues(alpha: 0.65),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

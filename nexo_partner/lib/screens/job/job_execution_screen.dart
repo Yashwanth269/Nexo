@@ -6,11 +6,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/network_helper.dart';
-import '../../utils/image_utils.dart';
 import '../chat/chat_detail_screen.dart';
 import 'dart:async';
 import 'job_completion_screen.dart';
-import 'dart:io';
 import '../../services/socket_service.dart';
 import '../../services/cache_service.dart';
 import '../../services/background_service.dart';
@@ -48,10 +46,6 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
   DateTime? _workStartTime;
   Position? _currentPosition;
   StreamSubscription<Position>? _positionStream;
-  DateTime? _lastRouteFetchTime;
-  
-  String _distance = "-- km";
-  String _eta = "-- mins";
   
   final Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
@@ -59,7 +53,6 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
 
   // Colors
   static const Color primaryColor = Color(0xFFF97316);
-  static const Color textPrimary = Colors.white;
   static const Color textSecondary = Colors.white70;
 
   @override
@@ -100,8 +93,10 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
       }
       
       final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 5),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 5),
+        ),
       );
       if (mounted) {
         setState(() {
@@ -116,7 +111,7 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
 
   void _listenForCancellations() {
     final socketService = SocketService();
-    final handleCancel = (data) {
+    void handleCancel(dynamic data) {
       if (!mounted) return;
       final String? cancelledJobId = data != null ? (data['jobId'] ?? data['job_id'])?.toString() : null;
       if (cancelledJobId == widget.jobId.toString()) {
@@ -147,7 +142,7 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
           ),
         );
       }
-    };
+    }
 
     socketService.socket?.on('job_cancelled_by_user', handleCancel);
     socketService.socket?.on('USER_CANCELLED_JOB', handleCancel);
@@ -206,23 +201,6 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
 
   void _updateRouteDetailsFromJob() {
     if (_job == null || !mounted) return;
-    
-    final distanceMeters = _job['route_distance'] ?? _job['distance_meters'] ?? _job['distanceMeters'];
-    if (distanceMeters != null) {
-      final double meters = (distanceMeters as num).toDouble();
-      final double km = meters / 1000;
-      _distance = km < 1 ? "${meters.round()} m" : "${km.toStringAsFixed(1)} km";
-    } else if (_job['distance'] != null) {
-      _distance = _job['distance'].toString();
-    }
-    
-    final durationSeconds = _job['route_duration'] ?? _job['duration_seconds'] ?? _job['duration'];
-    if (durationSeconds != null) {
-      final int mins = (durationSeconds as num).round() ~/ 60;
-      _eta = "$mins mins";
-    } else if (_job['eta'] != null) {
-      _eta = _job['eta'].toString();
-    }
     
     final polylineStr = _job['route_polyline'] ?? _job['polyline'];
     if (polylineStr != null && polylineStr.toString().isNotEmpty) {
@@ -369,7 +347,9 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
         headers: headers,
         body: jsonEncode({'jobId': widget.jobId, 'lat': pos.latitude, 'lng': pos.longitude}),
       );
-    } catch (e) {}
+    } catch (e) {
+      debugPrint("Error syncing location: $e");
+    }
   }
 
   void _listenForArrivalEvents() {
@@ -444,12 +424,6 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
           if (data['duration'] != null) {
             _job['route_duration'] = data['duration'];
           }
-          if (data['distance'] != null) {
-            _distance = data['distance'];
-          }
-          if (data['eta'] != null) {
-            _eta = data['eta'];
-          }
           _updateRouteDetailsFromJob();
         });
       }
@@ -510,9 +484,9 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.redAccent.withOpacity(0.1),
+                  color: Colors.redAccent.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
@@ -598,8 +572,8 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
           blur: 25,
           padding: const EdgeInsets.all(24),
           margin: const EdgeInsets.all(16),
-          color: const Color(0xFF011410).withOpacity(0.95),
-          border: Border.all(color: const Color(0xFF10B981).withOpacity(0.2), width: 1.5),
+          color: const Color(0xFF011410).withValues(alpha: 0.95),
+          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.2), width: 1.5),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -683,16 +657,16 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
+          color: color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.2), width: 1.2),
+          border: Border.all(color: color.withValues(alpha: 0.2), width: 1.2),
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
+                color: color.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: color, size: 24),
@@ -738,14 +712,18 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
       try {
         if (newStatus == 'ARRIVED' || newStatus == 'FORCE_ARRIVAL_PENDING_CONFIRMATION') {
           pos = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high,
-            timeLimit: const Duration(seconds: 4),
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 4),
+            ),
           );
         } else {
           pos = await Geolocator.getLastKnownPosition();
           pos ??= await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.low,
-            timeLimit: const Duration(seconds: 1),
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.low,
+              timeLimit: Duration(seconds: 1),
+            ),
           );
         }
       } catch (e) {
@@ -773,7 +751,7 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
           'lng': pos?.longitude ?? 0.0,
           'isMocked': pos?.isMocked ?? false,
           'force': force,
-          if (paymentMethod != null) 'paymentMethod': paymentMethod,
+          'paymentMethod': ?paymentMethod,
         }),
       );
 
@@ -902,7 +880,7 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                 bottom: MediaQuery.of(context).viewInsets.bottom + 24,
               ),
               margin: const EdgeInsets.all(16),
-              color: Colors.black.withOpacity(0.9),
+              color: Colors.black.withValues(alpha: 0.9),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -941,8 +919,10 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                         child: RadioListTile<String>(
                           title: Text(r, style: GoogleFonts.inter(fontSize: 14, color: Colors.white70)),
                           value: r,
+                          // ignore: deprecated_member_use
                           groupValue: selectedReason,
                           activeColor: Colors.redAccent,
+                          // ignore: deprecated_member_use
                           onChanged: (val) {
                             setModalState(() {
                               selectedReason = val;
@@ -1055,7 +1035,7 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                 bottom: MediaQuery.of(context).viewInsets.bottom + 24,
               ),
               margin: const EdgeInsets.all(16),
-              color: Colors.black.withOpacity(0.9),
+              color: Colors.black.withValues(alpha: 0.9),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1094,8 +1074,10 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                         child: RadioListTile<String>(
                           title: Text(r, style: GoogleFonts.inter(fontSize: 14, color: Colors.white70)),
                           value: r,
+                          // ignore: deprecated_member_use
                           groupValue: selectedReason,
                           activeColor: Colors.amberAccent,
+                          // ignore: deprecated_member_use
                           onChanged: (val) {
                             setModalState(() {
                               selectedReason = val;
@@ -1332,7 +1314,7 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                boxShadow: [BoxShadow(color: Colors.black1D, blurRadius: 20, offset: Offset(0, -4))],
+                boxShadow: [BoxShadow(color: Color(0x1D000000), blurRadius: 20, offset: Offset(0, -4))],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1586,19 +1568,7 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
   }
 
 
-  Widget _buildCircleButton(IconData icon, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: GlassContainer(
-        borderRadius: 50,
-        blur: 10,
-        padding: const EdgeInsets.all(12),
-        color: Colors.white.withOpacity(0.08),
-        border: Border.all(color: Colors.white.withOpacity(0.15)),
-        child: Icon(icon, color: primaryColor, size: 20),
-      ),
-    );
-  }
+
 
   Widget _buildSwipeActionByStatus() {
     String text = "";
@@ -1621,9 +1591,9 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
           width: double.infinity,
           height: 64,
           decoration: BoxDecoration(
-            color: Colors.amberAccent.withOpacity(0.1),
+            color: Colors.amberAccent.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(32),
-            border: Border.all(color: Colors.amberAccent.withOpacity(0.3)),
+            border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.3)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1661,9 +1631,9 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
           width: double.infinity,
           height: 64,
           decoration: BoxDecoration(
-            color: Colors.amberAccent.withOpacity(0.1),
+            color: Colors.amberAccent.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(32),
-            border: Border.all(color: Colors.amberAccent.withOpacity(0.3)),
+            border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.3)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,

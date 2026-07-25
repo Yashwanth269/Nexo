@@ -1,19 +1,24 @@
 const db = require('../config/db');
 
-class MigrationRunnerService {
-    async runAllMigrations() {
-        console.log("🛠️ [MIGRATION-START] Running database auto-migrations...");
-
-        const queries = [
-            // Extensions
-            "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";",
-            "CREATE EXTENSION IF NOT EXISTS cube;",
-            "CREATE EXTENSION IF NOT EXISTS earthdistance;",
-
-            // 1. Worker availability state
-            "ALTER TABLE workers ADD COLUMN IF NOT EXISTS availability_state VARCHAR(50) DEFAULT 'OFFLINE';",
-
-            // 2. worker_calendar table
+// Explicit versioned migration script registry
+const MIGRATIONS = [
+    {
+        version: 1,
+        name: 'uuid_and_availability',
+        up: [
+            'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";',
+            'CREATE EXTENSION IF NOT EXISTS cube;',
+            'CREATE EXTENSION IF NOT EXISTS earthdistance;',
+            "ALTER TABLE workers ADD COLUMN IF NOT EXISTS availability_state VARCHAR(50) DEFAULT 'OFFLINE';"
+        ],
+        down: [
+            "ALTER TABLE workers DROP COLUMN IF EXISTS availability_state;"
+        ]
+    },
+    {
+        version: 2,
+        name: 'worker_calendar',
+        up: [
             `CREATE TABLE IF NOT EXISTS worker_calendar (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
@@ -32,11 +37,17 @@ class MigrationRunnerService {
                 priority VARCHAR(50) DEFAULT 'NORMAL',
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );`,
-
             "CREATE INDEX IF NOT EXISTS idx_worker_calendar_worker_time ON worker_calendar(worker_id, scheduled_start);",
-            "CREATE INDEX IF NOT EXISTS idx_worker_calendar_booking ON worker_calendar(booking_id);",
-
-            // 3. Marketplace Zones
+            "CREATE INDEX IF NOT EXISTS idx_worker_calendar_booking ON worker_calendar(booking_id);"
+        ],
+        down: [
+            "DROP TABLE IF EXISTS worker_calendar CASCADE;"
+        ]
+    },
+    {
+        version: 3,
+        name: 'marketplace_zones',
+        up: [
             `CREATE TABLE IF NOT EXISTS marketplace_zones (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 city VARCHAR(100) NOT NULL,
@@ -47,41 +58,21 @@ class MigrationRunnerService {
                 radius_km DECIMAL DEFAULT 5.0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );`,
-
-            // Seed default Bangalore zones if empty
             `INSERT INTO marketplace_zones (city, zone_name, locality, center_lat, center_lng, radius_km)
-            SELECT 'Bangalore', 'Central', 'MG Road', 12.9756, 77.6067, 3.0 
-            WHERE NOT EXISTS (SELECT 1 FROM marketplace_zones WHERE locality = 'MG Road');`,
-
+             SELECT 'Bangalore', 'South', 'Koramangala', 12.9352, 77.6244, 4.0 
+             WHERE NOT EXISTS (SELECT 1 FROM marketplace_zones WHERE locality = 'Koramangala');`,
             `INSERT INTO marketplace_zones (city, zone_name, locality, center_lat, center_lng, radius_km)
-            SELECT 'Bangalore', 'South', 'Koramangala', 12.9352, 77.6244, 4.0 
-            WHERE NOT EXISTS (SELECT 1 FROM marketplace_zones WHERE locality = 'Koramangala');`,
-
-            `INSERT INTO marketplace_zones (city, zone_name, locality, center_lat, center_lng, radius_km)
-            SELECT 'Bangalore', 'South', 'HSR Layout', 12.9105, 77.6450, 4.0 
-            WHERE NOT EXISTS (SELECT 1 FROM marketplace_zones WHERE locality = 'HSR Layout');`,
-
-            `INSERT INTO marketplace_zones (city, zone_name, locality, center_lat, center_lng, radius_km)
-            SELECT 'Bangalore', 'South', 'Jayanagar', 12.9307, 77.5824, 4.0 
-            WHERE NOT EXISTS (SELECT 1 FROM marketplace_zones WHERE locality = 'Jayanagar');`,
-
-            `INSERT INTO marketplace_zones (city, zone_name, locality, center_lat, center_lng, radius_km)
-            SELECT 'Bangalore', 'East', 'Indiranagar', 12.9719, 77.6412, 4.0 
-            WHERE NOT EXISTS (SELECT 1 FROM marketplace_zones WHERE locality = 'Indiranagar');`,
-
-            `INSERT INTO marketplace_zones (city, zone_name, locality, center_lat, center_lng, radius_km)
-            SELECT 'Bangalore', 'East', 'Whitefield', 12.9698, 77.7499, 6.0 
-            WHERE NOT EXISTS (SELECT 1 FROM marketplace_zones WHERE locality = 'Whitefield');`,
-
-            `INSERT INTO marketplace_zones (city, zone_name, locality, center_lat, center_lng, radius_km)
-            SELECT 'Bangalore', 'West', 'Rajajinagar', 12.9882, 77.5540, 4.0 
-            WHERE NOT EXISTS (SELECT 1 FROM marketplace_zones WHERE locality = 'Rajajinagar');`,
-
-            `INSERT INTO marketplace_zones (city, zone_name, locality, center_lat, center_lng, radius_km)
-            SELECT 'Bangalore', 'North', 'Hebbal', 13.0358, 77.5970, 5.0 
-            WHERE NOT EXISTS (SELECT 1 FROM marketplace_zones WHERE locality = 'Hebbal');`,
-
-            // 4. Incentive Recommendations
+             SELECT 'Bangalore', 'South', 'HSR Layout', 12.9105, 77.6450, 4.0 
+             WHERE NOT EXISTS (SELECT 1 FROM marketplace_zones WHERE locality = 'HSR Layout');`
+        ],
+        down: [
+            "DROP TABLE IF EXISTS marketplace_zones CASCADE;"
+        ]
+    },
+    {
+        version: 4,
+        name: 'incentive_recommendations_and_slas',
+        up: [
             `CREATE TABLE IF NOT EXISTS incentive_recommendations (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 zone_id UUID REFERENCES marketplace_zones(id) ON DELETE CASCADE,
@@ -93,8 +84,6 @@ class MigrationRunnerService {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );`,
-
-            // 5. Job SLAs
             `CREATE TABLE IF NOT EXISTS job_slas (
                 job_id UUID PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
                 sla_type VARCHAR(50) NOT NULL,
@@ -104,9 +93,17 @@ class MigrationRunnerService {
                 predicted_failure_reason TEXT,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );`,
-
-            // 6. Alter Jobs table for lifecycle
+            );`
+        ],
+        down: [
+            "DROP TABLE IF EXISTS incentive_recommendations CASCADE;",
+            "DROP TABLE IF EXISTS job_slas CASCADE;"
+        ]
+    },
+    {
+        version: 5,
+        name: 'job_lifecycle_columns',
+        up: [
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS state_timestamps JSONB DEFAULT '{}'::jsonb;",
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS service_timer JSONB DEFAULT '{}'::jsonb;",
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS checklist JSONB DEFAULT '[]'::jsonb;",
@@ -119,9 +116,17 @@ class MigrationRunnerService {
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS start_otp TEXT;",
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS start_otp_verified BOOLEAN DEFAULT false;",
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS completion_otp TEXT;",
-            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS completion_otp_verified BOOLEAN DEFAULT false;",
-
-            // 7. Scheduled job bidding extensions to job_offers & workers
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS completion_otp_verified BOOLEAN DEFAULT false;"
+        ],
+        down: [
+            "ALTER TABLE jobs DROP COLUMN IF EXISTS state_timestamps;",
+            "ALTER TABLE jobs DROP COLUMN IF EXISTS service_timer;"
+        ]
+    },
+    {
+        version: 6,
+        name: 'scheduled_bidding_extensions',
+        up: [
             "ALTER TABLE workers ADD COLUMN IF NOT EXISTS commitment_score DECIMAL(5, 2) DEFAULT 100.0;",
             "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS offer_price DECIMAL(10, 2);",
             "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS proposed_scheduled_at TIMESTAMP WITH TIME ZONE;",
@@ -129,12 +134,17 @@ class MigrationRunnerService {
             "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP WITH TIME ZONE;",
             "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS confirmation_deadline TIMESTAMP WITH TIME ZONE;",
             "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS worker_confirmed_at TIMESTAMP WITH TIME ZONE;",
-            "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS withdrawal_reason TEXT;",
-
-            // Create PostGIS / Earth distance indexes on marketplace_zones center coordinate
+            "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS withdrawal_reason TEXT;"
+        ],
+        down: [
+            "ALTER TABLE workers DROP COLUMN IF EXISTS commitment_score;"
+        ]
+    },
+    {
+        version: 7,
+        name: 'observability_and_dispatch',
+        up: [
             "CREATE INDEX IF NOT EXISTS idx_marketplace_zones_geo ON marketplace_zones USING gist (ll_to_earth(center_lat, center_lng));",
-
-            // 8. Staged Dispatch observability columns on search_analytics_logs
             "ALTER TABLE search_analytics_logs ADD COLUMN IF NOT EXISTS queue_refresh_count INTEGER DEFAULT 0;",
             "ALTER TABLE search_analytics_logs ADD COLUMN IF NOT EXISTS queue_build_time_ms INTEGER DEFAULT 0;",
             "ALTER TABLE search_analytics_logs ADD COLUMN IF NOT EXISTS pools_used INTEGER DEFAULT 0;",
@@ -143,27 +153,302 @@ class MigrationRunnerService {
             "ALTER TABLE search_analytics_logs ADD COLUMN IF NOT EXISTS standby_used BOOLEAN DEFAULT FALSE;",
             "ALTER TABLE search_analytics_logs ADD COLUMN IF NOT EXISTS emergency_recovery_count INTEGER DEFAULT 0;",
             "ALTER TABLE search_analytics_logs ADD COLUMN IF NOT EXISTS duplicate_acceptance_attempts INTEGER DEFAULT 0;",
-
-            // 9. Dispatch pool ID on job_offers
             "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS dispatch_pool_id INTEGER DEFAULT 1;",
-            "CREATE INDEX IF NOT EXISTS idx_job_offers_dispatch_pool ON job_offers(job_id, dispatch_pool_id);",
-        ];
+            "CREATE INDEX IF NOT EXISTS idx_job_offers_dispatch_pool ON job_offers(job_id, dispatch_pool_id);"
+        ],
+        down: [
+            "ALTER TABLE job_offers DROP COLUMN IF EXISTS dispatch_pool_id;"
+        ]
+    },
+    {
+        version: 8,
+        name: 'preferences_achievements_and_flags',
+        up: [
+            `CREATE TABLE IF NOT EXISTS worker_zone_preferences (
+                worker_id UUID PRIMARY KEY REFERENCES workers(id) ON DELETE CASCADE,
+                primary_zone VARCHAR(100),
+                work_radius INTEGER DEFAULT 15,
+                secondary_zones TEXT[] DEFAULT '{}',
+                avoid_areas TEXT[] DEFAULT '{}',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );`,
+            "ALTER TABLE worker_zone_preferences ADD COLUMN IF NOT EXISTS skill_ratings JSONB DEFAULT '{}'::jsonb;",
+            `CREATE TABLE IF NOT EXISTS worker_achievements (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                achievement_type VARCHAR(100) NOT NULL,
+                title VARCHAR(100) NOT NULL,
+                description TEXT,
+                icon VARCHAR(50),
+                awarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(worker_id, achievement_type)
+            );`,
+            "ALTER TABLE disputes ADD COLUMN IF NOT EXISTS sla_breached BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE feature_flags ADD COLUMN IF NOT EXISTS rules JSONB DEFAULT '{}'::jsonb;",
+            "ALTER TABLE feature_flags ADD COLUMN IF NOT EXISTS prerequisites TEXT[] DEFAULT '{}';"
+        ],
+        down: [
+            "DROP TABLE IF EXISTS worker_zone_preferences CASCADE;",
+            "DROP TABLE IF EXISTS worker_achievements CASCADE;"
+        ]
+    },
+    {
+        version: 9,
+        name: 'idempotency_keys_and_minimum_guarantee',
+        up: [
+            "ALTER TABLE idempotency_keys ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'COMPLETED';",
+            "ALTER TABLE idempotency_keys ADD COLUMN IF NOT EXISTS request_hash VARCHAR(64);",
+            `CREATE TABLE IF NOT EXISTS minimum_guarantee_payouts (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                payout_date DATE NOT NULL,
+                jobs_completed INT NOT NULL,
+                actual_earnings DECIMAL(10,2) NOT NULL,
+                guarantee_target DECIMAL(10,2) NOT NULL,
+                top_up_amount DECIMAL(10,2) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );`,
+            "CREATE INDEX IF NOT EXISTS idx_min_guarantee_worker_date ON minimum_guarantee_payouts(worker_id, payout_date);"
+        ],
+        down: [
+            "DROP TABLE IF EXISTS minimum_guarantee_payouts CASCADE;"
+        ]
+    },
+    {
+        version: 10,
+        name: 'minimum_guarantee_extensions',
+        up: [
+            "ALTER TABLE minimum_guarantee_payouts ADD COLUMN IF NOT EXISTS eligible BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE minimum_guarantee_payouts ADD COLUMN IF NOT EXISTS rejection_reason TEXT;",
+            "ALTER TABLE minimum_guarantee_payouts ADD COLUMN IF NOT EXISTS qualification_reason TEXT;",
+            "ALTER TABLE minimum_guarantee_payouts ADD CONSTRAINT unique_worker_payout_date UNIQUE(worker_id, payout_date);"
+        ],
+        down: [
+            "ALTER TABLE minimum_guarantee_payouts DROP CONSTRAINT IF EXISTS unique_worker_payout_date;",
+            "ALTER TABLE minimum_guarantee_payouts DROP COLUMN IF EXISTS eligible;",
+            "ALTER TABLE minimum_guarantee_payouts DROP COLUMN IF EXISTS rejection_reason;",
+            "ALTER TABLE minimum_guarantee_payouts DROP COLUMN IF EXISTS qualification_reason;"
+        ]
+    },
+    {
+        version: 11,
+        name: 'dispatch_breakdown_metadata',
+        up: [
+            "ALTER TABLE dispatch_ranking_breakdowns ADD COLUMN IF NOT EXISTS model_version VARCHAR(50) DEFAULT '1.2.0-bandit';",
+            "ALTER TABLE dispatch_ranking_breakdowns ADD COLUMN IF NOT EXISTS feature_version VARCHAR(50) DEFAULT '2.0.1';",
+            "ALTER TABLE dispatch_ranking_breakdowns ADD COLUMN IF NOT EXISTS dispatch_policy_version VARCHAR(50) DEFAULT '1.0.0';"
+        ],
+        down: [
+            "ALTER TABLE dispatch_ranking_breakdowns DROP COLUMN IF EXISTS model_version;",
+            "ALTER TABLE dispatch_ranking_breakdowns DROP COLUMN IF EXISTS feature_version;",
+            "ALTER TABLE dispatch_ranking_breakdowns DROP COLUMN IF EXISTS dispatch_policy_version;"
+        ]
+    },
+    {
+        version: 12,
+        name: 'ml_training_data_schema_extensions',
+        up: [
+            "ALTER TABLE ml_training_data ADD COLUMN IF NOT EXISTS prediction_id UUID UNIQUE DEFAULT gen_random_uuid();",
+            "ALTER TABLE ml_training_data ADD COLUMN IF NOT EXISTS feature_store_version VARCHAR(50) DEFAULT '1.0.0';",
+            "ALTER TABLE ml_training_data ADD COLUMN IF NOT EXISTS feature_schema_version VARCHAR(50) DEFAULT '1.0.0';",
+            "ALTER TABLE ml_training_data ADD COLUMN IF NOT EXISTS model_version VARCHAR(50) DEFAULT '1.0.0';",
+            "ALTER TABLE ml_training_data ADD COLUMN IF NOT EXISTS weather VARCHAR(50);",
+            "ALTER TABLE ml_training_data ADD COLUMN IF NOT EXISTS holiday_flag BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE ml_training_data ADD COLUMN IF NOT EXISTS dispatch_policy_version VARCHAR(50);"
+        ],
+        down: [
+            "ALTER TABLE ml_training_data DROP COLUMN IF EXISTS weather;",
+            "ALTER TABLE ml_training_data DROP COLUMN IF EXISTS holiday_flag;",
+            "ALTER TABLE ml_training_data DROP COLUMN IF EXISTS dispatch_policy_version;"
+        ]
+    },
+    {
+        version: 13,
+        name: 'secure_otp_schema_extensions',
+        up: [
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS start_otp_expiry TIMESTAMP;",
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS completion_otp_expiry TIMESTAMP;",
+            "ALTER TABLE jobs ALTER COLUMN start_otp TYPE VARCHAR(64);",
+            "ALTER TABLE jobs ALTER COLUMN completion_otp TYPE VARCHAR(64);"
+        ],
+        down: [
+            "ALTER TABLE jobs DROP COLUMN IF EXISTS start_otp_expiry;",
+            "ALTER TABLE jobs DROP COLUMN IF EXISTS completion_otp_expiry;",
+            "ALTER TABLE jobs ALTER COLUMN start_otp TYPE VARCHAR(50);",
+            "ALTER TABLE jobs ALTER COLUMN completion_otp TYPE VARCHAR(50);"
+        ]
+    },
+    {
+        version: 14,
+        name: 'double_entry_ledger_and_payment_events',
+        up: [
+            "ALTER TABLE razorpay_webhooks ADD CONSTRAINT unique_razorpay_event_id UNIQUE(razorpay_id);",
+            `CREATE TABLE IF NOT EXISTS double_entry_ledger (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                account_id UUID NOT NULL,
+                account_type VARCHAR(50) NOT NULL,
+                amount DECIMAL(10,2) NOT NULL,
+                entry_type VARCHAR(10) NOT NULL, -- DEBIT/CREDIT
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS payment_events (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                event_type VARCHAR(50) NOT NULL,
+                payload JSONB NOT NULL,
+                status VARCHAR(20) DEFAULT 'PENDING',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );`
+        ],
+        down: [
+            "ALTER TABLE razorpay_webhooks DROP CONSTRAINT IF EXISTS unique_razorpay_event_id;",
+            "DROP TABLE IF EXISTS double_entry_ledger CASCADE;",
+            "DROP TABLE IF EXISTS payment_events CASCADE;"
+        ]
+    },
+    {
+        version: 15,
+        name: 'customer_memberships_table',
+        up: [
+            `CREATE TABLE IF NOT EXISTS customer_memberships (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                tier VARCHAR(50) NOT NULL,
+                price DECIMAL(10,2) NOT NULL,
+                fee_discount_pct DECIMAL(5,2) NOT NULL,
+                free_cancellations_remaining INT NOT NULL,
+                starts_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );`
+        ],
+        down: [
+            "DROP TABLE IF EXISTS customer_memberships CASCADE;"
+        ]
+    }
+];
 
-        for (const query of queries) {
-            try {
-                await db.query(query);
-            } catch (err) {
-                // If PostGIS functions are missing, log a warning but proceed
-                if (query.includes("ll_to_earth") && err.message.includes("does not exist")) {
-                    console.warn("⚠️ [MIGRATION-WARN] Earth distance query failed (missing earthdistance extension). Skipping earth distance index.");
-                } else {
-                    console.error("❌ [MIGRATION-ERROR] Query failed:", query.substring(0, 100), "Error:", err.message);
-                    throw err;
+const crypto = require('crypto');
+
+class MigrationRunnerService {
+    /**
+     * Incremental Version-aware Migrations Runner (with rollback support)
+     */
+    async runAllMigrations() {
+        if (process.env.SKIP_MIGRATIONS === 'true') {
+            console.log("ℹ️ [MIGRATION-SKIP] Migration execution skipped due to SKIP_MIGRATIONS environment flag.");
+            return;
+        }
+
+        console.log("🛠️ [MIGRATION-START] Running database auto-migrations...");
+
+        // 1. Create schema_migrations tracking audit table if missing
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INT PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Alter schema_migrations table to add checksum column if missing
+        await db.query("ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum VARCHAR(64);");
+
+        // 2. Fetch applied migrations
+        const appliedRes = await db.query("SELECT version, checksum FROM schema_migrations ORDER BY version ASC");
+        const appliedMap = {};
+        appliedRes.rows.forEach(r => {
+            appliedMap[r.version] = r.checksum;
+        });
+
+        // 3. Filter and execute pending versioned scripts sequentially
+        for (const m of MIGRATIONS) {
+            // Compute MD5 hash of this migration definition to track changes
+            const checksum = crypto.createHash('md5').update(JSON.stringify(m.up)).digest('hex');
+
+            if (appliedMap[m.version] !== undefined) {
+                const dbChecksum = appliedMap[m.version];
+                // Checksum integrity check to prevent edited migrations from executing silently after deployment
+                if (dbChecksum && dbChecksum !== checksum) {
+                    const errMsg = `🚨 [MIGRATION-INTEGRITY-ERROR] Checksum mismatch for Migration Version ${m.version}: ${m.name}. File has been altered after execution!`;
+                    console.error(errMsg);
+                    throw new Error(errMsg);
                 }
+                continue;
+            }
+
+            console.log(`[MIGRATION] Applying Version ${m.version}: ${m.name}...`);
+            const client = await db.pool.connect();
+            try {
+                await client.query('BEGIN');
+                
+                for (const query of m.up) {
+                    await client.query(query);
+                }
+
+                await client.query(
+                    "INSERT INTO schema_migrations (version, name, checksum) VALUES ($1, $2, $3)",
+                    [m.version, m.name, checksum]
+                );
+
+                await client.query('COMMIT');
+                console.log(`[MIGRATION-SUCCESS] Version ${m.version} applied.`);
+            } catch (err) {
+                await client.query('ROLLBACK');
+                console.error(`[MIGRATION-FAILED] Rollback complete. Failed at Version ${m.version}:`, err.message);
+                client.release();
+                throw err;
+            } finally {
+                client.release();
             }
         }
 
-        console.log("✅ [MIGRATION-SUCCESS] All auto-migrations applied successfully.");
+        console.log("✅ [MIGRATION-SUCCESS] All incremental schema migrations successfully verified.");
+    }
+
+    /**
+     * Rollback migrations to a target version
+     */
+    async rollbackTo(targetVersion) {
+        console.log(`[ROLLBACK] Reverting schema migrations to version: ${targetVersion}`);
+        
+        // Environment policy protection: Prevent destructive drops in production environments
+        if (process.env.NODE_ENV === 'production') {
+            console.error("🚨 [ROLLBACK-DENIED] Rollbacks involving potential data drop are strictly restricted on production environments.");
+            throw new Error("ROLLBACK_FORBIDDEN_IN_PRODUCTION");
+        }
+
+        const appliedRes = await db.query("SELECT version FROM schema_migrations ORDER BY version DESC");
+        const appliedVersions = appliedRes.rows.map(r => r.version);
+
+        for (const ver of appliedVersions) {
+            if (ver <= targetVersion) break;
+
+            const m = MIGRATIONS.find(item => item.version === ver);
+            if (!m) continue;
+
+            console.log(`[ROLLBACK] Reverting Version ${m.version}: ${m.name}...`);
+            const client = await db.pool.connect();
+            try {
+                await client.query('BEGIN');
+
+                for (const query of m.down) {
+                    await client.query(query);
+                }
+
+                await client.query("DELETE FROM schema_migrations WHERE version = $1", [m.version]);
+
+                await client.query('COMMIT');
+                console.log(`[ROLLBACK-SUCCESS] Reverted Version ${m.version}.`);
+            } catch (err) {
+                await client.query('ROLLBACK');
+                console.error(`[ROLLBACK-FAILED] Revert failed at Version ${m.version}:`, err.message);
+                client.release();
+                throw err;
+            } finally {
+                client.release();
+            }
+        }
     }
 }
 

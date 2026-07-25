@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../../utils/network_helper.dart';
 import 'chat_detail_screen.dart';
 
@@ -19,7 +19,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   List<dynamic> _chats = [];
   String _activeFilter = "All Chats";
   String _token = "";
-  late IO.Socket _socket;
+  late io.Socket _socket;
 
   @override
   void initState() {
@@ -42,7 +42,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   void _initSocket() {
-    _socket = IO.io(NetworkHelper.baseUrl, IO.OptionBuilder()
+    _socket = io.io(NetworkHelper.baseUrl, io.OptionBuilder()
       .setTransports(['websocket'])
       .setAuth({'token': _token})
       .setQuery({'token': _token})
@@ -188,7 +188,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10)],
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.all(16),

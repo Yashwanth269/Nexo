@@ -12,10 +12,10 @@ async function runMarketplaceIntelligenceTests() {
   // TEST 1: Chapter 4 & 5 — AI Calendar Engine (ACE)
   // ===============================================
   console.log("📅 1. Testing AI Calendar Engine (ACE)...");
-  const timeline = aiCalendarEngine.getWorkerTimeline(testWorkerId);
+  const timeline = await aiCalendarEngine.getWorkerTimeline(testWorkerId);
   console.log(`✅ Worker Timeline Blocks: ${timeline.length} blocks configured`);
 
-  const freeMatch = aiCalendarEngine.detectFreeSlotsAndMatch(testWorkerId, [
+  const freeMatch = await aiCalendarEngine.detectFreeSlotsAndMatch(testWorkerId, [
     { id: "opp_1", category: "Electrical", price: 950, address: "HSR Layout" },
   ]);
   console.log(`✅ Free Slot Matches Found: ${freeMatch.matchedOpportunities.length} opportunities matched to free window`);
@@ -25,14 +25,14 @@ async function runMarketplaceIntelligenceTests() {
     console.log(`   Dynamic Buffer (Apartment lift wait): +${opp.dynamicBufferMins} mins`);
   }
 
-  const hasConflict = aiCalendarEngine.hasBookingConflict(testWorkerId, "09:15", "10:00");
+  const hasConflict = await aiCalendarEngine.hasBookingConflict(testWorkerId, "09:15", "10:00");
   console.log(`   Conflict Detection Test (09:15-10:00 vs 09:00-10:30): Has Conflict? ${hasConflict}`);
 
   // ===============================================
   // TEST 2: Chapter 9 & 10 — Favourite Customer Engine (FCE)
   // ===============================================
   console.log("\n❤️ 2. Testing Favourite Customer Engine (FCE)...");
-  const rel = marketplaceIntelligenceService.getRelationshipScore(testCustomerId, testWorkerId);
+  const rel = await marketplaceIntelligenceService.getRelationshipScore(testCustomerId, testWorkerId);
   console.log(`✅ Relationship Score: ${rel.relationshipScore}/100 (${rel.previousJobsCount} previous jobs)`);
   console.log(`   Returning Revenue: ₹${rel.returningRevenue}`);
   console.log(`   Is Favourite Customer: ${rel.isFavouriteCustomer}`);
@@ -61,8 +61,8 @@ async function runMarketplaceIntelligenceTests() {
   // TEST 5: Chapter 13 & 14 — Customer (CRS) & Worker (WRS) Reliability
   // ===============================================
   console.log("\n⭐ 5. Testing Customer (CRS) & Worker (WRS) Reliability Scores...");
-  const crs = marketplaceIntelligenceService.getCustomerReliabilityScore(testCustomerId);
-  const wrs = marketplaceIntelligenceService.getWorkerReliabilityScore(testWorkerId);
+  const crs = await marketplaceIntelligenceService.getCustomerReliabilityScore(testCustomerId);
+  const wrs = await marketplaceIntelligenceService.getWorkerReliabilityScore(testWorkerId);
   console.log(`✅ Customer Reliability Score (CRS): ${crs.crsScore}% (${crs.badge})`);
   console.log(`✅ Worker Reliability Score (WRS): ${wrs.wrsScore}% (${wrs.badge})`);
   console.log(`   Unlocks Priority Dispatch: ${wrs.unlocksPriorityDispatch}`);

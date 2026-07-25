@@ -36,6 +36,19 @@ class MLHealthManager {
         this.status = 'STARTING';
         this.lastHealthyState = null;
         this.checkInterval = 10000; // 10 seconds
+        
+        // Model-Level Health States (Point 3)
+        this.modelStates = {
+            eta: { status: 'ONLINE', consecutiveFailures: 0 },
+            pricing: { status: 'ONLINE', consecutiveFailures: 0 },
+            acceptance: { status: 'ONLINE', consecutiveFailures: 0 }
+        };
+
+        // Canary status for Half-Open state (Point 2)
+        this.lastOfflineTime = null;
+        this.cooldownWindowMs = 15000; // 15 seconds before trying canary
+        this.canaryInProgress = false;
+
         this.startHealthChecks();
         this.updateHealthMetric();
     }
@@ -88,6 +101,9 @@ class MLHealthManager {
         if (newStatus === 'ONLINE') {
             this.lastHealthyState = Date.now();
         }
+        if (newStatus === 'OFFLINE') {
+            this.lastOfflineTime = Date.now();
+        }
     }
 
     updateHealthMetric() {
@@ -104,20 +120,87 @@ class MLHealthManager {
         return {
             status: this.status,
             lastHealthyTime: this.lastHealthyState ? new Date(this.lastHealthyState).toISOString() : null,
+            modelStates: this.modelStates,
             timestamp: new Date().toISOString()
         };
     }
 
+    /**
+     * Executes ML request with exponential retry policies, model-level health fallback, and circuit breaker.
+     */
     async callML(modelName, endpoint, body, method = 'POST') {
+        const normalizedModel = modelName.toLowerCase();
+        const modelState = this.modelStates[normalizedModel] || { status: 'ONLINE', consecutiveFailures: 0 };
+
+        // 1. Circuit Breaker Checks & Half-Open state (Point 2)
+        if (this.status === 'OFFLINE' || modelState.status === 'OFFLINE') {
+            const isCooldownOver = this.lastOfflineTime && (Date.now() - this.lastOfflineTime > this.cooldownWindowMs);
+            
+            if (isCooldownOver && !this.canaryInProgress) {
+                // Transition to HALF-OPEN: Allow exactly one request to pass through as a canary trial
+                console.log(`📡 [ML-HALF-OPEN] Circuit is HALF-OPEN. Attempting canary check for model ${modelName}...`);
+                this.canaryInProgress = true;
+            } else {
+                mlFailuresTotal.inc({ model_name: modelName, endpoint, error_type: 'CIRCUIT_BREAKER' });
+                await this.updateMonitoringStats(modelName, 0, 1, 0);
+                throw new Error(`ML Model ${modelName} is offline (Circuit Breaker active)`);
+            }
+        }
+
         mlRequestsTotal.inc({ model_name: modelName, endpoint });
         const start = Date.now();
 
-        if (this.status === 'OFFLINE') {
-            mlFailuresTotal.inc({ model_name: modelName, endpoint, error_type: 'CIRCUIT_BREAKER' });
-            await this.updateMonitoringStats(modelName, 0, 1, 0);
-            throw new Error(`ML Service is offline (Circuit Breaker active)`);
+        // 2. Exponential Backoff Retry wrapper (Point 1)
+        let attempts = 0;
+        const maxAttempts = 3;
+        let lastError = null;
+
+        while (attempts < maxAttempts) {
+            try {
+                const response = await this.executeHttpRequest(endpoint, body, method);
+                
+                // Successful inference response path
+                const latency = Date.now() - start;
+                mlLatency.observe({ model_name: modelName, endpoint }, latency);
+
+                // Reset statuses to ONLINE upon successful canary or normal transaction
+                this.setStatus('ONLINE');
+                modelState.status = 'ONLINE';
+                modelState.consecutiveFailures = 0;
+                this.canaryInProgress = false;
+
+                await this.updateMonitoringStats(modelName, latency, 0, 1);
+                return response;
+            } catch (err) {
+                attempts++;
+                lastError = err;
+                if (err.code === 'ECONNREFUSED' || err.message.includes('ECONNREFUSED') || err.message.includes('connect ECONNREFUSED')) {
+                    break; // Fail fast for complete service outages
+                }
+                const backoffMs = Math.pow(2, attempts) * 100;
+                console.warn(`[ML-RETRY] Attempt ${attempts}/${maxAttempts} failed for model ${modelName}: ${err.message}. Retrying in ${backoffMs}ms...`);
+                await new Promise(r => setTimeout(r, backoffMs));
+            }
         }
 
+        // Exhausted all retries - mark model and service offline/degraded
+        const latency = Date.now() - start;
+        modelState.consecutiveFailures++;
+        if (modelState.consecutiveFailures >= 3) {
+            modelState.status = 'OFFLINE';
+            this.setStatus('OFFLINE');
+        } else {
+            modelState.status = 'DEGRADED';
+            this.setStatus('DEGRADED');
+        }
+        this.canaryInProgress = false;
+
+        mlFailuresTotal.inc({ model_name: modelName, endpoint, error_type: 'EXHAUSTED_RETRIES' });
+        await this.updateMonitoringStats(modelName, latency, 1, 1);
+        throw new Error(`ML Service execution failed after ${maxAttempts} attempts. Last error: ${lastError.message}`);
+    }
+
+    executeHttpRequest(endpoint, body, method) {
         return new Promise((resolve, reject) => {
             const urlObj = new URL(ML_SERVICE_URL + endpoint);
             const options = {
@@ -132,45 +215,23 @@ class MLHealthManager {
             const req = http.request(options, (res) => {
                 let data = '';
                 res.on('data', (chunk) => data += chunk);
-                res.on('end', async () => {
-                    const latency = Date.now() - start;
-                    mlLatency.observe({ model_name: modelName, endpoint }, latency);
-
+                res.on('end', () => {
                     if (res.statusCode >= 200 && res.statusCode < 300) {
                         try {
-                            const parsed = JSON.parse(data);
-                            this.setStatus('ONLINE');
-                            await this.updateMonitoringStats(modelName, latency, 0, 1);
-                            resolve(parsed);
-                        } catch (e) {
-                            mlFailuresTotal.inc({ model_name: modelName, endpoint, error_type: 'INVALID_JSON' });
-                            await this.updateMonitoringStats(modelName, latency, 1, 1);
+                            resolve(JSON.parse(data));
+                        } catch {
                             reject(new Error('Invalid JSON response'));
                         }
                     } else {
-                        this.setStatus('DEGRADED');
-                        mlFailuresTotal.inc({ model_name: modelName, endpoint, error_type: `STATUS_${res.statusCode}` });
-                        await this.updateMonitoringStats(modelName, latency, 1, 1);
-                        reject(new Error(`ML service returned status ${res.statusCode}`));
+                        reject(new Error(`Server returned status ${res.statusCode}`));
                     }
                 });
             });
 
-            req.on('error', async (err) => {
-                const latency = Date.now() - start;
-                this.setStatus('OFFLINE');
-                mlFailuresTotal.inc({ model_name: modelName, endpoint, error_type: 'CONNECTION_ERROR' });
-                await this.updateMonitoringStats(modelName, latency, 1, 1);
-                reject(err);
-            });
-
-            req.on('timeout', async () => {
+            req.on('error', reject);
+            req.on('timeout', () => {
                 req.destroy();
-                const latency = Date.now() - start;
-                this.setStatus('DEGRADED');
-                mlFailuresTotal.inc({ model_name: modelName, endpoint, error_type: 'TIMEOUT' });
-                await this.updateMonitoringStats(modelName, latency, 1, 1);
-                reject(new Error('ML service timeout'));
+                reject(new Error('ML connection timeout'));
             });
 
             req.write(JSON.stringify(body));
@@ -194,7 +255,7 @@ class MLHealthManager {
                 latencyMs,
                 isPrediction ? 1 : 0,
                 isFailure ? 1 : 0,
-                this.status
+                this.modelStates[modelName.toLowerCase()]?.status || this.status
             ]);
         } catch (e) {
             console.error('[ML-MONITOR] Failed to update stats:', e.message);
@@ -205,7 +266,6 @@ class MLHealthManager {
 // Global register helper
 const register = client.register;
 if (register) {
-    // Check if metric is already registered (in case of double-init or dev hot reload)
     try {
         register.registerMetric(mlRequestsTotal);
         register.registerMetric(mlFailuresTotal);

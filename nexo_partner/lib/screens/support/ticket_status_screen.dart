@@ -26,7 +26,7 @@ class TicketStatusScreen extends StatelessWidget {
             Container(
               width: 200,
               height: 200,
-              decoration: BoxDecoration(color: const Color(0xFFFFC09F).withOpacity(0.3), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: const Color(0xFFFFC09F).withValues(alpha: 0.3), shape: BoxShape.circle),
               child: const Center(child: Icon(Icons.mark_chat_read_outlined, size: 80, color: Color(0xFF994B00))),
             ),
             const SizedBox(height: 32),
@@ -117,7 +117,7 @@ class TicketStatusScreen extends StatelessWidget {
       margin: const EdgeInsets.only(left: 11),
       height: 24,
       width: 2,
-      color: active ? const Color(0xFF994B00).withOpacity(0.3) : Colors.black12,
+      color: active ? const Color(0xFF994B00).withValues(alpha: 0.3) : Colors.black12,
     );
   }
 }

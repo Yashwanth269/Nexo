@@ -39,88 +39,129 @@ const categoryToSkillsMap = {
     'pesticide spraying': ['agriculture work', 'field worker']
 };
 
+const stemMap = {
+    // Electrical stems
+    'electrician': 'electric',
+    'electrical': 'electric',
+    'electricians': 'electric',
+    'wiring': 'electric',
+    'switch repair': 'electric',
+    'fan installation': 'electric',
+    'light fitting': 'electric',
+    'inverter setup': 'electric',
+    'meter repair': 'electric',
+    'switch board': 'electric',
+    'switch board repair': 'electric',
+    'ceiling fan repair': 'electric',
+    'house wiring': 'electric',
+    'mcb installation': 'electric',
+    'industrial electrical': 'electric',
+
+    // Plumbing stems
+    'plumber': 'plumb',
+    'plumbing': 'plumb',
+    'plumbers': 'plumb',
+    'pipe leakage': 'plumb',
+    'tap repair': 'plumb',
+    'tank cleaning': 'plumb',
+    'bathroom fittings': 'plumb',
+
+    // AC & Appliance stems
+    'ac repair': 'ac',
+    'ac technician': 'ac',
+    'ac service': 'ac',
+    'ac installation': 'ac',
+    'refrigerator repair': 'appliance',
+    'washing machine repair': 'appliance',
+    'microwave repair': 'appliance',
+    'tv repair': 'appliance',
+    'appliance repair': 'appliance',
+    'appliance technician': 'appliance',
+
+    // Mechanic stems
+    'mechanic': 'mechanic',
+    'mechanical': 'mechanic',
+    'motor repair': 'mechanic',
+    'bike repair': 'mechanic',
+    'car repair': 'mechanic',
+
+    // Cleaning stems
+    'cleaning': 'clean',
+    'house cleaner': 'clean',
+    'cleaner': 'clean',
+    'full house cleaning': 'clean',
+    'kitchen cleaning': 'clean',
+    'bathroom cleaning': 'clean',
+    'sofa cleaning': 'clean',
+    'water tank cleaning': 'clean',
+
+    // Carpentry stems
+    'carpenter': 'carpenter',
+    'carpentry': 'carpenter',
+
+    // Agriculture stems
+    'agriculture': 'agri',
+    'agriculture work': 'agri',
+    'field worker': 'agri',
+    'tractor driver': 'agri',
+    'tractor for ploughing': 'agri',
+    'tractor for tilling': 'agri',
+    'land preparation': 'agri',
+    'crop cutting': 'agri',
+    'sowing,planting': 'agri',
+    'harvesting manual': 'agri',
+    'weeding': 'agri',
+    'pesticide spraying': 'agri',
+    'solar installation': 'solar',
+};
+
+function getStem(phrase = '') {
+    const p = phrase.toLowerCase().trim();
+    if (stemMap[p]) return stemMap[p];
+
+    if (p.includes('electric') || p.includes('wiring') || p.includes('switch') || p.includes('fan') || p.includes('light') || p.includes('meter')) {
+        return 'electric';
+    }
+    if (p.includes('plumb') || p.includes('pipe') || p.includes('tap') || p.includes('leak') || p.includes('fittings')) {
+        return 'plumb';
+    }
+    if (p.includes('ac') || p.includes('air condition') || p.includes('fridge') || p.includes('refrigerator') || p.includes('washing')) {
+        return 'ac';
+    }
+    if (p.includes('mechanic') || p.includes('motor') || p.includes('vehicle') || p.includes('bike') || p.includes('car')) {
+        return 'mechanic';
+    }
+    if (p.includes('cleaning') || p.includes('cleaner') || p.includes('wash') || p.includes('mop')) {
+        return 'clean';
+    }
+    if (p.includes('carpenter') || p.includes('carpentry') || p.includes('wood')) {
+        return 'carpenter';
+    }
+    if (p.includes('agri') || p.includes('farm') || p.includes('tractor') || p.includes('crop') || p.includes('harvest')) {
+        return 'agri';
+    }
+    if (p.includes('pest')) return 'pest';
+    if (p.includes('paint')) return 'paint';
+    if (p.includes('salon')) return 'salon';
+
+    return p;
+}
+
 function isSkillMatch(workerSkills = [], workerTasks = [], jobCategory = '') {
     if (!jobCategory) return true;
-    
-    const categoryLower = jobCategory.toLowerCase().trim();
-    
+
     const skillsArray = Array.isArray(workerSkills) ? workerSkills : [];
     const tasksArray = Array.isArray(workerTasks) ? workerTasks : [];
 
-    // Direct matches (case insensitive)
-    const skillsLower = skillsArray.map(s => s.toLowerCase().trim());
-    const tasksLower = tasksArray.map(t => t.toLowerCase().trim());
-    
-    if (skillsLower.includes(categoryLower) || tasksLower.includes(categoryLower)) {
-        return true;
+    const jobStem = getStem(jobCategory);
+
+    for (const skill of skillsArray) {
+        if (getStem(skill) === jobStem) return true;
     }
-    
-    // Fuzzy matching for tasks e.g. "Switchboard Repair" matches "Switch repair"
-    for (const task of tasksLower) {
-        if (task.includes(categoryLower) || categoryLower.includes(task)) {
-            return true;
-        }
-        // Sub-string/partial match of words
-        const taskWords = task.split(/\s+/);
-        const catWords = categoryLower.split(/\s+/);
-        if (taskWords.some(tw => tw.length > 3 && catWords.includes(tw)) ||
-            catWords.some(cw => cw.length > 3 && taskWords.includes(cw))) {
-            return true;
-        }
+    for (const task of tasksArray) {
+        if (getStem(task) === jobStem) return true;
     }
-    
-    // Map of categories to skills
-    const mappedSkills = categoryToSkillsMap[categoryLower] || [];
-    for (const mapped of mappedSkills) {
-        if (skillsLower.includes(mapped)) {
-            return true;
-        }
-    }
-    
-    // Fallback: check if jobCategory contains any skill word or vice versa
-    for (const skill of skillsLower) {
-        if (categoryLower.includes(skill) || skill.includes(categoryLower)) {
-            return true;
-        }
-        
-        // E.g. "Electrician" matches electrical tasks
-        if (skill === 'electrician' || skill === 'electrical') {
-            if (categoryLower.includes('switch') || 
-                categoryLower.includes('fan') || 
-                categoryLower.includes('light') || 
-                categoryLower.includes('wire') || 
-                categoryLower.includes('meter')) {
-                return true;
-            }
-        }
-        
-        if (skill === 'plumber' || skill === 'plumbing') {
-            if (categoryLower.includes('pipe') || 
-                categoryLower.includes('tap') || 
-                categoryLower.includes('leak') || 
-                categoryLower.includes('motor') || 
-                categoryLower.includes('tank') ||
-                categoryLower.includes('fittings')) {
-                return true;
-            }
-        }
-        
-        if (skill === 'agriculture work' || skill === 'tractor driver') {
-            if (categoryLower.includes('tractor') || 
-                categoryLower.includes('plough') || 
-                categoryLower.includes('till') || 
-                categoryLower.includes('land') || 
-                categoryLower.includes('crop') ||
-                categoryLower.includes('sow') ||
-                categoryLower.includes('plant') ||
-                categoryLower.includes('harvest') ||
-                categoryLower.includes('weed') ||
-                categoryLower.includes('spray')) {
-                return true;
-            }
-        }
-    }
-    
+
     return false;
 }
 

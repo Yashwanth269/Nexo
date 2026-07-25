@@ -80,50 +80,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
         leading: IconButton(icon: const Icon(Icons.arrow_back, color: Color(0xFFFF6A00)), onPressed: () => Navigator.pop(context)),
         title: Text("Settings", style: GoogleFonts.outfit(color: Colors.black, fontWeight: FontWeight.bold)),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildProfileSummary(),
-            const SizedBox(height: 32),
-            _buildSectionHeader("Account"),
-            _buildSettingItem("Edit Profile", Icons.person_outline, onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileSetupScreen(phoneNumber: widget.worker['phoneNumber'], isEdit: true)));
-            }),
-            _buildSettingItem("Change Phone Number", Icons.phone_outlined, onTap: () {}),
-            const SizedBox(height: 32),
-            _buildSectionHeader("Permissions"),
-            _buildSettingItem("Location Access", Icons.gps_fixed_outlined, trailing: _buildTag(_locationPermission, const Color(0xFFEEF2FF), const Color(0xFF4F46E5)), onTap: () async {
-              await Permission.location.request();
-              await openAppSettings();
-            }),
-            _buildSettingItem("Notification Access", Icons.notifications_none, onTap: () async {
-              await Permission.notification.request();
-              await openAppSettings();
-            }),
-            const SizedBox(height: 32),
-            _buildSectionHeader("Security"),
-            _buildSettingItem("Logout", Icons.logout_outlined, onTap: _handleLogout),
-            _buildSettingItem("Logout from all devices", Icons.devices_outlined, onTap: () => _handleLogout(allDevices: true)),
-            const SizedBox(height: 32),
-            _buildSectionHeader("Support"),
-            _buildSettingItem("Help & Support", Icons.help_outline, onTap: () {}),
-            _buildSettingItem("Privacy Policy", Icons.security_outlined, onTap: () {}),
-            _buildSettingItem("Terms & Conditions", Icons.description_outlined, onTap: () {}),
-            const SizedBox(height: 40),
-            Center(
-              child: Column(
-                children: [
-                  Text("App Version 2.4.1 (2024)", style: GoogleFonts.inter(color: Colors.black26, fontSize: 12)),
-                  const SizedBox(height: 4),
-                  Text("DIGNITY OF LABOR", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF994B00), letterSpacing: 2, fontSize: 10)),
-                ],
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildProfileSummary(),
+                const SizedBox(height: 32),
+                _buildSectionHeader("Account"),
+                _buildSettingItem("Edit Profile", Icons.person_outline, onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileSetupScreen(phoneNumber: widget.worker['phoneNumber'], isEdit: true)));
+                }),
+                _buildSettingItem("Change Phone Number", Icons.phone_outlined, onTap: () {}),
+                const SizedBox(height: 32),
+                _buildSectionHeader("Permissions"),
+                _buildSettingItem("Location Access", Icons.gps_fixed_outlined, trailing: _buildTag(_locationPermission, const Color(0xFFEEF2FF), const Color(0xFF4F46E5)), onTap: () async {
+                  await Permission.location.request();
+                  await openAppSettings();
+                }),
+                _buildSettingItem("Notification Access", Icons.notifications_none, onTap: () async {
+                  await Permission.notification.request();
+                  await openAppSettings();
+                }),
+                const SizedBox(height: 32),
+                _buildSectionHeader("Security"),
+                _buildSettingItem("Logout", Icons.logout_outlined, onTap: _handleLogout),
+                _buildSettingItem("Logout from all devices", Icons.devices_outlined, onTap: () => _handleLogout(allDevices: true)),
+                const SizedBox(height: 32),
+                _buildSectionHeader("Support"),
+                _buildSettingItem("Help & Support", Icons.help_outline, onTap: () {}),
+                _buildSettingItem("Privacy Policy", Icons.security_outlined, onTap: () {}),
+                _buildSettingItem("Terms & Conditions", Icons.description_outlined, onTap: () {}),
+                const SizedBox(height: 40),
+                Center(
+                  child: Column(
+                    children: [
+                      Text("App Version 2.4.1 (2024)", style: GoogleFonts.inter(color: Colors.black26, fontSize: 12)),
+                      const SizedBox(height: 4),
+                      Text("DIGNITY OF LABOR", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF994B00), letterSpacing: 2, fontSize: 10)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 40),
+              ],
+            ),
+          ),
+          if (_isLoading)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.15),
+                child: const Center(
+                  child: CircularProgressIndicator(color: Color(0xFFFF6A00)),
+                ),
               ),
             ),
-            const SizedBox(height: 40),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -138,7 +151,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               CircleAvatar(
                 radius: 35, 
-                backgroundColor: const Color(0xFFFF6A00).withOpacity(0.1),
+                backgroundColor: const Color(0xFFFF6A00).withValues(alpha: 0.1),
                 child: widget.worker['photoUrl'] != null 
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(35),
