@@ -70,24 +70,73 @@ class UserTrustService {
     }
 
     async _recalculateScore(userId) {
+        // Ensure category_trust column is present
+        try {
+            await db.query("ALTER TABLE user_trust_scores ADD COLUMN IF NOT EXISTS category_trust JSONB DEFAULT '{}'");
+        } catch (_) {}
+
         const res = await db.query("SELECT * FROM user_trust_scores WHERE user_id = $1", [userId]);
         if (res.rowCount === 0) return;
         const u = res.rows[0];
+
+        // 1. Fetch event log history to apply time decay (Requirement 3)
+        const eventKeys = Object.keys(TRUST_EVENTS);
+        const logsRes = await db.query(
+            "SELECT event_type, created_at FROM event_logs WHERE user_id = $1 AND event_type = ANY($2)",
+            [userId, eventKeys]
+        );
+
         let score = 100;
-        for (const [eventType, config] of Object.entries(TRUST_EVENTS)) {
-            const count = parseInt(u[config.field] || 0);
-            if (config.weight > 0) {
-                score -= Math.min(config.maxPenalty, count * config.weight);
-            } else {
-                score += Math.min(config.maxBonus, count * Math.abs(config.weight));
+
+        if (logsRes.rowCount > 0) {
+            for (const row of logsRes.rows) {
+                const event = TRUST_EVENTS[row.event_type];
+                if (!event) continue;
+
+                const daysOld = (Date.now() - new Date(row.created_at).getTime()) / (1000 * 3600 * 24);
+                let decay = 1.0;
+                if (daysOld > 90) {
+                    decay = 0.2; // weight decays to 0.2 after 90 days
+                } else if (daysOld > 30) {
+                    decay = 0.5; // weight decays to 0.5 after 30 days
+                }
+
+                if (event.weight > 0) {
+                    score -= event.weight * decay;
+                } else {
+                    score += Math.abs(event.weight) * decay;
+                }
+            }
+        } else {
+            // Fallback to static column sums if event_logs is empty
+            for (const [eventType, config] of Object.entries(TRUST_EVENTS)) {
+                const count = parseInt(u[config.field] || 0);
+                if (config.weight > 0) {
+                    score -= Math.min(config.maxPenalty, count * config.weight);
+                } else {
+                    score += Math.min(config.maxBonus, count * Math.abs(config.weight));
+                }
             }
         }
+
         score = Math.max(0, Math.min(100, score));
         await db.query(
             "UPDATE user_trust_scores SET trust_score = $1, calculated_at = NOW() WHERE user_id = $2",
             [score, userId]
         );
         metrics.userTrustScore.set({ user_id: userId }, score);
+    }
+
+    /**
+     * Category-specific trust override (Requirement 3)
+     */
+    async getCategoryTrust(userId, category) {
+        const score = await this.getOrCreateScore(userId);
+        const catTrust = score.category_trust || {};
+        if (catTrust[category] !== undefined) {
+            return parseFloat(catTrust[category]);
+        }
+        return parseFloat(score.trust_score);
     }
 
     async getTrustLevel(userId) {

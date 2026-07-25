@@ -61,9 +61,10 @@ class ScheduledJobProtectionService {
         const minutesUntilStart = Math.round((scheduledMs - nowMs) / 60000.0);
 
         try {
-            // 1. Maintain & Refresh Hidden Standby Worker Pool
+            // 1. Maintain & Refresh Dynamic Hidden Standby Worker Pool (Requirement 3)
             if (job.worker_id) {
-                await backupWorkerService.reserveBackups(jobId, job.worker_id, scheduledConfig.standby.poolSize);
+                const dynamicPoolSize = this._getDynamicStandbyPoolSize(job);
+                await backupWorkerService.reserveBackups(jobId, job.worker_id, dynamicPoolSize);
             }
 
             // 2. Pre-Job Health & Risk Evaluation
@@ -162,6 +163,29 @@ class ScheduledJobProtectionService {
             const matchingService = require('./matching.service');
             await matchingService.runDispatchPipeline(job.id);
         }
+    }
+
+    _getDynamicStandbyPoolSize(job) {
+        const schedTime = new Date(job.scheduled_at);
+        const day = schedTime.getDay();
+        const hour = schedTime.getHours();
+        
+        const isWeekend = day === 0 || day === 6; // Sunday or Saturday
+        const isPeakTime = (hour >= 8 && hour <= 12) || (hour >= 17 && hour <= 21);
+        
+        // Simulating environmental features: Rain or festival peaks via configuration / environment variables
+        const weather = process.env.WEATHER || 'CLEAR';
+        const isFestivalSeason = process.env.FESTIVAL === 'true';
+
+        let poolSize = 3;
+        if (isWeekend) poolSize += 2;
+        if (isPeakTime) poolSize += 2;
+        if (weather === 'RAIN') poolSize += 3;
+        if (isFestivalSeason) poolSize += 3;
+
+        const finalSize = Math.min(8, Math.max(2, poolSize));
+        console.log(`🛡️ [DYNAMIC-STANDBY] Job ${job.id} on Day ${day} Hour ${hour} (Weather: ${weather}, Festival: ${isFestivalSeason}) assigned pool size: ${finalSize}`);
+        return finalSize;
     }
 }
 

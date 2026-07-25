@@ -12,6 +12,7 @@ import 'package:nexo/screens/profile_screen.dart';
 import 'package:nexo/components/skeleton_components.dart';
 import 'package:nexo/widgets/shimmer_loading.dart';
 import 'package:nexo/utils/network_helper.dart';
+import 'package:nexo/screens/multi_service_booking_screen.dart';
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
@@ -140,6 +141,93 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Save More Banner
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const MultiServiceBookingScreen(),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFFF7ED), Color(0xFFFFE5D9)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFFFD8C2), width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF6A00).withOpacity(0.04),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.stars_rounded, color: Color(0xFFFF6A00), size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "💰 Save More!",
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                  color: const Color(0xFFC2410C),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                "Add another service and reduce your overall visit charges.",
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFF7C2D12),
+                                  height: 1.3,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF6A00),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            "Browse",
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               // Search Bar row
               Padding(
                 padding: const EdgeInsets.all(16.0),

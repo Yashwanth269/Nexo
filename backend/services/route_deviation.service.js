@@ -1,5 +1,7 @@
 const db = require('../config/db');
 const { getIO } = require('../config/socket');
+const redis = require('../config/redis');
+const eventBus = require('./event_bus.service');
 
 class RouteDeviationService {
     async checkDeviation(jobId, workerId, workerLat, workerLng) {
@@ -43,25 +45,67 @@ class RouteDeviationService {
             isDeviating = true;
         }
 
+        const redisConsecutiveKey = `route_deviation:consecutive_count:${jobId}:${workerId}`;
+        const redisLastDistKey = `route_deviation:last_dist:${jobId}:${workerId}`;
+
         if (isDeviating) {
+            // Context Awareness: Check if distance to destination is decreasing (simulated rerouting)
+            const lastDistStr = await redis.get(redisLastDistKey);
+            let isGoogleRerouting = false;
+            if (lastDistStr) {
+                const lastDist = parseFloat(lastDistStr);
+                if (distToDest < lastDist - 15) {
+                    isGoogleRerouting = true;
+                }
+            }
+            await redis.setex(redisLastDistKey, 1800, distToDest.toString());
+
+            if (isGoogleRerouting) {
+                console.log(`🧭 [ROUTE-DEVIATION] Worker ${workerId} is off route but distance to destination is decreasing. Assuming Google Reroute/Diversion.`);
+                await redis.setex(redisConsecutiveKey, 1800, "0");
+                return { isDeviating: false, isGoogleRerouting: true, deviationScore: 0, deviationDistance: 0 };
+            }
+
+            // Increment consecutive deviation counter
+            const consecutiveCount = await redis.incr(redisConsecutiveKey);
+            await redis.expire(redisConsecutiveKey, 1800);
+
+            console.log(`⚠️ [ROUTE-DEVIATION] Worker ${workerId} is deviating (consecutive: ${consecutiveCount}, distance: ${deviationDistance}m)`);
+
             await db.query(`
                 INSERT INTO route_deviations (job_id, worker_id, deviation_distance_meters, deviation_score, worker_lat, worker_lng, destination_lat, destination_lng)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             `, [jobId, workerId, deviationDistance, deviationScore, workerLat, workerLng, job.location_lat, job.location_lng]);
 
-            if (deviationScore > 0.3) {
-                const io = getIO();
-                io.to(`worker:${workerId}`).emit('route_deviation_warning', {
+            // Only notify & publish event after 3 consecutive deviations to filter out GPS drift noise
+            if (consecutiveCount >= 3) {
+                eventBus.publish('ROUTE_DEVIATION', {
                     jobId,
+                    workerId,
+                    deviationScore,
                     deviationDistance,
-                    message: `You appear to be ${Math.round(deviationDistance)}m away from the expected route.`,
+                    consecutiveCount
                 });
-                await db.query(
-                    "UPDATE route_deviations SET notified = TRUE WHERE job_id = $1 AND worker_id = $2 AND notified = FALSE",
-                    [jobId, workerId]
-                );
+
+                if (deviationScore > 0.3) {
+                    const io = getIO();
+                    if (io) {
+                        io.to(`worker:${workerId}`).emit('route_deviation_warning', {
+                            jobId,
+                            deviationDistance,
+                            message: `You appear to be ${Math.round(deviationDistance)}m away from the expected route.`,
+                        });
+                    }
+                    await db.query(
+                        "UPDATE route_deviations SET notified = TRUE WHERE job_id = $1 AND worker_id = $2 AND notified = FALSE",
+                        [jobId, workerId]
+                    );
+                }
             }
+        } else {
+            await redis.setex(redisConsecutiveKey, 1800, "0");
         }
+
         return { isDeviating, deviationScore: Math.round(deviationScore * 100) / 100, deviationDistance };
     }
 

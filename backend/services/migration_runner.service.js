@@ -282,6 +282,7 @@ const MIGRATIONS = [
         version: 14,
         name: 'double_entry_ledger_and_payment_events',
         up: [
+            "DELETE FROM razorpay_webhooks a USING razorpay_webhooks b WHERE a.ctid < b.ctid AND a.razorpay_id = b.razorpay_id;",
             "ALTER TABLE razorpay_webhooks ADD CONSTRAINT unique_razorpay_event_id UNIQUE(razorpay_id);",
             `CREATE TABLE IF NOT EXISTS double_entry_ledger (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -324,6 +325,85 @@ const MIGRATIONS = [
         ],
         down: [
             "DROP TABLE IF EXISTS customer_memberships CASCADE;"
+        ]
+    },
+    {
+        version: 16,
+        name: 'multi_service_booking_engine',
+        up: [
+            `CREATE TABLE IF NOT EXISTS worker_skill_confidence (
+                worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                category VARCHAR(100) NOT NULL,
+                confidence_score DECIMAL(5,2) DEFAULT 0.00,
+                jobs_completed INTEGER DEFAULT 0,
+                avg_rating DECIMAL(3,2) DEFAULT 0.00,
+                dispute_count INTEGER DEFAULT 0,
+                repeat_customer_count INTEGER DEFAULT 0,
+                calculated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (worker_id, category)
+            );`,
+            `CREATE TABLE IF NOT EXISTS multi_service_bookings (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                status VARCHAR(50) DEFAULT 'PENDING_PLAN', -- PENDING_PLAN, PLAN_READY, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED
+                location_lat DECIMAL(9,6) NOT NULL,
+                location_lng DECIMAL(10,6) NOT NULL,
+                address TEXT,
+                total_price DECIMAL(10,2) DEFAULT 0.00,
+                plan_type VARCHAR(20) DEFAULT 'SINGLE_WORKER', -- SINGLE_WORKER, MULTI_WORKER
+                selected_plan_index INT,
+                estimated_duration_minutes INT DEFAULT 0,
+                scheduled_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                notes TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS multi_service_booking_items (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                booking_id UUID REFERENCES multi_service_bookings(id) ON DELETE CASCADE,
+                service_category VARCHAR(100) NOT NULL,
+                description TEXT,
+                base_price DECIMAL(10,2) NOT NULL,
+                status VARCHAR(50) DEFAULT 'PENDING', -- PENDING, ASSIGNED, IN_PROGRESS, COMPLETED
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS multi_service_assignments (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                booking_id UUID REFERENCES multi_service_bookings(id) ON DELETE CASCADE,
+                worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                assigned_categories JSONB NOT NULL, -- e.g. ["AC Repair", "Fan Installation"]
+                status VARCHAR(50) DEFAULT 'PENDING_ACCEPTANCE', -- PENDING_ACCEPTANCE, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED
+                worker_payout DECIMAL(10,2) DEFAULT 0.00,
+                arrival_eta_minutes INT DEFAULT 30,
+                accepted_at TIMESTAMP WITH TIME ZONE,
+                completed_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS multi_service_addon_offers (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                booking_id UUID REFERENCES multi_service_bookings(id) ON DELETE CASCADE,
+                worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                service_category VARCHAR(100) NOT NULL,
+                description TEXT,
+                proposed_price DECIMAL(10,2) NOT NULL,
+                source VARCHAR(20) DEFAULT 'WORKER_SUGGESTED', -- WORKER_SUGGESTED, AI_DETECTED
+                status VARCHAR(20) DEFAULT 'PENDING', -- PENDING, ACCEPTED, DECLINED
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                responded_at TIMESTAMP WITH TIME ZONE
+            );`,
+            "CREATE INDEX IF NOT EXISTS idx_multi_booking_user ON multi_service_bookings(user_id);",
+            "CREATE INDEX IF NOT EXISTS idx_multi_booking_items_booking ON multi_service_booking_items(booking_id);",
+            "CREATE INDEX IF NOT EXISTS idx_multi_booking_assign_worker ON multi_service_assignments(worker_id);",
+            "CREATE INDEX IF NOT EXISTS idx_multi_booking_addon_booking ON multi_service_addon_offers(booking_id);",
+            "ALTER TABLE worker_calendar ADD COLUMN IF NOT EXISTS multi_service_booking_id UUID REFERENCES multi_service_bookings(id) ON DELETE CASCADE;"
+        ],
+        down: [
+            "ALTER TABLE worker_calendar DROP COLUMN IF EXISTS multi_service_booking_id;",
+            "DROP TABLE IF EXISTS multi_service_addon_offers CASCADE;",
+            "DROP TABLE IF EXISTS multi_service_assignments CASCADE;",
+            "DROP TABLE IF EXISTS multi_service_booking_items CASCADE;",
+            "DROP TABLE IF EXISTS multi_service_bookings CASCADE;",
+            "DROP TABLE IF EXISTS worker_skill_confidence CASCADE;"
         ]
     }
 ];
@@ -396,7 +476,6 @@ class MigrationRunnerService {
             } catch (err) {
                 await client.query('ROLLBACK');
                 console.error(`[MIGRATION-FAILED] Rollback complete. Failed at Version ${m.version}:`, err.message);
-                client.release();
                 throw err;
             } finally {
                 client.release();
@@ -443,7 +522,6 @@ class MigrationRunnerService {
             } catch (err) {
                 await client.query('ROLLBACK');
                 console.error(`[ROLLBACK-FAILED] Revert failed at Version ${m.version}:`, err.message);
-                client.release();
                 throw err;
             } finally {
                 client.release();

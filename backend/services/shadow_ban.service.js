@@ -9,15 +9,36 @@ const BAN_LEVELS = {
 };
 
 class ShadowBanService {
+    constructor() {
+        // Automatically ensure the restrictions JSONB column is present in DB
+        this._ensureSchema();
+    }
+
+    async _ensureSchema() {
+        try {
+            await db.query("ALTER TABLE shadow_ban_status ADD COLUMN IF NOT EXISTS restrictions JSONB DEFAULT '{\"safety\": false, \"payments\": false, \"spam\": false, \"reviews\": false}'");
+        } catch (_) {}
+    }
+
     async getStatus(workerId) {
+        await this._ensureSchema();
         const res = await db.query(
             "SELECT * FROM shadow_ban_status WHERE worker_id = $1",
             [workerId]
         );
         if (res.rowCount === 0) {
-            return { worker_id: workerId, ban_level: 0, active: false };
+            return { 
+                worker_id: workerId, 
+                ban_level: 0, 
+                active: false,
+                restrictions: { safety: false, payments: false, spam: false, reviews: false }
+            };
         }
-        return res.rows[0];
+        const row = res.rows[0];
+        if (!row.restrictions) {
+            row.restrictions = { safety: false, payments: false, spam: false, reviews: false };
+        }
+        return row;
     }
 
     async setBanLevel(workerId, level, reason = null) {
@@ -46,6 +67,22 @@ class ShadowBanService {
             const { invalidateAllHomeServicesCaches } = require('../routes/home.routes');
             await invalidateAllHomeServicesCaches().catch(() => {});
         } catch (e) {}
+    }
+
+    async updateRestrictions(workerId, newRestrictions) {
+        const current = await this.getStatus(workerId);
+        const restrictions = { ...current.restrictions, ...newRestrictions };
+        
+        await db.query(`
+            INSERT INTO shadow_ban_status (worker_id, restrictions, active)
+            VALUES ($1, $2, TRUE)
+            ON CONFLICT (worker_id) DO UPDATE SET
+                restrictions = EXCLUDED.restrictions,
+                active = TRUE,
+                updated_at = NOW()
+        `, [workerId, JSON.stringify(restrictions)]);
+        
+        console.log(`[SHADOW-BAN] Restrictions updated for Worker ${workerId}:`, JSON.stringify(restrictions));
     }
 
     async escalate(workerId, reason = null) {
@@ -77,14 +114,27 @@ class ShadowBanService {
 
     async applyBanPenalties(workerId, baseVisibility, baseDispatch) {
         const ban = await this.getStatus(workerId);
-        if (!ban.active || ban.ban_level === 0) return { visibility: baseVisibility, dispatch: baseDispatch };
+        if (!ban.active) return { visibility: baseVisibility, dispatch: baseDispatch };
         if (ban.expires_at && new Date(ban.expires_at) < new Date()) {
             await this.deescalate(workerId);
             return { visibility: baseVisibility, dispatch: baseDispatch };
         }
+
+        let visMultiplier = parseFloat(ban.visibility_multiplier || 1.0);
+        let dispMultiplier = parseFloat(ban.dispatch_multiplier || 1.0);
+
+        // Apply targeted restrictions
+        const rest = ban.restrictions || {};
+        if (rest.safety === true) {
+            dispMultiplier = 0.10; // Lock dispatch priority to low on safety risk
+        }
+        if (rest.spam === true) {
+            visMultiplier = 0.10; // Hide from search recommendations on spam risk
+        }
+
         return {
-            visibility: baseVisibility * parseFloat(ban.visibility_multiplier || 1),
-            dispatch: baseDispatch * parseFloat(ban.dispatch_multiplier || 1),
+            visibility: baseVisibility * visMultiplier,
+            dispatch: baseDispatch * dispMultiplier,
         };
     }
 }

@@ -303,6 +303,59 @@ class WalletService {
             totalWithdrawn,
         };
     }
+
+    /**
+     * Balanced debit/credit double-entry fund transfer (Requirement 5)
+     */
+    async transferFunds(fromOwnerId, fromOwnerType, toOwnerId, toOwnerType, amount, type, referenceId = null, description = null, client = db) {
+        const amt = parseFloat(amount);
+        if (amt <= 0) throw new Error("Invalid transfer amount");
+
+        // 1. Debit from sender
+        await this.deductFunds(fromOwnerId, fromOwnerType, amt, type, referenceId, `Debit: transfer to ${toOwnerType}:${toOwnerId}. ${description || ''}`, client);
+
+        // 2. Credit to receiver
+        await this.addFunds(toOwnerId, toOwnerType, amt, type, referenceId, `Credit: transfer from ${fromOwnerType}:${fromOwnerId}. ${description || ''}`, client);
+        
+        console.log(`💸 [DOUBLE-ENTRY-TRANSFER] Transferred ₹${amt} from ${fromOwnerType}:${fromOwnerId} to ${toOwnerType}:${toOwnerId} (Ref: ${referenceId})`);
+    }
+
+    /**
+     * Ledger reconciliation audit job (Requirement 5)
+     */
+    async runReconciliationCheck() {
+        console.log("🔍 [RECONCILIATION-ENGINE] Running nightly wallet ledger reconciliation audit...");
+        const walletsRes = await db.query("SELECT * FROM wallets");
+        const anomalies = [];
+
+        for (const wallet of walletsRes.rows) {
+            const transSumRes = await db.query(
+                "SELECT COALESCE(SUM(amount), 0) as total FROM settlement_ledger WHERE wallet_id = $1",
+                [wallet.id]
+            );
+            const transactionSum = parseFloat(transSumRes.rows[0].total);
+            const walletBalance = parseFloat(wallet.balance);
+
+            if (Math.abs(walletBalance - transactionSum) > 0.01) {
+                anomalies.push({
+                    walletId: wallet.id,
+                    ownerId: wallet.owner_id,
+                    ownerType: wallet.owner_type,
+                    walletBalance,
+                    transactionSum,
+                    difference: Math.abs(walletBalance - transactionSum)
+                });
+            }
+        }
+
+        const success = anomalies.length === 0;
+        console.log(`🔍 [RECONCILIATION-ENGINE] Audit finished. Status: ${success ? 'CLEAN' : 'ANOMALIES_FOUND'}. Mismatch count: ${anomalies.length}`);
+        return {
+            success,
+            checkedCount: walletsRes.rowCount,
+            anomalies
+        };
+    }
 }
 
 module.exports = new WalletService();

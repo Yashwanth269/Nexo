@@ -8,13 +8,20 @@
 
 const db = require('../config/db');
 const { getIO } = require('../config/socket');
+const eventBus = require('./event_bus.service');
 
 class ScopeChangeService {
     /**
-     * Creates an additional work request.
+     * Creates an additional work request with material/labour split, evidence photos, and AI price validation.
      */
-    async requestAdditionalWork(jobId, workerId, { title, description, extraAmount }) {
-        const amount = parseFloat(extraAmount);
+    async requestAdditionalWork(jobId, workerId, { title, description, extraAmount, materialPrice, labourPrice, evidencePhotoUrl }) {
+        const mat = parseFloat(materialPrice || 0);
+        const lab = parseFloat(labourPrice || 0);
+        let amount = mat + lab;
+        if (amount <= 0 && extraAmount) {
+            amount = parseFloat(extraAmount);
+        }
+
         if (isNaN(amount) || amount <= 0) {
             return { success: false, message: "INVALID_AMOUNT" };
         }
@@ -24,7 +31,7 @@ class ScopeChangeService {
             await client.query('BEGIN');
 
             const jobRes = await client.query(
-                "SELECT id, user_id, price FROM jobs WHERE id = $1 AND worker_id = $2 FOR UPDATE",
+                "SELECT id, user_id, price, category FROM jobs WHERE id = $1 AND worker_id = $2 FOR UPDATE",
                 [jobId, workerId]
             );
 
@@ -35,6 +42,24 @@ class ScopeChangeService {
 
             const job = jobRes.rows[0];
 
+            // AI price validation comparison (Requirement 1)
+            const averages = {
+                'AC REPAIR': { avg: 350, min: 280, max: 380 },
+                'FAN INSTALLATION': { avg: 150, min: 120, max: 180 },
+                'PLUMBING': { avg: 250, min: 200, max: 300 },
+                'PAINTING': { avg: 400, min: 300, max: 500 }
+            };
+
+            const jobCat = (job.category || 'AC REPAIR').toUpperCase();
+            let aiValidationWarning = null;
+            if (averages[jobCat]) {
+                const limit = averages[jobCat];
+                if (amount > limit.max) {
+                    aiValidationWarning = `⚠ Higher than average. Typical price for ${job.category || 'this category'} is ₹${limit.min}-₹${limit.max}`;
+                }
+            }
+
+            // Create table structure & add new columns dynamically if needed
             await client.query(`
                 CREATE TABLE IF NOT EXISTS job_scope_change_requests (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -49,15 +74,33 @@ class ScopeChangeService {
                 )
             `);
 
+            await client.query(`ALTER TABLE job_scope_change_requests ADD COLUMN IF NOT EXISTS material_price DECIMAL(10, 2) DEFAULT 0.00`);
+            await client.query(`ALTER TABLE job_scope_change_requests ADD COLUMN IF NOT EXISTS labour_price DECIMAL(10, 2) DEFAULT 0.00`);
+            await client.query(`ALTER TABLE job_scope_change_requests ADD COLUMN IF NOT EXISTS evidence_photo_url VARCHAR(512)`);
+            await client.query(`ALTER TABLE job_scope_change_requests ADD COLUMN IF NOT EXISTS ai_validation_warning VARCHAR(256)`);
+
             const reqRes = await client.query(`
-                INSERT INTO job_scope_change_requests (job_id, worker_id, title, description, extra_amount)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO job_scope_change_requests (
+                    job_id, worker_id, title, description, extra_amount, material_price, labour_price, evidence_photo_url, ai_validation_warning
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 RETURNING *
-            `, [jobId, workerId, title, description, amount]);
+            `, [jobId, workerId, title, description, amount, mat, lab, evidencePhotoUrl || null, aiValidationWarning]);
 
             await client.query('COMMIT');
 
             const scopeReq = reqRes.rows[0];
+
+            // Publish scope change request to event bus
+            eventBus.publish('SCOPE_CHANGE', {
+                requestId: scopeReq.id,
+                jobId,
+                workerId,
+                extraAmount: amount,
+                materialPrice: mat,
+                labourPrice: lab,
+                aiValidationWarning
+            });
 
             // Notify customer via socket
             const io = getIO();
@@ -68,9 +111,13 @@ class ScopeChangeService {
                     title,
                     description,
                     extraAmount: amount,
+                    materialPrice: mat,
+                    labourPrice: lab,
+                    evidencePhotoUrl: evidencePhotoUrl || null,
+                    aiValidationWarning,
                     currentPrice: parseFloat(job.price),
                     newPrice: parseFloat(job.price) + amount,
-                    message: `Professional requested additional work/parts (${title}): +₹${amount}`
+                    message: `Professional requested additional work/parts (${title}): +₹${amount}. ${aiValidationWarning || ''}`
                 });
             }
 
@@ -115,7 +162,6 @@ class ScopeChangeService {
             );
 
             if (approved) {
-                // Update job price atomically
                 const updatedJob = await client.query(
                     "UPDATE jobs SET price = price + $1, updated_at = NOW() WHERE id = $2 RETURNING price",
                     [scopeReq.extra_amount, jobId]

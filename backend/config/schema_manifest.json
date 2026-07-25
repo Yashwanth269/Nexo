@@ -1,5 +1,5 @@
 {
-  "version": "15",
+  "version": "16",
   "migrations": [
     { "version": "1", "name": "uuid_and_availability" },
     { "version": "2", "name": "worker_calendar" },
@@ -15,7 +15,8 @@
     { "version": "12", "name": "commission_history" },
     { "version": "13", "name": "secure_otp_expiry" },
     { "version": "14", "name": "double_entry_ledger_and_payment_events" },
-    { "version": "15", "name": "customer_memberships_table" }
+    { "version": "15", "name": "customer_memberships_table" },
+    { "version": "16", "name": "multi_service_booking_engine" }
   ],
   "tables": {
     "users": {
@@ -116,6 +117,45 @@
         "id": { "type": "uuid", "nullable": false },
         "user_id": { "type": "uuid", "nullable": true },
         "tier": { "type": "character varying", "nullable": false }
+      }
+    },
+    "multi_service_bookings": {
+      "required": false,
+      "columns": {
+        "id": { "type": "uuid", "nullable": false },
+        "user_id": { "type": "uuid", "nullable": true },
+        "status": { "type": "character varying", "nullable": true },
+        "total_price": { "type": "numeric", "nullable": true },
+        "plan_type": { "type": "character varying", "nullable": true }
+      }
+    },
+    "multi_service_booking_items": {
+      "required": false,
+      "columns": {
+        "id": { "type": "uuid", "nullable": false },
+        "booking_id": { "type": "uuid", "nullable": true },
+        "service_category": { "type": "character varying", "nullable": false },
+        "status": { "type": "character varying", "nullable": true }
+      }
+    },
+    "multi_service_assignments": {
+      "required": false,
+      "columns": {
+        "id": { "type": "uuid", "nullable": false },
+        "booking_id": { "type": "uuid", "nullable": true },
+        "worker_id": { "type": "uuid", "nullable": true },
+        "assigned_categories": { "type": "jsonb", "nullable": false },
+        "status": { "type": "character varying", "nullable": true }
+      }
+    },
+    "multi_service_addon_offers": {
+      "required": false,
+      "columns": {
+        "id": { "type": "uuid", "nullable": false },
+        "booking_id": { "type": "uuid", "nullable": true },
+        "worker_id": { "type": "uuid", "nullable": true },
+        "service_category": { "type": "character varying", "nullable": false },
+        "status": { "type": "character varying", "nullable": true }
       }
     }
   },

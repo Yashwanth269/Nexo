@@ -574,20 +574,20 @@ router.get('/availability/:workerId', async (req, res) => {
 // ==========================================
 const travelHomeEngine = require('../services/travel_home_engine.service');
 
-router.post('/travel-home/start', (req, res) => {
+router.post('/travel-home/start', async (req, res) => {
     try {
         const { workerId, homeLocation } = req.body;
-        const result = travelHomeEngine.startTravelHomeMode(workerId, homeLocation || {});
+        const result = await travelHomeEngine.startTravelHomeMode(workerId, homeLocation || {});
         res.json(result);
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
     }
 });
 
-router.post('/travel-home/stop', (req, res) => {
+router.post('/travel-home/stop', async (req, res) => {
     try {
         const { workerId } = req.body;
-        const result = travelHomeEngine.stopTravelHomeMode(workerId);
+        const result = await travelHomeEngine.stopTravelHomeMode(workerId);
         res.json(result);
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
@@ -597,7 +597,7 @@ router.post('/travel-home/stop', (req, res) => {
 router.get('/travel-home/status', async (req, res) => {
     try {
         const { workerId, lat, lng } = req.query;
-        const session = travelHomeEngine.getSession(workerId);
+        const session = await travelHomeEngine.getSession(workerId);
         if (!session || !session.isActive) {
             return res.json({ success: true, isActive: false });
         }
@@ -606,7 +606,7 @@ router.get('/travel-home/status', async (req, res) => {
             "SELECT j.*, u.full_name as \"userName\" FROM jobs j LEFT JOIN users u ON j.user_id = u.id WHERE j.status IN ('OPEN', 'REQUESTED', 'SCHEDULED_BIDDING')"
         );
 
-        const routeAnalysis = travelHomeEngine.filterAndRankRouteJobs(
+        const routeAnalysis = await travelHomeEngine.filterAndRankRouteJobs(
             workerId,
             candidateResult.rows,
             { lat: parseFloat(lat || 12.9352), lng: parseFloat(lng || 77.6245) }
@@ -828,27 +828,27 @@ router.post('/dispatch/atomic-accept', async (req, res) => {
 // ==========================================
 const workerPresenceService = require('../services/worker_presence.service');
 
-router.post('/worker/heartbeat', (req, res) => {
+router.post('/worker/heartbeat', async (req, res) => {
     try {
         const { workerId, payload, idempotencyKey } = req.body;
         
         // Check idempotency (Chapter 44)
         if (idempotencyKey) {
-            const cached = workerPresenceService.checkIdempotency(idempotencyKey);
+            const cached = await workerPresenceService.checkIdempotency(idempotencyKey);
             if (cached) return res.json(cached);
         }
 
-        const result = workerPresenceService.processHeartbeat(workerId, payload || {});
-        if (idempotencyKey) workerPresenceService.saveIdempotency(idempotencyKey, result);
+        const result = await workerPresenceService.processHeartbeat(workerId, payload || {});
+        if (idempotencyKey) await workerPresenceService.saveIdempotency(idempotencyKey, result);
         res.json(result);
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
     }
 });
 
-router.get('/worker/presence/:workerId', (req, res) => {
+router.get('/worker/presence/:workerId', async (req, res) => {
     try {
-        const presence = workerPresenceService.getPresence(req.params.workerId);
+        const presence = await workerPresenceService.getPresence(req.params.workerId);
         res.json({ success: true, presence });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

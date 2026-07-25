@@ -47,7 +47,21 @@ class InMemoryRedis {
         return entry.value;
     }
 
-
+    async keys(pattern) {
+        const regexPattern = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+        const matched = [];
+        const now = Date.now();
+        for (const [key, entry] of this.store.entries()) {
+            if (entry.expiresAt && entry.expiresAt <= now) {
+                this.store.delete(key);
+                continue;
+            }
+            if (regexPattern.test(key)) {
+                matched.push(key);
+            }
+        }
+        return matched;
+    }
 
     async mget(...keys) {
         const results = [];

@@ -38,6 +38,9 @@ setIO(io);
 const matchingEngine = require('./services/matching.service');
 matchingEngine.init(io);
 
+const policyEngine = require('./services/policy_engine.service');
+policyEngine.init();
+
 const eventStream = require('./utils/event_stream');
 eventStream.init(io);
 
@@ -235,6 +238,7 @@ app.use('/api/security', require('./routes/security.routes'));
 app.use('/api/trust', authenticateToken, require('./routes/trust.routes'));
 app.use('/api/fatigue', authenticateToken, require('./routes/fatigue.routes'));
 app.use('/api/metrics', authenticateToken, require('./routes/metrics.routes'));
+app.use('/api/multi-booking', authenticateToken, require('./routes/multi_service_booking.routes'));
 
 // Shared Photo Upload (requires auth)
 app.post('/api/user/upload-photo', authenticateToken, upload.single('photo'), (req, res) => {

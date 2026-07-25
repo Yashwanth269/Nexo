@@ -1,12 +1,10 @@
-// In-memory Redis simulation for worker presence store: workerId -> presenceObject
-const workerPresenceMap = new Map();
-const idempotencyStore = new Map(); // idempotencyKey -> response
+const redis = require('../config/redis');
 
 class WorkerPresenceService {
   /**
    * Process 20s Heartbeat from Worker App (Chapter 39)
    */
-  processHeartbeat(workerId, payload) {
+  async processHeartbeat(workerId, payload) {
     const wId = workerId.toString();
     const now = new Date();
 
@@ -24,7 +22,8 @@ class WorkerPresenceService {
       category: payload.category || "electricians",
     };
 
-    workerPresenceMap.set(wId, presence);
+    // Store in Redis with a 5-minute (300s) TTL expiration fallback
+    await redis.set(`worker_presence:${wId}`, JSON.stringify(presence), 'EX', 300);
     console.log(`💓 [PRESENCE_HEARTBEAT] Worker ${wId} heartbeat received. Battery: ${presence.batteryLevel}%`);
     return { success: true, presence };
   }
@@ -32,37 +31,55 @@ class WorkerPresenceService {
   /**
    * Evaluate Presence Timeout State Machine (60s -> STALE, 90s -> OFFLINE)
    */
-  evaluatePresenceTimeouts() {
+  async evaluatePresenceTimeouts() {
     const now = Date.now();
     let staleCount = 0;
     let offlineCount = 0;
 
-    for (const [wId, presence] of workerPresenceMap.entries()) {
+    const keys = await redis.keys("worker_presence:*");
+    for (const key of keys) {
+      const val = await redis.get(key);
+      if (!val) continue;
+
+      const presence = JSON.parse(val);
       const elapsedSeconds = (now - presence.lastHeartbeatTime) / 1000;
 
       if (elapsedSeconds >= 90) {
         presence.status = "OFFLINE";
         offlineCount++;
+        await redis.set(key, JSON.stringify(presence), 'EX', 300);
       } else if (elapsedSeconds >= 60) {
         presence.status = "STALE";
         staleCount++;
+        await redis.set(key, JSON.stringify(presence), 'EX', 300);
       }
     }
 
-    return { totalWorkers: workerPresenceMap.size, staleCount, offlineCount };
+    return { totalWorkers: keys.length, staleCount, offlineCount };
   }
 
   /**
    * Get Active Worker Presence
    */
-  getPresence(workerId) {
-    const presence = workerPresenceMap.get(workerId.toString());
-    if (!presence) return null;
+  async getPresence(workerId) {
+    const val = await redis.get(`worker_presence:${workerId.toString()}`);
+    if (!val) return null;
 
-    // Check if stale/offline dynamically
+    const presence = JSON.parse(val);
     const elapsedSeconds = (Date.now() - presence.lastHeartbeatTime) / 1000;
-    if (elapsedSeconds >= 90) presence.status = "OFFLINE";
-    else if (elapsedSeconds >= 60) presence.status = "STALE";
+    
+    let changed = false;
+    if (elapsedSeconds >= 90 && presence.status !== "OFFLINE") {
+      presence.status = "OFFLINE";
+      changed = true;
+    } else if (elapsedSeconds >= 60 && presence.status === "ONLINE") {
+      presence.status = "STALE";
+      changed = true;
+    }
+
+    if (changed) {
+      await redis.set(`worker_presence:${workerId.toString()}`, JSON.stringify(presence), 'EX', 300);
+    }
 
     return presence;
   }
@@ -84,14 +101,15 @@ class WorkerPresenceService {
   /**
    * Chapter 44 — Idempotency Engine
    */
-  checkIdempotency(idempotencyKey) {
+  async checkIdempotency(idempotencyKey) {
     if (!idempotencyKey) return null;
-    return idempotencyStore.get(idempotencyKey) || null;
+    const val = await redis.get(`idempotency:${idempotencyKey}`);
+    return val ? JSON.parse(val) : null;
   }
 
-  saveIdempotency(idempotencyKey, response) {
+  async saveIdempotency(idempotencyKey, response) {
     if (idempotencyKey) {
-      idempotencyStore.set(idempotencyKey, response);
+      await redis.set(`idempotency:${idempotencyKey}`, JSON.stringify(response), 'EX', 86400); // 24 hours TTL
     }
   }
 }
