@@ -209,6 +209,41 @@ router.post('/negotiate', async (req, res) => {
     }
 });
 
+// Worker Opportunities Marketplace (Scheduled Gigs for Offline & Online workers)
+router.get('/opportunities', async (req, res) => {
+    try {
+        const { workerId, category, minPrice, sortBy } = req.query;
+
+        let queryText = `
+            SELECT j.*, u.full_name as "userName", u.avatar_url as "userPhoto", u.phone_number as "userPhone"
+            FROM jobs j
+            LEFT JOIN users u ON j.user_id = u.id
+            WHERE j.status IN ('SCHEDULED_BIDDING', 'OPEN')
+              AND (j.scheduled_at IS NOT NULL OR j.created_at > CURRENT_TIMESTAMP - INTERVAL '1 day')
+            ORDER BY j.created_at DESC
+        `;
+
+        const result = await db.query(queryText);
+        const opportunities = result.rows.map((job, idx) => {
+            const matchScore = 95 - (idx * 2);
+            return {
+                ...job,
+                matchScore: Math.max(75, matchScore),
+                isRecommended: matchScore >= 88,
+                badges: matchScore >= 88 ? ["⭐ Recommended", "⚡ Top Match"] : ["📅 Scheduled"]
+            };
+        });
+
+        res.json({
+            success: true,
+            totalAvailable: opportunities.length,
+            opportunities
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Fetch Scheduled Job Worker Offers (Customer Comparison Screen)
 router.get('/:id/offers', async (req, res) => {
     try {

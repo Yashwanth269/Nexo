@@ -29,6 +29,7 @@ import '../settings/settings_screen.dart';
 import '../job/active_jobs_screen.dart';
 import '../earnings/earnings_history_screen.dart';
 import '../profile/worker_profile_screen.dart';
+import '../job/opportunities_screen.dart';
 import '../chat/chat_list_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../support/support_screen.dart';
@@ -1566,9 +1567,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     final List<Widget> screens = [
       _buildDashboard(),
+      _buildLiveGigsTab(),
+      const OpportunitiesScreen(),
       ActiveJobsScreen(key: ValueKey('active_jobs_$_activeJobsRefreshTrigger')),
-      EarningsHistoryScreen(),
-      const SupportScreen(),
       const WorkerProfileScreen(isTab: true),
     ];
 
@@ -1593,6 +1594,73 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildLiveGigsTab() {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F172A),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0F172A),
+        elevation: 0,
+        title: Row(
+          children: [
+            const Icon(Icons.bolt_rounded, color: Color(0xFFFF6A00), size: 24),
+            const SizedBox(width: 8),
+            Text("Live Gigs Feed", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 20)),
+          ],
+        ),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _isOnline ? const Color(0xFF10B981) : const Color(0xFF334155), width: 2),
+                ),
+                child: Icon(
+                  _isOnline ? Icons.radar_rounded : Icons.power_settings_new_rounded,
+                  size: 56,
+                  color: _isOnline ? const Color(0xFF10B981) : Colors.white38,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                _isOnline ? "Live Dispatch Engine Active" : "You are Offline for Instant Jobs",
+                style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _isOnline
+                    ? "Searching for immediate live jobs within 5km radius... Instant popups will ring when a customer posts a live gig."
+                    : "Toggle Online on Home screen to start receiving instant live dispatch offers.",
+                style: GoogleFonts.inter(fontSize: 13, color: Colors.white60, height: 1.4),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              if (!_isOnline)
+                ElevatedButton.icon(
+                  onPressed: () => _toggleOnline(true),
+                  icon: const Icon(Icons.power_settings_new_rounded, color: Colors.white, size: 18),
+                  label: Text("Go Online Now", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildBottomNav() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
@@ -1607,59 +1675,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           )
         ],
       ),
-      padding: const EdgeInsets.only(bottom: 12, top: 8),
+      padding: const EdgeInsets.only(bottom: 10, top: 6),
       child: SafeArea(
         top: false,
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _buildNewNavItem(0, Icons.home_rounded, "Home"),
-            _buildNewNavItem(1, Icons.work_rounded, "My Gigs"),
-            // Center circular button
-            GestureDetector(
-              onTap: () {
-                if (_isOnline) {
-                  _showOfflineConfirmation();
-                } else {
-                  _toggleOnline(true);
-                }
-              },
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: _isOnline ? Colors.redAccent : const Color(0xFF2563EB),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: (_isOnline ? Colors.redAccent : const Color(0xFF2563EB)).withOpacity(0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        )
-                      ],
-                    ),
-                    child: Icon(
-                      _isOnline ? Icons.power_settings_new_rounded : Icons.flash_on_rounded,
-                      color: Colors.white,
-                      size: 26,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _isOnline ? "Go Offline" : "Go Online",
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF64748B),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            _buildNewNavItem(2, Icons.wallet_rounded, "Earnings"),
+            _buildNewNavItem(1, Icons.bolt_rounded, "Live"),
+            _buildNewNavItem(2, Icons.calendar_month_rounded, "Opportunities"),
+            _buildNewNavItem(3, Icons.work_rounded, "My Gigs"),
             _buildNewNavItem(4, Icons.person_rounded, "Profile"),
           ],
         ),

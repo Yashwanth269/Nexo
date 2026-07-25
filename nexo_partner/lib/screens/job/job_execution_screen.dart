@@ -1219,6 +1219,7 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
     }
 
     return Scaffold(
+      backgroundColor: Colors.white,
       extendBodyBehindAppBar: true,
       body: Stack(
         children: [
@@ -1242,32 +1243,42 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
             ),
           ),
 
-          // FLOATING APP BAR
+          // CLEAN TOP APP BAR (Matching Screenshot)
           Positioned(
             top: 40,
-            left: 20,
-            right: 20,
+            left: 16,
+            right: 16,
             child: SafeArea(
-              child: GlassContainer(
-                borderRadius: 20,
-                blur: 25,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                color: Colors.black.withOpacity(0.65),
-                border: Border.all(color: Colors.white.withOpacity(0.12)),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Back Button
+                  Container(
+                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 18),
                       onPressed: () => Navigator.pop(context),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                  ),
+
+                  // Status Badge Pill
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 2))],
+                    ),
+                    child: Row(
                       children: [
-                        DynamicIslandPulse(
-                          text: _currentStatus == 'ACCEPTED'
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle),
+                          child: const Icon(Icons.check, color: Colors.white, size: 12),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _currentStatus == 'ACCEPTED'
                               ? 'Accepted'
                               : _currentStatus == 'ON_THE_WAY'
                                   ? 'En Route'
@@ -1275,209 +1286,302 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                                       ? 'Arrived'
                                       : _currentStatus == 'WORK_IN_PROGRESS'
                                           ? 'Working'
-                                          : _currentStatus == 'WAITING_FOR_PAYMENT'
-                                              ? 'Awaiting Payment'
-                                              : _currentStatus,
-                          icon: _currentStatus == 'ACCEPTED'
-                              ? Icons.check_circle
-                              : _currentStatus == 'ON_THE_WAY'
-                                  ? Icons.directions_walk
-                                  : _currentStatus == 'ARRIVED'
-                                      ? Icons.location_on
-                                      : _currentStatus == 'WAITING_FOR_PAYMENT'
-                                          ? Icons.hourglass_empty_rounded
-                                          : Icons.build_circle,
-                          pulseColor: _currentStatus == 'ACCEPTED'
-                              ? Colors.lightBlueAccent
-                              : _currentStatus == 'ON_THE_WAY' || _currentStatus == 'WAITING_FOR_PAYMENT'
-                                  ? Colors.amberAccent
-                                  : _currentStatus == 'ARRIVED' ||
-                                          _currentStatus == 'WORK_IN_PROGRESS'
-                                      ? Colors.greenAccent
-                                      : Colors.greenAccent,
+                                          : _currentStatus,
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF0F172A), fontSize: 16),
                         ),
                       ],
                     ),
-                    ImageUtils.buildProfileImage(_job['userPhoto'] != null ? '${NetworkHelper.baseUrl}${_job['userPhoto']}' : null, radius: 14, name: _job['userName']),
-                  ],
-                ),
+                  ),
+
+                  // Avatar & Help Action
+                  Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(color: Color(0xFFDBEAFE), shape: BoxShape.circle),
+                        child: Center(
+                          child: Text(
+                            (_job['userName'] ?? 'A').toString().substring(0, 1).toUpperCase(),
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: const Color(0xFF2563EB), fontSize: 16),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                        child: IconButton(
+                          icon: const Icon(Icons.help_outline_rounded, color: Color(0xFF0F172A), size: 20),
+                          onPressed: () {},
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
 
-          // FLOATING ETA CARD
-          if (_currentPosition != null && _currentStatus == 'ON_THE_WAY')
-            Positioned(
-              top: 130,
-              left: 20,
-              right: 20,
-              child: GlassContainer(
-                borderRadius: 20,
-                blur: 25,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                color: Colors.black.withOpacity(0.7),
-                border: Border.all(color: Colors.white.withOpacity(0.15)),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: primaryColor.withOpacity(0.2), shape: BoxShape.circle),
-                      child: const Icon(Icons.timer_outlined, color: primaryColor, size: 20),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("ESTIMATED ARRIVAL", style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white54)),
-                          Text("$_eta away ($_distance)", style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: textPrimary)),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right, color: Colors.white30),
-                  ],
-                ),
-              ),
-            ),
-
+          // FLOATING BOTTOM DETAILS CARD (White light mode, matching screenshot)
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Details Card
-                GlassContainer(
-                  customBorderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-                  blur: 35,
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
-                  color: Colors.black.withOpacity(0.75),
-                  border: Border(
-                    top: BorderSide(color: Colors.white.withOpacity(0.15), width: 1.5),
-                    left: BorderSide(color: Colors.white.withOpacity(0.15), width: 1.5),
-                    right: BorderSide(color: Colors.white.withOpacity(0.15), width: 1.5),
-                  ),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(context).size.height * 0.4,
-                    ),
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white30, borderRadius: BorderRadius.circular(2)))),
-                          const SizedBox(height: 12),
-                          _buildCustomerRow(),
-                          const SizedBox(height: 14),
-                          // Service + Payout as compact inline row
-                          Row(
-                            children: [
-                              const Icon(Icons.bolt, color: primaryColor, size: 15),
-                              const SizedBox(width: 5),
-                              Text(
-                                _job['category'] ?? 'Service',
-                                style: GoogleFonts.inter(fontSize: 13, color: textSecondary),
-                              ),
-                              const SizedBox(width: 16),
-                              const Icon(Icons.payments_outlined, color: primaryColor, size: 15),
-                              const SizedBox(width: 5),
-                              Text(
-                                '₹${_job['price']}',
-                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: textPrimary),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-                          Text('Job Details', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: textPrimary)),
-                          const SizedBox(height: 6),
-                          Text(_job['description'] ?? 'No description provided.', style: GoogleFonts.inter(color: textSecondary, fontSize: 13, height: 1.5)),
-                          const SizedBox(height: 12),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(Icons.location_on, color: primaryColor, size: 16),
-                              const SizedBox(width: 6),
-                              Expanded(child: Text(_job['address'] ?? _job['location_name'] ?? 'Address on map', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: textPrimary))),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                // STICKY BOTTOM ACTIONS
-                GlassContainer(
-                  borderRadius: 0,
-                  blur: 30,
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-                  color: Colors.black.withOpacity(0.8),
-                  border: Border(top: BorderSide(color: Colors.white.withOpacity(0.12))),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                boxShadow: [BoxShadow(color: Colors.black1D, blurRadius: 20, offset: Offset(0, -4))],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Row 1: Customer Profile + Call & Message Pills
+                  _buildCustomerRow(),
+
+                  const SizedBox(height: 14),
+
+                  // Row 2: Service Category & Price Pills
+                  Row(
                     children: [
-                      if (_currentStatus == 'ON_THE_WAY')
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: GlassButton(
-                            icon: Icons.directions,
-                            text: "NAVIGATE TO LOCATION",
-                            onPressed: _openMaps,
-                          ),
-                        ),
-                      _buildSwipeActionByStatus(),
-                      if (_currentStatus == 'ACCEPTED' || _currentStatus == 'ON_THE_WAY' || _currentStatus == 'FORCE_ARRIVAL_PENDING_CONFIRMATION' || _currentStatus == 'ARRIVED' || _currentStatus == 'WORK_IN_PROGRESS') ...[
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            TextButton.icon(
-                              onPressed: _isTransitioning ? null : _showCancelJobModal,
-                              icon: const Icon(Icons.cancel_outlined, color: Colors.redAccent, size: 16),
-                              label: Text("CANCEL GIG", style: GoogleFonts.outfit(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12)),
-                            ),
-                            TextButton.icon(
-                              onPressed: _isTransitioning ? null : _showEmergencyReassignModal,
-                              icon: const Icon(Icons.swap_horiz, color: Colors.amberAccent, size: 16),
-                              label: Text("EMERGENCY REASSIGN", style: GoogleFonts.outfit(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 12)),
-                            ),
-                          ],
-                        ),
-                      ]
+                      _buildInfoBadge(Icons.bolt_rounded, const Color(0xFFFF6A00), _job['category'] ?? 'Electrician'),
+                      const SizedBox(width: 12),
+                      _buildInfoBadge(Icons.payments_outlined, const Color(0xFFFF6A00), '₹${(double.tryParse(_job['price']?.toString() ?? '500') ?? 500.0).toStringAsFixed(2)}'),
                     ],
                   ),
-                ),
-              ],
+
+                  const SizedBox(height: 14),
+                  const Divider(color: Color(0xFFF1F5F9), height: 1),
+                  const SizedBox(height: 14),
+
+                  // Row 3: 2-Column Location & Job Type
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildDetailGridTile(
+                          icon: Icons.location_on_rounded,
+                          iconColor: const Color(0xFF2563EB),
+                          label: "Pickup Location",
+                          value: _job['address'] ?? _job['location_name'] ?? "Gowripete, Kolar",
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildDetailGridTile(
+                          icon: Icons.access_time_rounded,
+                          iconColor: const Color(0xFF0F172A),
+                          label: "Job Type",
+                          value: _job['category'] ?? "Electrical",
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Row 4: Job Details List Item
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFF1F5F9)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.format_list_bulleted_rounded, color: Color(0xFF64748B), size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text("Job Details", style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B), fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 2),
+                              Text(
+                                _job['description'] ?? "Need an electrician for fixing multiple faulty switches and sockets.",
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF0F172A)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8), size: 18),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Row 5: Swipe to Start Action Slider Button
+                  _buildSwipeActionByStatus(),
+
+                  const SizedBox(height: 16),
+
+                  // Row 6: Bottom Action Text Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _isTransitioning ? null : _showCancelJobModal,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.cancel_outlined, color: Colors.redAccent, size: 16),
+                              const SizedBox(width: 6),
+                              Text("CANCEL GIG", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.redAccent, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Container(width: 1, height: 20, color: const Color(0xFFE2E8F0)),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _isTransitioning ? null : _showEmergencyReassignModal,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.swap_horiz_rounded, color: Color(0xFF2563EB), size: 16),
+                              const SizedBox(width: 6),
+                              Text("EMERGENCY REASSIGN", style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFF2563EB), fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
 
           if (_isTransitioning)
-            Container(color: Colors.black38, child: const Center(child: CircularProgressIndicator(color: primaryColor))),
+            Container(color: Colors.black38, child: const Center(child: CircularProgressIndicator(color: Color(0xFF2563EB)))),
         ],
       ),
     );
   }
 
   Widget _buildCustomerRow() {
+    final customerName = _job['userName'] ?? "asdfg";
     return Row(
       children: [
-        ImageUtils.buildProfileImage(_job['userPhoto'] != null ? '${NetworkHelper.baseUrl}${_job['userPhoto']}' : null, radius: 30, name: _job['userName']),
-        const SizedBox(width: 16),
+        Container(
+          width: 52,
+          height: 52,
+          decoration: const BoxDecoration(color: Color(0xFFEFF6FF), shape: BoxShape.circle),
+          child: Center(
+            child: Text(
+              customerName.substring(0, 1).toUpperCase(),
+              style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold, color: const Color(0xFF2563EB)),
+            ),
+          ),
+        ),
+        const SizedBox(width: 14),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(_job['userName'] ?? "Client", style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: textPrimary)),
-              Text("Verified Customer", style: GoogleFonts.inter(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+              Text(
+                customerName,
+                style: GoogleFonts.outfit(fontSize: 19, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 14),
+                  const SizedBox(width: 4),
+                  Text("Verified Customer", style: GoogleFonts.inter(color: const Color(0xFF16A34A), fontSize: 12, fontWeight: FontWeight.bold)),
+                ],
+              ),
             ],
           ),
         ),
-        _buildCircleButton(Icons.phone, () => launchUrl(Uri.parse("tel:+919731016442"))),
-        const SizedBox(width: 12),
-        _buildCircleButton(Icons.chat_bubble_outline, () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(jobId: widget.jobId, userName: _job['userName'] ?? "Client", initialPrice: _job['price']?.toString() ?? "0")));
+        // Action Buttons Call & Message
+        _buildActionPillButton(Icons.phone_rounded, "Call", () => launchUrl(Uri.parse("tel:+919731016442"))),
+        const SizedBox(width: 10),
+        _buildActionPillButton(Icons.chat_bubble_outline_rounded, "Message", () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(
+                jobId: widget.jobId,
+                userName: customerName,
+                initialPrice: _job['price']?.toString() ?? "500",
+              ),
+            ),
+          );
         }),
       ],
+    );
+  }
+
+  Widget _buildActionPillButton(IconData icon, String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: const Color(0xFF16A34A), size: 20),
+            const SizedBox(height: 4),
+            Text(label, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoBadge(IconData icon, Color color, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFF1F5F9)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(text, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailGridTile({required IconData icon, required Color iconColor, required String label, required String value}) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF1F5F9)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: iconColor, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B), fontWeight: FontWeight.bold)),
+                const SizedBox(height: 2),
+                Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1604,7 +1708,7 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
 class SwipeToPerformAction extends StatefulWidget {
   final String text;
   final Color color;
-  final VoidCallback onSwipe;
+  final VoidCallback? onSwipe;
   const SwipeToPerformAction({super.key, required this.text, required this.color, required this.onSwipe});
   @override
   State<SwipeToPerformAction> createState() => _SwipeToPerformActionState();
@@ -1616,20 +1720,36 @@ class _SwipeToPerformActionState extends State<SwipeToPerformAction> {
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
       final double trackWidth = constraints.maxWidth;
-      final double maxSlide = trackWidth - 64;
-      return GlassContainer(
-        borderRadius: 32,
-        blur: 15,
+      final double handleSize = 52.0;
+      final double padding = 5.0;
+      final double maxSlide = trackWidth - handleSize - (padding * 2);
+
+      return Container(
         width: double.infinity,
-        height: 64,
-        padding: EdgeInsets.zero,
-        color: widget.color.withOpacity(0.12),
-        border: Border.all(color: widget.color.withOpacity(0.2)),
+        height: 62,
+        decoration: BoxDecoration(
+          color: const Color(0xFF2563EB),
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: [
+            BoxShadow(color: const Color(0xFF2563EB).withValues(alpha: 0.3), blurRadius: 12, offset: const Offset(0, 4)),
+          ],
+        ),
         child: Stack(
+          alignment: Alignment.center,
           children: [
-            Center(child: Text(widget.text, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13))),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.touch_app_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  widget.text.replaceAll("👉 ", "").replaceAll("SWIPE TO ", "SWIPE TO "),
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16, letterSpacing: 0.5),
+                ),
+              ],
+            ),
             Positioned(
-              left: _position,
+              left: padding + _position,
               child: GestureDetector(
                 onHorizontalDragUpdate: (details) {
                   setState(() {
@@ -1639,20 +1759,20 @@ class _SwipeToPerformActionState extends State<SwipeToPerformAction> {
                   });
                 },
                 onHorizontalDragEnd: (details) {
-                  if (_position > maxSlide * 0.8) widget.onSwipe();
+                  if (_position > maxSlide * 0.7 && widget.onSwipe != null) {
+                    widget.onSwipe!();
+                  }
                   setState(() => _position = 0);
                 },
                 child: Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: widget.color, 
-                    shape: BoxShape.circle, 
-                    boxShadow: [
-                      BoxShadow(color: widget.color.withOpacity(0.4), blurRadius: 12)
-                    ],
-                  ), 
-                  child: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 24)
+                  width: handleSize,
+                  height: handleSize,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2))],
+                  ),
+                  child: const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF2563EB), size: 20),
                 ),
               ),
             ),
