@@ -4,6 +4,10 @@ module.exports = {
     finalSelectionDeadlineMinutes: 60, // Customer must select worker before scheduled_at - 60 minutes (e.g. 5:00 PM for 6:00 PM job)
     fallbackDeadlineMinutes: 45, // Automatic fallback triggers at scheduled_at - 45 minutes if customer hasn't selected
     
+    maxAcceptedWorkersPerJob: 10, // Max 10 accepted workers per job to prevent excessive reservations
+    maxWorkerPendingInterests: 20, // Max 20 active interested job offers per worker
+    selectionConfirmationWindowMinutes: 10, // Worker has 10 minutes to confirm booking once selected by customer
+    
     // Configurable Fallback Strategy: 'AUTO_ASSIGN_HIGHEST_RANKED' | 'CANCEL_BOOKING' | 'ESCALATE_OPS'
     fallbackStrategy: process.env.SCHEDULED_BIDDING_FALLBACK || 'AUTO_ASSIGN_HIGHEST_RANKED',
 

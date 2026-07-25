@@ -234,6 +234,40 @@ router.post('/:id/select-worker', async (req, res) => {
     }
 });
 
+// Worker Withdraws Interest Offer for Scheduled Job
+router.post('/:id/withdraw-offer', async (req, res) => {
+    try {
+        const jobId = req.params.id;
+        const { workerId, reason } = req.body;
+        if (!workerId) {
+            return res.status(400).json({ success: false, message: "Missing required parameter: workerId" });
+        }
+        const scheduledBiddingService = require('../services/scheduled_bidding.service');
+        const result = await scheduledBiddingService.withdrawScheduledOffer(jobId, workerId, reason);
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Worker Confirms or Declines Customer Selection (Stage 2 Confirmation)
+router.post('/:id/confirm-reservation', async (req, res) => {
+    try {
+        const jobId = req.params.id;
+        const { workerId, isConfirmed = true } = req.body;
+        if (!workerId) {
+            return res.status(400).json({ success: false, message: "Missing required parameter: workerId" });
+        }
+        const scheduledBiddingService = require('../services/scheduled_bidding.service');
+        const result = await scheduledBiddingService.confirmWorkerReservation(jobId, workerId, isConfirmed);
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // User accepts a worker's offer
 router.post('/offer/accept', async (req, res) => {
     try {

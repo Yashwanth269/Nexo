@@ -121,11 +121,15 @@ class MigrationRunnerService {
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS completion_otp TEXT;",
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS completion_otp_verified BOOLEAN DEFAULT false;",
 
-            // 7. Scheduled job bidding extensions to job_offers
+            // 7. Scheduled job bidding extensions to job_offers & workers
+            "ALTER TABLE workers ADD COLUMN IF NOT EXISTS commitment_score DECIMAL(5, 2) DEFAULT 100.0;",
             "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS offer_price DECIMAL(10, 2);",
             "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS proposed_scheduled_at TIMESTAMP WITH TIME ZONE;",
             "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS counter_notes TEXT;",
             "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS confirmation_deadline TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS worker_confirmed_at TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE job_offers ADD COLUMN IF NOT EXISTS withdrawal_reason TEXT;",
 
             // Create PostGIS / Earth distance indexes on marketplace_zones center coordinate
             "CREATE INDEX IF NOT EXISTS idx_marketplace_zones_geo ON marketplace_zones USING gist (ll_to_earth(center_lat, center_lng));",

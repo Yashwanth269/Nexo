@@ -804,6 +804,123 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
       });
 
+      _socketService.socket?.on('SCHEDULED_SELECTION_CONFIRMATION_REQUIRED', (data) {
+        if (data != null && mounted) {
+          debugPrint("🎯 [SOCKET] SCHEDULED_SELECTION_CONFIRMATION_REQUIRED: ${data['jobId']}");
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF0F172A),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              title: Row(
+                children: [
+                  const Icon(Icons.star_rounded, color: Color(0xFFFF6A00), size: 28),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "You've Been Selected!",
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18),
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    data['message'] ?? "The customer has selected your profile for this scheduled job! Please confirm to reserve your calendar slot.",
+                    style: GoogleFonts.inter(color: Colors.white70, fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF334155)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.timer_outlined, color: Colors.amberAccent, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "10 Mins Confirmation Deadline",
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.amberAccent, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    try {
+                      final prefs = await SharedPreferences.getInstance();
+                      final workerId = prefs.getString('worker_id') ?? prefs.getString('id');
+                      final token = prefs.getString('token');
+                      await http.post(
+                        Uri.parse('${NetworkHelper.baseUrl}/api/jobs/${data['jobId']}/confirm-reservation'),
+                        headers: {
+                          'Content-Type': 'application/json',
+                          if (token != null) 'Authorization': 'Bearer $token',
+                        },
+                        body: json.encode({'workerId': workerId, 'isConfirmed': false}),
+                      );
+                    } catch (e) {
+                      debugPrint("Decline confirmation error: $e");
+                    }
+                  },
+                  child: Text("Decline", style: GoogleFonts.inter(color: Colors.white54)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    try {
+                      final prefs = await SharedPreferences.getInstance();
+                      final workerId = prefs.getString('worker_id') ?? prefs.getString('id');
+                      final token = prefs.getString('token');
+                      final response = await http.post(
+                        Uri.parse('${NetworkHelper.baseUrl}/api/jobs/${data['jobId']}/confirm-reservation'),
+                        headers: {
+                          'Content-Type': 'application/json',
+                          if (token != null) 'Authorization': 'Bearer $token',
+                        },
+                        body: json.encode({'workerId': workerId, 'isConfirmed': true}),
+                      );
+                      if (response.statusCode == 200) {
+                        _fetchActiveGigs();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("🎉 Reservation confirmed & calendar locked!"),
+                              backgroundColor: Color(0xFF22C55E),
+                            ),
+                          );
+                        }
+                      }
+                    } catch (e) {
+                      debugPrint("Confirm reservation error: $e");
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF22C55E),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text("Confirm & Reserve", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          );
+        }
+      });
+
       // LISTEN: Scheduled Job Bidding Result Events
       _socketService.socket?.on('SCHEDULED_OFFER_WON', (data) {
         if (data != null && mounted) {
