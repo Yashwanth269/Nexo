@@ -1,7 +1,9 @@
 const redis = require('../config/redis');
+const EventEmitter = require('events');
 
-class EventStream {
+class EventStream extends EventEmitter {
     constructor() {
+        super();
         this.streamName = 'marketplace_stream';
         this.groupName = 'marketplace_group';
         this.consumerName = 'consumer_1';
@@ -86,6 +88,10 @@ class EventStream {
 
     async consumeEvent(eventType, payload) {
         console.log(`[EVENT_STREAM_CONSUMER] Received event: ${eventType}`);
+        
+        // Notify local subscribers (e.g., gamification service)
+        this.emit(eventType, payload);
+        
         try {
             const marketService = require('../services/market.service');
             const workerService = require('../services/worker.service');
