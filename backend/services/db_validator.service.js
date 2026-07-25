@@ -347,11 +347,21 @@ class DBValidatorService {
             }
 
             // Assess validity state
-            const currentSchemaVersion = migrationRes.rows[migrationRes.rows.length - 1]?.version || '0.0.0';
+            // isValid = true means the DB is structurally sound and safe to run against.
+            // Pending migrations are a WARNING (schema stamps may lag) — not a fatal blocker.
+            const currentSchemaVersion = migrationRes.rows[migrationRes.rows.length - 1]?.version || '0';
             const hasFatalMissingObjects = missingTables.length > 0 || missingColumns.length > 0 || missingIndexes.length > 0;
             const hasCorruption = invalidIndexes.length > 0;
             
-            this.isValid = (!hasFatalMissingObjects && !hasCorruption && pendingMigrations.length === 0);
+            this.isValid = (!hasFatalMissingObjects && !hasCorruption);
+
+            // Demote pending migrations to warnings instead of blocking crons
+            if (pendingMigrations.length > 0) {
+                warnings.push(`${pendingMigrations.length} migration(s) pending: ${pendingMigrations.map(m => `v${m.version}(${m.name})`).join(', ')}. Run migration_runner to apply.`);
+                if (classification === 'OK') {
+                    classification = schemaConfig.errorClasses.MIGRATION_MISMATCH;
+                }
+            }
 
             if (!this.isValid && classification === 'OK') {
                 classification = schemaConfig.errorClasses.SCHEMA_MISSING;

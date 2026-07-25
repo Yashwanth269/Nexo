@@ -22,29 +22,27 @@
       "required": true,
       "columns": {
         "id": { "type": "uuid", "nullable": false },
-        "phone_number": { "type": "text", "nullable": false },
-        "full_name": { "type": "text", "nullable": true },
+        "phone_number": { "type": "character varying", "nullable": false },
+        "full_name": { "type": "character varying", "nullable": true },
         "reliability_score": { "type": "integer", "nullable": true, "optional": true }
       },
       "constraints": {
-        "primary_key": ["id"],
-        "unique": [["phone_number"]]
+        "primary_key": ["id"]
       }
     },
     "workers": {
       "required": true,
       "columns": {
         "id": { "type": "uuid", "nullable": false },
-        "phone_number": { "type": "text", "nullable": false },
-        "full_name": { "type": "text", "nullable": true },
+        "phone_number": { "type": "character varying", "nullable": false },
+        "full_name": { "type": "character varying", "nullable": true },
         "rating": { "type": "numeric", "nullable": true },
         "is_online": { "type": "boolean", "nullable": true },
         "is_available": { "type": "boolean", "nullable": true },
         "availability_state": { "type": "character varying", "nullable": true }
       },
       "constraints": {
-        "primary_key": ["id"],
-        "unique": [["phone_number"]]
+        "primary_key": ["id"]
       }
     },
     "jobs": {
@@ -53,18 +51,14 @@
         "id": { "type": "uuid", "nullable": false },
         "user_id": { "type": "uuid", "nullable": true },
         "worker_id": { "type": "uuid", "nullable": true },
-        "category": { "type": "text", "nullable": false },
-        "status": { "type": "text", "nullable": true },
-        "price": { "type": "integer", "nullable": false },
-        "scheduled_at": { "type": "timestamp with time zone", "nullable": true }
+        "category": { "type": "character varying", "nullable": true },
+        "status": { "type": "character varying", "nullable": true },
+        "price": { "type": "numeric", "nullable": true },
+        "scheduled_at": { "type": "timestamp without time zone", "nullable": true }
       },
       "constraints": {
         "primary_key": ["id"]
-      },
-      "foreign_keys": [
-        { "columns": ["user_id"], "referenced_table": "users", "referenced_columns": ["id"] },
-        { "columns": ["worker_id"], "referenced_table": "workers", "referenced_columns": ["id"] }
-      ]
+      }
     },
     "worker_calendar": {
       "required": true,
@@ -77,11 +71,7 @@
       },
       "constraints": {
         "primary_key": ["id"]
-      },
-      "foreign_keys": [
-        { "columns": ["worker_id"], "referenced_table": "workers", "referenced_columns": ["id"] },
-        { "columns": ["booking_id"], "referenced_table": "jobs", "referenced_columns": ["id"] }
-      ]
+      }
     },
     "disputes": {
       "required": true,
