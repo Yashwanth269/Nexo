@@ -362,6 +362,94 @@ router.get('/availability/:workerId', async (req, res) => {
     res.json({ success: true, availability });
 });
 
+// ==========================================
+// TRAVEL HOME INTELLIGENCE ENGINE (THE) APIs
+// ==========================================
+const travelHomeEngine = require('../services/travel_home_engine.service');
+
+router.post('/travel-home/start', (req, res) => {
+    try {
+        const { workerId, homeLocation } = req.body;
+        const result = travelHomeEngine.startTravelHomeMode(workerId, homeLocation || {});
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/travel-home/stop', (req, res) => {
+    try {
+        const { workerId } = req.body;
+        const result = travelHomeEngine.stopTravelHomeMode(workerId);
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/travel-home/status', async (req, res) => {
+    try {
+        const { workerId, lat, lng } = req.query;
+        const session = travelHomeEngine.getSession(workerId);
+        if (!session || !session.isActive) {
+            return res.json({ success: true, isActive: false });
+        }
+
+        const candidateResult = await db.query(
+            "SELECT j.*, u.full_name as \"userName\" FROM jobs j LEFT JOIN users u ON j.user_id = u.id WHERE j.status IN ('OPEN', 'REQUESTED', 'SCHEDULED_BIDDING')"
+        );
+
+        const routeAnalysis = travelHomeEngine.filterAndRankRouteJobs(
+            workerId,
+            candidateResult.rows,
+            { lat: parseFloat(lat || 12.9352), lng: parseFloat(lng || 77.6245) }
+        );
+
+        res.json({
+            success: true,
+            isActive: true,
+            session,
+            routeAnalysis
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==========================================
+// PREFERRED AREAS (PAE) & SERVICES (PSE) APIs
+// ==========================================
+const workerPreferenceService = require('../services/worker_preference.service');
+
+router.get('/preferences/:workerId', (req, res) => {
+    try {
+        const prefs = workerPreferenceService.getPreferences(req.params.workerId);
+        res.json({ success: true, preferences: prefs });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/preferences/areas', (req, res) => {
+    try {
+        const { workerId, areaRatings } = req.body;
+        const result = workerPreferenceService.updateAreaRatings(workerId, areaRatings);
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/preferences/skills', (req, res) => {
+    try {
+        const { workerId, skillRatings } = req.body;
+        const result = workerPreferenceService.updateSkillRatings(workerId, skillRatings);
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
 // Fetch Scheduled Job Worker Offers (Customer Comparison Screen)
 router.get('/:id/offers', async (req, res) => {
     try {

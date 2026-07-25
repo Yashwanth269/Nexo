@@ -29,7 +29,9 @@ import '../settings/settings_screen.dart';
 import '../job/active_jobs_screen.dart';
 import '../earnings/earnings_history_screen.dart';
 import '../profile/worker_profile_screen.dart';
+import '../profile/worker_preferences_screen.dart';
 import '../job/opportunities_screen.dart';
+import '../../widgets/travel_home_banner.dart';
 import '../chat/chat_list_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../support/support_screen.dart';
@@ -74,6 +76,177 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<String> _mySkills = [];
   String _currentArea = "Detecting location...";
   int _activeJobsRefreshTrigger = 0;
+  bool _isTravelHomeActive = false;
+  Map<String, dynamic> _travelHomeData = {};
+
+  Future<void> _fetchTravelHomeStatus() async {
+    if (_phoneNumber == "Worker") return;
+    try {
+      final uri = Uri.parse('${NetworkHelper.baseUrl}/api/jobs/travel-home/status?workerId=$_phoneNumber');
+      final response = await http.get(uri, headers: _getAuthHeaders());
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['isActive'] == true) {
+          setState(() {
+            _isTravelHomeActive = true;
+            _travelHomeData = data['routeAnalysis'] ?? {};
+          });
+        } else {
+          setState(() {
+            _isTravelHomeActive = false;
+            _travelHomeData = {};
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _startTravelHomeMode() async {
+    try {
+      final uri = Uri.parse('${NetworkHelper.baseUrl}/api/jobs/travel-home/start');
+      final response = await http.post(
+        uri,
+        headers: _getAuthHeaders(),
+        body: json.encode({
+          'workerId': _phoneNumber,
+          'homeLocation': {
+            'address': 'BTM Layout',
+            'lat': 12.9141,
+            'lng': 77.6412,
+          }
+        }),
+      );
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("🏠 Travel Home Mode Active! GPS battery saver enabled (15s)."),
+            backgroundColor: Color(0xFF166534),
+          ),
+        );
+        _fetchTravelHomeStatus();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _stopTravelHomeMode() async {
+    try {
+      final uri = Uri.parse('${NetworkHelper.baseUrl}/api/jobs/travel-home/stop');
+      await http.post(
+        uri,
+        headers: _getAuthHeaders(),
+        body: json.encode({'workerId': _phoneNumber}),
+      );
+      setState(() {
+        _isTravelHomeActive = false;
+        _travelHomeData = {};
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Travel Home Mode ended.")),
+      );
+    } catch (_) {}
+  }
+
+  void _showPostJobNextStepSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+            ),
+            const SizedBox(height: 16),
+            Text("Nice work 🎉 What's next?", style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+            const SizedBox(height: 4),
+            Text("Select your intention so Nexo can optimize your route and offers.", style: GoogleFonts.inter(fontSize: 12.5, color: Colors.white60)),
+            const SizedBox(height: 20),
+
+            _buildNextStepOptionTile(
+              icon: Icons.flash_on_rounded,
+              title: "Continue Working",
+              subtitle: "Keep receiving live and scheduled jobs near you",
+              color: const Color(0xFF2563EB),
+              onTap: () {
+                Navigator.pop(context);
+                _toggleOnline(true);
+              },
+            ),
+            const SizedBox(height: 10),
+
+            _buildNextStepOptionTile(
+              icon: Icons.home_rounded,
+              title: "Going Home",
+              subtitle: "Enter Travel Home Mode • Only receive jobs along your route",
+              color: const Color(0xFF166534),
+              onTap: () {
+                Navigator.pop(context);
+                _startTravelHomeMode();
+              },
+            ),
+            const SizedBox(height: 10),
+
+            _buildNextStepOptionTile(
+              icon: Icons.coffee_rounded,
+              title: "Take a Break",
+              subtitle: "Temporarily pause all incoming job notifications",
+              color: const Color(0xFFD97706),
+              onTap: () {
+                Navigator.pop(context);
+                _showOfflineConfirmation();
+              },
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNextStepOptionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.2), shape: BoxShape.circle),
+              child: Icon(icon, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: GoogleFonts.inter(fontSize: 11, color: Colors.white60)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+          ],
+        ),
+      ),
+    );
+  }
 
   void _sortActiveGigs() {
     _activeGigs.sort((a, b) {
@@ -1835,6 +2008,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (_isTravelHomeActive)
+                TravelHomeBanner(
+                  homeAddress: _travelHomeData['homeAddress'] ?? 'BTM Layout',
+                  minsRemaining: _travelHomeData['estimatedMinsRemaining'] ?? 42,
+                  potentialEarnings: (_travelHomeData['potentialEarnings'] as num?)?.toDouble() ?? 1850.0,
+                  jobsCount: _travelHomeData['jobsCount'] ?? 0,
+                  routeJobs: _travelHomeData['jobs'] ?? [],
+                  onStopTravelHome: _stopTravelHomeMode,
+                  onSelectJob: (job) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => JobExecutionScreen(jobId: job['id'], initialJob: job),
+                      ),
+                    );
+                  },
+                ),
               // 1. Online / Offline Card
               Container(
                 decoration: BoxDecoration(
