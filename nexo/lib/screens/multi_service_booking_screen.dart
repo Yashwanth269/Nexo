@@ -425,6 +425,18 @@ class _MultiServiceBookingScreenState extends State<MultiServiceBookingScreen> {
     setState(() => _wizardStep = 0);
   }
 
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
   // --- Step Rendering routers ---
   Widget _buildStepView() {
     switch (_wizardStep) {
@@ -940,7 +952,7 @@ class _MultiServiceBookingScreenState extends State<MultiServiceBookingScreen> {
               Column(
                 children: assigns.map((a) {
                   return Container(
-                    margin: const EdgeInsets.only(vertical: 4),
+                    margin: const EdgeInsets.symmetric(vertical: 4),
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(12)),
                     child: Row(
