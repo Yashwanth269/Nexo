@@ -438,6 +438,16 @@ const MIGRATIONS = [
             "DROP TABLE IF EXISTS training_schedule CASCADE;",
             "ALTER TABLE disputes DROP COLUMN IF EXISTS updated_at;"
         ]
+    },
+    {
+        version: 19,
+        name: 'clean_stock_photo_placeholders',
+        up: [
+            "UPDATE workers SET photo_url = NULL WHERE photo_url LIKE '%unsplash%' OR photo_url LIKE '%pravatar%' OR photo_url LIKE '%adventurer%' OR photo_url LIKE '%i.pravatar.cc%';",
+            "UPDATE users SET photo_url = NULL WHERE photo_url LIKE '%unsplash%' OR photo_url LIKE '%pravatar%' OR photo_url LIKE '%adventurer%' OR photo_url LIKE '%i.pravatar.cc%';",
+            "UPDATE users SET avatar_url = NULL WHERE avatar_url LIKE '%unsplash%' OR avatar_url LIKE '%pravatar%' OR avatar_url LIKE '%adventurer%' OR avatar_url LIKE '%i.pravatar.cc%';"
+        ],
+        down: []
     }
 ];
 

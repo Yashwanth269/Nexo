@@ -178,28 +178,44 @@ class ImageUtils {
       }
     }
 
-    if (resolvedUrl == null || resolvedUrl.isEmpty || resolvedUrl.contains('randomuser.me')) {
+    final bool isGhostUrl = resolvedUrl == null ||
+        resolvedUrl.isEmpty ||
+        resolvedUrl == 'null' ||
+        resolvedUrl.contains('randomuser.me') ||
+        resolvedUrl.contains('images.unsplash.com') ||
+        resolvedUrl.contains('pravatar.cc') ||
+        resolvedUrl.contains('adventurer');
+
+    final String displayName = (name != null && name.isNotEmpty) ? name : 'Nexo';
+    final String fallbackUrl = "https://ui-avatars.com/api/?name=${Uri.encodeComponent(displayName)}&background=2563eb&color=fff&size=128&bold=true";
+
+    if (isGhostUrl) {
       return CircleAvatar(
         radius: radius,
-        backgroundColor: Colors.grey[200],
-        child: name != null && name.isNotEmpty
-            ? Text(
-                name[0].toUpperCase(),
-                style: TextStyle(
-                  color: Colors.grey[700],
-                  fontWeight: FontWeight.bold,
-                  fontSize: radius * 0.8,
-                ),
-              )
-            : Icon(Icons.person, size: radius, color: Colors.grey[400]),
+        backgroundColor: const Color(0xFF2563EB),
+        backgroundImage: NetworkImage(fallbackUrl),
       );
     }
 
     return CircleAvatar(
       radius: radius,
-      backgroundImage: NetworkImage(resolvedUrl),
-      backgroundColor: Colors.transparent,
-      onBackgroundImageError: (e, s) {},
+      backgroundColor: const Color(0xFF2563EB),
+      child: ClipOval(
+        child: Image.network(
+          resolvedUrl!,
+          width: radius * 2,
+          height: radius * 2,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Image.network(
+              fallbackUrl,
+              width: radius * 2,
+              height: radius * 2,
+              fit: BoxFit.cover,
+            );
+          },
+        ),
+      ),
     );
   }
 }
