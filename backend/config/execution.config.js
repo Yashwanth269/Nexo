@@ -21,6 +21,6 @@ module.exports = {
 
     // ML predictions configuration
     mlServiceUrl: process.env.ML_SERVICE_URL || 'http://localhost:8000',
-    mlTimeoutMs: parseInt(process.env.EXECUTION_ML_TIMEOUT_MS || "2000", 10),
-    mlMaxRetries: 3
+    mlTimeoutMs: parseInt(process.env.EXECUTION_ML_TIMEOUT_MS || "300", 10),
+    mlMaxRetries: 1
 };

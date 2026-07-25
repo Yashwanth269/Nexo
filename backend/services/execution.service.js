@@ -40,11 +40,16 @@ async function callMLService(endpoint, bodyData) {
                 req.end();
             });
         } catch (err) {
+            // Immediate fast-fail without retrying if local ML server is offline
+            if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+                console.warn(`[EXECUTION-ML-CLIENT] ML service offline (${err.code}). Using instant heuristic fallback.`);
+                throw err;
+            }
             console.warn(`[EXECUTION-ML-CLIENT-WARN] Attempt ${attempts} failed: ${err.message}`);
             if (attempts >= maxRetries) {
                 throw err;
             }
-            await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, attempts)));
+            await new Promise(resolve => setTimeout(resolve, 50));
         }
     }
 }
