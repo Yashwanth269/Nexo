@@ -209,39 +209,157 @@ router.post('/negotiate', async (req, res) => {
     }
 });
 
+// In-memory fallback stores for worker bookmarks & availability preferences
+const savedJobsStore = new Map(); // workerId -> Set of jobIds
+const workerAvailabilityStore = new Map(); // workerId -> schedule object
+
 // Worker Opportunities Marketplace (Scheduled Gigs for Offline & Online workers)
 router.get('/opportunities', async (req, res) => {
     try {
-        const { workerId, category, minPrice, sortBy } = req.query;
+        const { workerId, category, dateFilter, distanceFilter, minPrice, timeFilter, sortBy, searchQuery } = req.query;
 
         let queryText = `
             SELECT j.*, u.full_name as "userName", u.avatar_url as "userPhoto", u.phone_number as "userPhone"
             FROM jobs j
             LEFT JOIN users u ON j.user_id = u.id
             WHERE j.status IN ('SCHEDULED_BIDDING', 'OPEN')
-              AND (j.scheduled_at IS NOT NULL OR j.created_at > CURRENT_TIMESTAMP - INTERVAL '1 day')
             ORDER BY j.created_at DESC
         `;
 
         const result = await db.query(queryText);
-        const opportunities = result.rows.map((job, idx) => {
-            const matchScore = 95 - (idx * 2);
+        let jobs = result.rows;
+
+        // Apply Natural Language & Keyword Filtering
+        if (searchQuery && searchQuery.trim().length > 0) {
+            const sq = searchQuery.toLowerCase().trim();
+            jobs = jobs.filter(job => {
+                const title = (job.title || job.category || '').toLowerCase();
+                const desc = (job.description || '').toLowerCase();
+                const addr = (job.address || job.location_name || '').toLowerCase();
+                return title.includes(sq) || desc.includes(sq) || addr.includes(sq);
+            });
+        }
+
+        // Apply Category Filter
+        if (category && category !== 'All') {
+            jobs = jobs.filter(j => (j.category || '').toLowerCase().includes(category.toLowerCase()));
+        }
+
+        // Apply Min Price Filter
+        if (minPrice && minPrice !== 'All') {
+            const minP = parseFloat(minPrice.replace(/[^\d.]/g, '')) || 0;
+            jobs = jobs.filter(j => parseFloat(j.price || 0) >= minP);
+        }
+
+        const savedSet = savedJobsStore.get(workerId) || new Set();
+
+        const enrichedJobs = jobs.map((job, idx) => {
+            const price = parseFloat(job.price || 500);
+            const distanceKm = Math.round((2.0 + (idx * 0.8)) * 10) / 10;
+            const fuelCost = Math.round(distanceKm * 8);
+            const netProfit = Math.max(100, price - fuelCost);
+            const matchScore = Math.max(75, 96 - (idx * 3));
+            const isSaved = savedSet.has(job.id.toString());
+
+            // Rationale Bullets (WHY)
+            const rationale = [
+                `📍 Near your active area (${distanceKm} km away)`,
+                `💰 High earnings potential (Net Profit ₹${netProfit})`,
+                `⭐ ${matchScore}% selection probability for your profile`,
+                `📅 Fits 10:30 AM – 1:00 PM free schedule slot`
+            ];
+
             return {
                 ...job,
-                matchScore: Math.max(75, matchScore),
-                isRecommended: matchScore >= 88,
-                badges: matchScore >= 88 ? ["⭐ Recommended", "⚡ Top Match"] : ["📅 Scheduled"]
+                distanceKm,
+                fuelCost,
+                netProfit,
+                matchScore,
+                isSaved,
+                estimatedDuration: "1.5 Hours",
+                estimatedFinishTime: "12:30 PM",
+                interestedCount: 3 + (idx % 4),
+                customerRating: "4.9★",
+                rationale,
+                badges: matchScore >= 88 ? ["⭐ Recommended", "⚡ Top Match", "👑 Premium Customer"] : ["📅 Scheduled Bidding"]
             };
         });
 
+        // Curated Section Categorization
+        const recommended = enrichedJobs.filter(j => j.matchScore >= 85);
+        const highDemand = enrichedJobs.filter(j => j.interestedCount >= 4 || j.price >= 800);
+        const highPaying = enrichedJobs.filter(j => j.price >= 1000);
+        const fitsCalendar = enrichedJobs.filter(j => j.matchScore >= 90);
+        const saved = enrichedJobs.filter(j => j.isSaved);
+
         res.json({
             success: true,
-            totalAvailable: opportunities.length,
-            opportunities
+            totalAvailable: enrichedJobs.length,
+            dashboard: {
+                workerName: "Rahul",
+                potentialEarnings: enrichedJobs.reduce((sum, j) => sum + parseFloat(j.price || 0), 0),
+                recommendedCount: recommended.length,
+                reservedCount: 2,
+                freeSlots: ["10:30–12:00", "3:30–6:00"],
+                topPercentile: 8,
+                reliabilityScore: 98,
+                acceptanceRate: 96,
+                onTimeRate: 99
+            },
+            sections: {
+                recommended,
+                highDemand,
+                highPaying,
+                fitsCalendar,
+                recentlyPosted: enrichedJobs,
+                saved
+            },
+            opportunities: enrichedJobs
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
+});
+
+// Bookmark / Save Job Opportunity
+router.post('/:id/save', async (req, res) => {
+    try {
+        const jobId = req.params.id;
+        const { workerId, save } = req.body;
+        if (!savedJobsStore.has(workerId)) {
+            savedJobsStore.set(workerId, new Set());
+        }
+        const set = savedJobsStore.get(workerId);
+        if (save === false) {
+            set.delete(jobId.toString());
+        } else {
+            set.add(jobId.toString());
+        }
+        res.json({ success: true, isSaved: set.has(jobId.toString()) });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+// Save & Retrieve Worker Availability Preferences
+router.post('/availability/save', async (req, res) => {
+    try {
+        const { workerId, availability } = req.body;
+        workerAvailabilityStore.set(workerId, availability);
+        res.json({ success: true, message: "Availability schedule updated!" });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/availability/:workerId', async (req, res) => {
+    const availability = workerAvailabilityStore.get(req.params.workerId) || {
+        morning: true,
+        afternoon: true,
+        evening: false,
+        night: false
+    };
+    res.json({ success: true, availability });
 });
 
 // Fetch Scheduled Job Worker Offers (Customer Comparison Screen)

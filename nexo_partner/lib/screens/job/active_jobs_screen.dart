@@ -20,7 +20,7 @@ class ActiveJobsScreen extends StatefulWidget {
 
 class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
   final Color primaryColor = const Color(0xFF2563EB);
-  String _selectedStatusFilter = "All";
+  String _selectedStatusFilter = "Today";
   String _sortBy = "Latest";
   List<dynamic> _jobs = [];
   bool _isLoading = true;
@@ -383,14 +383,14 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
     
     // Split gigs into categories dynamically from the loaded state
     final allGigs = _jobs;
-    final activeGigs = _jobs.where((j) {
+    final todayGigs = _jobs.where((j) {
       final s = j['status'] ?? "";
       return s == 'ACCEPTED' || s == 'ON_THE_WAY' || s == 'ARRIVED' || s == 'STARTED' || s == 'IN_PROGRESS' || s == 'WORK_IN_PROGRESS';
     }).toList();
     
     final upcomingGigs = _jobs.where((j) {
       final s = j['status'] ?? "";
-      return s == 'OPEN' || s == 'REQUESTED' || s == 'REDISTRIBUTING' || s == 'REASSIGNING';
+      return s == 'OPEN' || s == 'REQUESTED' || s == 'SCHEDULED_BIDDING' || s == 'SELECTION_PENDING_CONFIRMATION';
     }).toList();
 
     final completedGigs = _jobs.where((j) => j['status'] == 'COMPLETED').toList();
@@ -398,11 +398,12 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
 
     // Sort matching active order
     List<dynamic> targetGigs = [];
-    if (_selectedStatusFilter == "All") targetGigs = List.from(allGigs);
-    else if (_selectedStatusFilter == "Active") targetGigs = List.from(activeGigs);
+    if (_selectedStatusFilter == "Today") targetGigs = List.from(todayGigs);
     else if (_selectedStatusFilter == "Upcoming") targetGigs = List.from(upcomingGigs);
     else if (_selectedStatusFilter == "Completed") targetGigs = List.from(completedGigs);
     else if (_selectedStatusFilter == "Cancelled") targetGigs = List.from(cancelledGigs);
+    else if (_selectedStatusFilter == "History") targetGigs = List.from(allGigs);
+    else targetGigs = List.from(allGigs);
 
     // Apply active filters
     if (_selectedFilterDate != null) {
@@ -481,11 +482,11 @@ class _ActiveJobsScreenState extends State<ActiveJobsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  _buildFilterPill("All", allGigs.length),
-                  _buildFilterPill("Active", activeGigs.length, countColor: Colors.green),
+                  _buildFilterPill("Today", todayGigs.length, countColor: Colors.green),
                   _buildFilterPill("Upcoming", upcomingGigs.length, countColor: Colors.blue),
                   _buildFilterPill("Completed", completedGigs.length, countColor: Colors.teal),
                   _buildFilterPill("Cancelled", cancelledGigs.length, countColor: Colors.red),
+                  _buildFilterPill("History", allGigs.length, countColor: Colors.grey),
                 ],
               ),
             ),
