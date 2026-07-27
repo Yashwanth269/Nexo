@@ -6,17 +6,8 @@ const paymentService = require('./payment.service');
 const disputeService = require('./dispute.service');
 const metrics = require('../middleware/metrics');
 const paymentTrustService = require('./payment-trust.service');
-
 class CronService {
     start() {
-        const dbValidator = require('./db_validator.service');
-        if (!dbValidator.isValid) {
-            console.error('⏰ [CRON-ABORT] Database schema validation is currently failing/invalid. Skipping cron scheduling.');
-            return;
-        }
-        const aiAssetCronService = require('./ai_asset_cron.service');
-        aiAssetCronService.start();
-
         // Run every 2 minutes: Scheduled Job Protection & Pre-Job Health Monitor
         cron.schedule('*/2 * * * *', async () => {
             await this._monitorScheduledJobs();
