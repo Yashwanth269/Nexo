@@ -63,18 +63,13 @@ class GeminiImageService {
     _callGeminiApi(promptText) {
         return new Promise((resolve, reject) => {
             const postData = JSON.stringify({
-                instances: [{ prompt: promptText }],
-                parameters: {
-                    sampleCount: 1,
-                    aspectRatio: '1:1',
-                    outputOptions: { mimeType: 'image/png' }
-                }
+                contents: [{ parts: [{ text: promptText }] }]
             });
 
             const options = {
                 hostname: 'generativelanguage.googleapis.com',
                 port: 443,
-                path: `/v1beta/models/imagen-3.0-generate-002:predict?key=${this.apiKey}`,
+                path: `/v1beta/models/gemini-2.5-flash-image:generateContent?key=${this.apiKey}`,
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -90,9 +85,12 @@ class GeminiImageService {
                     try {
                         if (res.statusCode >= 200 && res.statusCode < 300) {
                             const parsed = JSON.parse(body);
-                            if (parsed.predictions && parsed.predictions[0]?.bytesBase64Encoded) {
-                                const buffer = Buffer.from(parsed.predictions[0].bytesBase64Encoded, 'base64');
-                                return resolve(buffer);
+                            const parts = parsed.candidates?.[0]?.content?.parts || [];
+                            for (const part of parts) {
+                                if (part.inlineData?.data) {
+                                    const buffer = Buffer.from(part.inlineData.data, 'base64');
+                                    return resolve(buffer);
+                                }
                             }
                         }
                         reject(new Error(`API HTTP ${res.statusCode}: ${body.slice(0, 150)}`));
