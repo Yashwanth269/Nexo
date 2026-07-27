@@ -62,15 +62,18 @@ class CategoryAssetService {
      * Executes AI Generation pipeline for a given subcategory from stored master prompt
      */
     async generateCategoryAsset(subcategoryId) {
-        // 1. Read stored master prompt from database
+        console.log(`🚀 [AI-GEN] Starting asset generation request for subcategory identifier: ${subcategoryId}`);
+
+        // 1. Read stored master prompt from database (matches subcategory ID, prompt ID, or slug)
         const promptRes = await db.query(`
             SELECT p.*, s.category_id, s.name as subcat_name, s.slug as subcat_slug
             FROM category_prompts p
             JOIN marketplace_subcategories s ON p.subcategory_id = s.id
-            WHERE s.id::text = $1 OR s.slug = $1;
+            WHERE s.id::text = $1 OR s.slug = $1 OR p.id::text = $1 OR p.subcategory_id::text = $1;
         `, [subcategoryId]);
 
         if (promptRes.rowCount === 0) {
+            console.warn(`⚠️ [AI-GEN-WARN] No master prompt found for identifier: ${subcategoryId}`);
             throw new Error(`No preloaded master prompt found for subcategory: ${subcategoryId}`);
         }
 
@@ -83,6 +86,8 @@ class CategoryAssetService {
             WHERE subcategory_id = $1;
         `, [promptRecord.subcategory_id]);
         const nextVersion = versionRes.rows[0].next_version;
+
+        console.log(`⏳ [AI-GEN] Found master prompt for "${promptRecord.job_title}" (${promptRecord.subcat_name}). Generating Version v${nextVersion}...`);
 
         // 3. Create initial GENERATING record
         const insertRes = await db.query(`
@@ -106,6 +111,7 @@ class CategoryAssetService {
             const validation = imageValidatorService.validateImageBuffer(genResult.imageBuffer);
 
             if (!validation.isValid) {
+                console.warn(`⚠️ [AI-GEN-REJECTED] Quality check failed for ${promptRecord.subcat_name}: ${validation.reason}`);
                 // Quality Validation Failed -> Mark REJECTED & Retain Old Active Version
                 await db.query(`
                     UPDATE category_images 
@@ -137,6 +143,8 @@ class CategoryAssetService {
             // Invalidate Redis Cache
             await this._invalidateCache();
 
+            console.log(`🎉 [AI-GEN-SUCCESS] Generated Version v${nextVersion} for "${promptRecord.subcat_name}" -> ${genResult.imageUrl}`);
+
             return {
                 success: true,
                 version: nextVersion,
@@ -145,6 +153,7 @@ class CategoryAssetService {
                 approved: true
             };
         } catch (err) {
+            console.error(`❌ [AI-GEN-ERROR] Generation failed for ${promptRecord.subcat_name}: ${err.message}`);
             // Generation Error -> Mark FAILED & Retain Old Active Version
             await db.query(`
                 UPDATE category_images 
