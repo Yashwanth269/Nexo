@@ -36,10 +36,10 @@ async function batchGenerateLiveAssets(limit = 10) {
             const result = await categoryAssetService.generateCategoryAsset(item.subcategory_id);
             if (result.success) {
                 if (result.fallbackUsed) {
-                    console.log(`⚠️ Result: Fallback asset used (v${result.version}). URL: ${result.imageUrl}`);
+                    console.log(`⚠️ Result: Fallback asset used (v${result.version}). Engine: ${result.provider}. URL: ${result.imageUrl}`);
                     fallbackCount++;
                 } else {
-                    console.log(`🎉 Result: LIVE GEMINI SUCCESS! Version v${result.version} -> ${result.imageUrl}`);
+                    console.log(`🎉 Result: LIVE AI SUCCESS! Version v${result.version} (Engine: ${result.provider}) -> ${result.imageUrl}`);
                     successCount++;
                 }
             } else {
