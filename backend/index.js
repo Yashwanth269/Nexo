@@ -211,7 +211,7 @@ app.use('/api/auth', require('./routes/auth.routes'));
 // Protected routes — require valid JWT
 app.use('/api/worker/profile', authenticateToken, require('./routes/worker.profile.routes'));
 app.use('/api/user', authenticateToken, require('./routes/user.routes'));
-app.use('/api/marketplace', authenticateToken, require('./routes/marketplace.routes'));
+app.use('/api/marketplace', require('./routes/marketplace.routes'));
 app.use('/api/jobs', authenticateToken, require('./routes/job_lifecycle.routes'));
 app.use('/api/jobs', authenticateToken, require('./routes/job.routes'));
 app.use('/api/workers', require('./routes/worker.routes')); // has internal optional auth

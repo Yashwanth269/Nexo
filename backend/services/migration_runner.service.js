@@ -448,6 +448,61 @@ const MIGRATIONS = [
             "UPDATE users SET avatar_url = NULL WHERE avatar_url LIKE '%unsplash%' OR avatar_url LIKE '%pravatar%' OR avatar_url LIKE '%adventurer%' OR avatar_url LIKE '%i.pravatar.cc%';"
         ],
         down: []
+    },
+    {
+        version: 20,
+        name: 'seed_all_in_one_marketplace',
+        up: [
+            `CREATE TABLE IF NOT EXISTS marketplace_categories (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name VARCHAR(100) NOT NULL UNIQUE,
+                slug VARCHAR(100) NOT NULL UNIQUE,
+                icon VARCHAR(100),
+                description TEXT,
+                sort_order INT DEFAULT 0,
+                is_active BOOLEAN DEFAULT true,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS marketplace_subcategories (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                category_id UUID NOT NULL REFERENCES marketplace_categories(id) ON DELETE CASCADE,
+                name VARCHAR(100) NOT NULL,
+                slug VARCHAR(100) NOT NULL UNIQUE,
+                icon VARCHAR(100),
+                image TEXT,
+                description TEXT,
+                default_pricing_type VARCHAR(20) DEFAULT 'FIXED',
+                min_price NUMERIC(10,2) DEFAULT 0.00,
+                max_price NUMERIC(10,2) DEFAULT 0.00,
+                keywords TEXT[],
+                is_active BOOLEAN DEFAULT true,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS worker_skills (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                worker_id UUID NOT NULL REFERENCES workers(id) ON DELETE CASCADE,
+                category_id UUID REFERENCES marketplace_categories(id) ON DELETE CASCADE,
+                subcategory_id UUID REFERENCES marketplace_subcategories(id) ON DELETE CASCADE,
+                skill_name VARCHAR(100) NOT NULL,
+                experience_years INT DEFAULT 1,
+                certifications TEXT[],
+                hourly_rate NUMERIC(10,2),
+                fixed_rate NUMERIC(10,2),
+                pricing_type VARCHAR(20) DEFAULT 'HOURLY',
+                is_emergency BOOLEAN DEFAULT false,
+                experience_level VARCHAR(20) DEFAULT 'INTERMEDIATE',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT unique_worker_subcategory UNIQUE (worker_id, subcategory_id, skill_name)
+            );`
+        ],
+        down: [
+            "DROP TABLE IF EXISTS worker_skills CASCADE;",
+            "DROP TABLE IF EXISTS marketplace_subcategories CASCADE;",
+            "DROP TABLE IF EXISTS marketplace_categories CASCADE;"
+        ]
     }
 ];
 

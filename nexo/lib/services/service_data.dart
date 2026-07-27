@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -366,4 +368,29 @@ class ServiceData {
       ]
     },
   ];
+
+  static Future<List<Map<String, dynamic>>> fetchCategoriesFromApi(String baseUrl) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/api/marketplace/categories'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['categories'] != null) {
+          final List<dynamic> apiCats = data['categories'];
+          return apiCats.map((c) => {
+            "name": c['name'],
+            "icon": FontAwesomeIcons.layerGroup,
+            "description": c['description'],
+            "subcategories": (c['subcategories'] as List? ?? []).map((s) => {
+              "name": s['name'],
+              "defaultPricingType": s['defaultPricingType'],
+              "minPrice": s['minPrice'],
+              "maxPrice": s['maxPrice'],
+              "keywords": s['keywords'] ?? []
+            }).toList()
+          }).toList();
+        }
+      }
+    } catch (_) {}
+    return categories;
+  }
 }

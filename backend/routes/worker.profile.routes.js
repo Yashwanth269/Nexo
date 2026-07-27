@@ -93,6 +93,70 @@ router.post('/setup', async (req, res) => {
     }
 });
 
+// Configure Dynamic Marketplace Worker Skills & Pricing
+router.post('/skills', async (req, res) => {
+    try {
+        const workerId = req.user?.workerId;
+        const { skills } = req.body; // Array of { skillName, subcategoryId, categoryId, experienceYears, hourlyRate, fixedRate, pricingType, isEmergency }
+
+        if (!workerId || !Array.isArray(skills)) {
+            return res.status(400).json({ success: false, message: "Invalid payload or worker unauthorized" });
+        }
+
+        for (const s of skills) {
+            if (!s.skillName) continue;
+            await db.query(`
+                INSERT INTO worker_skills (worker_id, category_id, subcategory_id, skill_name, experience_years, certifications, hourly_rate, fixed_rate, pricing_type, is_emergency)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                ON CONFLICT (worker_id, subcategory_id, skill_name) DO UPDATE SET
+                    experience_years = EXCLUDED.experience_years,
+                    certifications = EXCLUDED.certifications,
+                    hourly_rate = EXCLUDED.hourly_rate,
+                    fixed_rate = EXCLUDED.fixed_rate,
+                    pricing_type = EXCLUDED.pricing_type,
+                    is_emergency = EXCLUDED.is_emergency,
+                    updated_at = CURRENT_TIMESTAMP;
+            `, [
+                workerId,
+                s.categoryId || null,
+                s.subcategoryId || null,
+                s.skillName,
+                s.experienceYears || 1,
+                s.certifications || [],
+                s.hourlyRate || null,
+                s.fixedRate || null,
+                s.pricingType || 'HOURLY',
+                s.isEmergency || false
+            ]);
+        }
+
+        // Also update legacy skills array on worker row for fast fallback
+        const skillNames = skills.map(s => s.skillName).filter(Boolean);
+        if (skillNames.length > 0) {
+            await db.query("UPDATE workers SET skills = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", [skillNames, workerId]);
+        }
+
+        res.json({ success: true, count: skills.length, message: "Worker skills saved successfully" });
+    } catch (error) {
+        console.error("❌ [WORKER-SKILLS ERROR]", error.message);
+        res.status(500).json({ success: false, error: "Internal server error" });
+    }
+});
+
+// Get Configured Worker Skills
+router.get('/skills', async (req, res) => {
+    try {
+        const workerId = req.user?.workerId;
+        if (!workerId) return res.status(401).json({ success: false, error: "Unauthorized" });
+
+        const result = await db.query("SELECT * FROM worker_skills WHERE worker_id = $1 ORDER BY created_at DESC", [workerId]);
+        res.json({ success: true, skills: result.rows });
+    } catch (error) {
+        console.error("❌ [GET-WORKER-SKILLS ERROR]", error.message);
+        res.status(500).json({ success: false, error: "Internal server error" });
+    }
+});
+
 // Get Detailed Worker Profile & Performance Metrics
 router.get('/details/:phoneNumber', async (req, res) => {
     try {

@@ -11,11 +11,12 @@ const { invalidateTrendCache } = require('../services/market.service');
 const CACHE_TTL_SECONDS = 45;
 
 const ALL_CATEGORIES = [
-    'Agriculture', 'Construction', 'Delivery', 'Events',
-    'Home Services', 'Household', 'Mechanic', 'Shops',
-    'Skilled', 'Smart Tech', 'Transport',
-    'Electrical', 'Plumbing', 'Cleaning', 'Painting', 'AC Repair',
-    'Labour', 'Security', 'Healthcare',
+    'Home Services', 'Appliance Repair', 'Automobile', 'Moving & Logistics',
+    'Cleaning', 'Outdoor Services', 'Beauty & Wellness', 'Education',
+    'Photography & Creative', 'IT & Digital', 'Business & Legal', 'Healthcare',
+    'Pet Services', 'Food & Catering', 'Events', 'Construction',
+    'Rentals', 'Security', 'Care Services', 'Emergency',
+    'Delivery & Errands', 'Industrial Services'
 ];
 
 const getTimeSegment = (hour) => {

@@ -50,13 +50,14 @@ const WEIGHTS = {
     activeWorkers     : 0.05,
 };
 
-// All valid service categories in the system
+// All valid service category verticals in the system
 const ALL_CATEGORIES = [
-    'Agriculture', 'Construction', 'Delivery', 'Events',
-    'Home Services', 'Household', 'Mechanic', 'Shops',
-    'Skilled', 'Smart Tech', 'Transport',
-    'Electrical', 'Plumbing', 'Cleaning', 'Painting', 'AC Repair',
-    'Labour', 'Security', 'Healthcare',
+    'Home Services', 'Appliance Repair', 'Automobile', 'Moving & Logistics',
+    'Cleaning', 'Outdoor Services', 'Beauty & Wellness', 'Education',
+    'Photography & Creative', 'IT & Digital', 'Business & Legal', 'Healthcare',
+    'Pet Services', 'Food & Catering', 'Events', 'Construction',
+    'Rentals', 'Security', 'Care Services', 'Emergency',
+    'Delivery & Errands', 'Industrial Services'
 ];
 
 // Rural-indicator categories
