@@ -85,6 +85,30 @@ const mapSkillLabel = (confidence) => {
     return { badge: 'Available', color: '#94A3B8' };
 };
 
+const homepageLayoutService = require('../services/homepage_layout.service');
+
+// GET /api/home/layout - Backend-Driven Homepage Layout Engine
+router.get('/layout', async (req, res) => {
+    try {
+        const { lat, lng, userId, city, userSegment } = req.query;
+        const userLat = lat ? parseFloat(lat) : null;
+        const userLng = lng ? parseFloat(lng) : null;
+
+        const layout = await homepageLayoutService.getDynamicLayout({
+            userLat,
+            userLng,
+            userId,
+            city: city || 'ALL',
+            userSegment: userSegment || 'ALL'
+        });
+
+        res.json(layout);
+    } catch (error) {
+        console.error('❌ [HOME_LAYOUT_ERROR]', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // GET /api/home/services
 router.get('/services', async (req, res) => {
     const startTime = Date.now();

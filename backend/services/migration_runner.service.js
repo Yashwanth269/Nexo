@@ -503,6 +503,79 @@ const MIGRATIONS = [
             "DROP TABLE IF EXISTS marketplace_subcategories CASCADE;",
             "DROP TABLE IF EXISTS marketplace_categories CASCADE;"
         ]
+    },
+    {
+        version: 21,
+        name: 'homepage_layout_engine_and_banner_cms',
+        up: [
+            `CREATE TABLE IF NOT EXISTS homepage_layouts (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name VARCHAR(100) NOT NULL UNIQUE,
+                version INT DEFAULT 1,
+                is_active BOOLEAN DEFAULT true,
+                ab_split_pct INT DEFAULT 100,
+                target_user_segment VARCHAR(50) DEFAULT 'ALL',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS homepage_sections (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                layout_id UUID REFERENCES homepage_layouts(id) ON DELETE CASCADE,
+                section_type VARCHAR(50) NOT NULL,
+                title VARCHAR(100),
+                subtitle VARCHAR(150),
+                sort_order INT DEFAULT 0,
+                is_enabled BOOLEAN DEFAULT true,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS banner_campaigns (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                title VARCHAR(150) NOT NULL,
+                subtitle VARCHAR(200),
+                description TEXT,
+                cta_text VARCHAR(50) DEFAULT 'Book Now ->',
+                image_url TEXT,
+                bg_color VARCHAR(30) DEFAULT '#FFF7ED',
+                text_color VARCHAR(30) DEFAULT '#1E293B',
+                badge_text VARCHAR(50),
+                target_action VARCHAR(50) DEFAULT 'OPEN_SEARCH',
+                action_payload TEXT,
+                priority INT DEFAULT 1,
+                start_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                end_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP + INTERVAL '1 year'),
+                target_cities TEXT[] DEFAULT ARRAY['ALL'],
+                target_user_segments TEXT[] DEFAULT ARRAY['ALL'],
+                is_active BOOLEAN DEFAULT true,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS banner_impressions (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                banner_id UUID REFERENCES banner_campaigns(id) ON DELETE CASCADE,
+                user_id VARCHAR(100),
+                city VARCHAR(100),
+                device_type VARCHAR(50) DEFAULT 'MOBILE',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS banner_clicks (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                banner_id UUID REFERENCES banner_campaigns(id) ON DELETE CASCADE,
+                user_id VARCHAR(100),
+                action VARCHAR(50),
+                action_payload TEXT,
+                city VARCHAR(100),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`
+        ],
+        down: [
+            "DROP TABLE IF EXISTS banner_clicks CASCADE;",
+            "DROP TABLE IF EXISTS banner_impressions CASCADE;",
+            "DROP TABLE IF EXISTS banner_campaigns CASCADE;",
+            "DROP TABLE IF EXISTS homepage_sections CASCADE;",
+            "DROP TABLE IF EXISTS homepage_layouts CASCADE;"
+        ]
     }
 ];
 
