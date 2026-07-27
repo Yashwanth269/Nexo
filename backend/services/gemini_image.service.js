@@ -58,12 +58,23 @@ class GeminiImageService {
     }
 
     /**
-     * Internal REST HTTPS call to Gemini Generative API
+     * Internal REST HTTPS call to Gemini Generative API matching Google GenAI SDK specs
      */
     _callGeminiApi(promptText) {
         return new Promise((resolve, reject) => {
             const postData = JSON.stringify({
-                contents: [{ parts: [{ text: promptText }] }]
+                contents: [{
+                    parts: [{ text: promptText }]
+                }],
+                generationConfig: {
+                    temperature: 1,
+                    topP: 0.95,
+                    responseModalities: ["IMAGE"],
+                    imageConfig: {
+                        aspectRatio: "1:1",
+                        imageSize: "1K"
+                    }
+                }
             });
 
             const options = {
