@@ -32,12 +32,15 @@ class GeminiImageService {
             // Persist generated image file to disk
             await fs.promises.writeFile(filePath, imageBuffer);
 
+            console.log(`✨ [GEMINI_LIVE_SUCCESS] Received live AI photo from Gemini API (${imageBuffer.length} bytes) -> ${relativeUrl}`);
+
             return {
                 success: true,
                 imageBuffer,
                 imageUrl: relativeUrl,
                 localPath: filePath,
-                provider: 'GEMINI_NANO'
+                provider: 'GEMINI_LIVE_AI',
+                fallbackUsed: false
             };
         } catch (error) {
             console.warn(`⚠️ [GEMINI_API_WARN] Gemini API call failed/quota exceeded (${error.message}). Creating fallback asset buffer.`);
