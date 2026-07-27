@@ -135,10 +135,11 @@
 
                 <select id="statusFilter" onchange="filterPrompts()" class="select-field">
                     <option value="ALL">All Image Statuses</option>
-                    <option value="READY">READY</option>
-                    <option value="DEFAULT">DEFAULT / FALLBACK</option>
-                    <option value="GENERATING">GENERATING</option>
-                    <option value="REJECTED">REJECTED</option>
+                    <option value="READY">READY (AI Generated)</option>
+                    <option value="DEFAULT">DEFAULT (Fallback Icon)</option>
+                    <option value="GENERATING">GENERATING (Live In Progress)</option>
+                    <option value="REJECTED">REJECTED (Quality Check Failed)</option>
+                    <option value="FAILED">FAILED (API Quota/Error)</option>
                 </select>
             </div>
         </div>
@@ -197,12 +198,17 @@
 
     <script>
         let allPrompts = [];
+        let autoPollTimer = null;
 
         document.addEventListener('DOMContentLoaded', () => {
             loadAllPrompts();
+            // Live status polling every 4 seconds for real-time monitoring
+            autoPollTimer = setInterval(() => {
+                loadAllPrompts(true);
+            }, 4000);
         });
 
-        async function loadAllPrompts() {
+        async function loadAllPrompts(silent = false) {
             try {
                 const res = await fetch('/api/admin/cms/ai-assets/prompts');
                 const data = await res.json();
@@ -210,14 +216,14 @@
                 if (data.success) {
                     allPrompts = data.prompts;
                     updateStats();
-                    populateCategoryFilter();
-                    renderPromptsGrid(allPrompts);
-                } else {
+                    if (!silent) populateCategoryFilter();
+                    filterPrompts();
+                } else if (!silent) {
                     showToast('Failed to load master prompts', 'error');
                 }
             } catch (err) {
                 console.error(err);
-                showToast('Error connecting to backend API', 'error');
+                if (!silent) showToast('Error connecting to backend API', 'error');
             }
         }
 
@@ -229,6 +235,7 @@
 
         function populateCategoryFilter() {
             const select = document.getElementById('categoryFilter');
+            const currentVal = select.value;
             const categories = [...new Set(allPrompts.map(p => p.category_name))].sort();
             
             select.innerHTML = '<option value="ALL">All Vertical Categories</option>';
@@ -238,6 +245,7 @@
                 opt.textContent = cat;
                 select.appendChild(opt);
             });
+            select.value = currentVal || 'ALL';
         }
 
         function filterPrompts() {
@@ -252,11 +260,7 @@
                     p.job_tool.toLowerCase().includes(search);
 
                 const matchesCat = cat === 'ALL' || p.category_name === cat;
-                const matchesStatus = status === 'ALL' || 
-                    (status === 'READY' && p.current_status === 'READY') ||
-                    (status === 'DEFAULT' && p.current_status === 'DEFAULT') ||
-                    (status === 'GENERATING' && p.current_status === 'GENERATING') ||
-                    (status === 'REJECTED' && p.current_status === 'REJECTED');
+                const matchesStatus = status === 'ALL' || p.current_status === status;
 
                 return matchesSearch && matchesCat && matchesStatus;
             });
