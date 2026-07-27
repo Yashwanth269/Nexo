@@ -576,6 +576,46 @@ const MIGRATIONS = [
             "DROP TABLE IF EXISTS homepage_sections CASCADE;",
             "DROP TABLE IF EXISTS homepage_layouts CASCADE;"
         ]
+    },
+    {
+        version: 22,
+        name: 'ai_prompt_library_and_asset_versioning',
+        up: [
+            `CREATE TABLE IF NOT EXISTS category_prompts (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                category_id UUID REFERENCES marketplace_categories(id) ON DELETE CASCADE,
+                subcategory_id UUID REFERENCES marketplace_subcategories(id) ON DELETE CASCADE,
+                job_title VARCHAR(150) NOT NULL,
+                job_tool VARCHAR(150) NOT NULL,
+                master_prompt TEXT NOT NULL,
+                negative_prompt TEXT NOT NULL,
+                style_version INT DEFAULT 1,
+                provider VARCHAR(50) DEFAULT 'GEMINI',
+                is_approved BOOLEAN DEFAULT true,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT unique_subcat_prompt UNIQUE (subcategory_id)
+            );`,
+            `CREATE TABLE IF NOT EXISTS category_images (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                category_id UUID REFERENCES marketplace_categories(id) ON DELETE CASCADE,
+                subcategory_id UUID REFERENCES marketplace_subcategories(id) ON DELETE CASCADE,
+                version INT DEFAULT 1,
+                provider VARCHAR(50) DEFAULT 'GEMINI',
+                prompt_id UUID REFERENCES category_prompts(id) ON DELETE SET NULL,
+                prompt_used TEXT,
+                image_url TEXT NOT NULL,
+                thumbnail_url TEXT,
+                status VARCHAR(30) DEFAULT 'GENERATING',
+                approved BOOLEAN DEFAULT false,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`
+        ],
+        down: [
+            "DROP TABLE IF EXISTS category_images CASCADE;",
+            "DROP TABLE IF EXISTS category_prompts CASCADE;"
+        ]
     }
 ];
 
