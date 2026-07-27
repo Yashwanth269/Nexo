@@ -4,6 +4,24 @@ class PromptGeneratorService {
     static STANDARD_NEGATIVE_PROMPT = `No text, No logo, No watermark, No background scene, No room, No building, No landscape, No extra people, No duplicate tools, No cropped body, No blur, No low quality, No dark lighting, No photo, No 3D render, No anime, No cartoon, No sketch, No oil painting, No clipart, No exaggerated proportions, No deformed hands, No floating objects, No unrealistic colors`;
 
     /**
+     * Formats category names into natural human profession titles
+     */
+    static formatProfessionName(jobTitle) {
+        const title = jobTitle.trim();
+        const lower = title.toLowerCase();
+
+        if (lower.endsWith('er') || lower.endsWith('or') || lower.endsWith('ian') || lower.endsWith('man') || lower.endsWith('specialist') || lower.endsWith('technician') || lower.endsWith('worker') || lower.endsWith('cleaner') || lower.endsWith('painter') || lower.endsWith('driver') || lower.endsWith('welder')) {
+            return title;
+        }
+
+        if (lower.endsWith('repair') || lower.endsWith('service') || lower.endsWith('maintenance') || lower.endsWith('installation') || lower.endsWith('fitting') || lower.endsWith('work') || lower.endsWith('relocation') || lower.endsWith('shifting')) {
+            return `${title} Technician`;
+        }
+
+        return `${title} Specialist`;
+    }
+
+    /**
      * Constructs standardized 15-point Master Prompt for any marketplace category asset
      */
     static generateMasterPrompt(jobTitle, jobTool) {
@@ -11,15 +29,16 @@ class PromptGeneratorService {
             throw new Error('JOB_TITLE and JOB_TOOL are required to generate master prompt.');
         }
 
-        const title = jobTitle.trim();
+        const rawTitle = jobTitle.trim();
+        const profession = this.formatProfessionName(rawTitle);
         const tool = jobTool.trim();
 
-        return `Create a premium marketplace category illustration of a professional ${title}.
+        return `Create a premium marketplace category illustration of a professional ${profession}.
 
 The illustration must follow exactly the same visual language as every other Nexo category image.
 
 Subject:
-One professional Indian ${title}.
+One professional Indian ${profession}.
 
 Appearance:
 Friendly, trustworthy, smiling, clean grooming, modern appearance.
