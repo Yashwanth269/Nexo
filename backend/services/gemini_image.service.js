@@ -69,7 +69,7 @@ class GeminiImageService {
             const options = {
                 hostname: 'generativelanguage.googleapis.com',
                 port: 443,
-                path: `/v1beta/models/gemini-2.5-flash-image:generateContent?key=${this.apiKey}`,
+                path: `/v1beta/models/gemini-3.1-flash-lite-image:generateContent?key=${this.apiKey}`,
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
