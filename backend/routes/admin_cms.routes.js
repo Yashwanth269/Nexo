@@ -82,10 +82,25 @@ router.post('/banner-click', async (req, res) => {
 router.get('/ai-assets/prompts', async (req, res) => {
     try {
         const result = await db.query(`
-            SELECT p.*, s.name as subcategory_name, s.slug as subcategory_slug, c.name as category_name
+            SELECT 
+                p.*, 
+                s.name as subcategory_name, 
+                s.slug as subcategory_slug, 
+                s.image as current_image,
+                c.name as category_name,
+                COALESCE(img.version, 0) as current_version,
+                COALESCE(img.status, 'DEFAULT') as current_status,
+                img.created_at as last_generated_at
             FROM category_prompts p
             JOIN marketplace_subcategories s ON p.subcategory_id = s.id
             JOIN marketplace_categories c ON s.category_id = c.id
+            LEFT JOIN LATERAL (
+                SELECT version, status, created_at 
+                FROM category_images 
+                WHERE subcategory_id = s.id 
+                ORDER BY version DESC, created_at DESC 
+                LIMIT 1
+            ) img ON true
             ORDER BY c.name ASC, s.name ASC;
         `);
         res.json({ success: true, count: result.rowCount, prompts: result.rows });

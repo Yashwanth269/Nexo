@@ -99,14 +99,13 @@ app.use('/uploads', express.static(uploadsDir, {
     }
 }));
 
-// Serve public folder statically (for web checkout pages and static category assets)
+// Serve public folder statically (for web checkout pages, admin dashboard, and AI generated assets)
 const publicDir = path.join(__dirname, 'public');
 if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
-app.use('/public', express.static(publicDir, {
-    setHeaders: (res) => {
-        res.set('X-Content-Type-Options', 'nosniff');
-    }
-}));
+app.use('/public', express.static(publicDir));
+app.use('/assets', express.static(path.join(publicDir, 'assets')));
+app.use('/admin', express.static(path.join(publicDir, 'admin')));
+app.get('/admin', (req, res) => res.sendFile(path.join(publicDir, 'admin', 'index.html')));
 
 const upload = multer({ 
     storage: multer.diskStorage({
