@@ -3,6 +3,7 @@
 const db = require('../config/db');
 const redis = require('../config/redis');
 const geminiImageService = require('./gemini_image.service');
+const cloudflareImageService = require('./cloudflare_image.service');
 const imageValidatorService = require('./image_validator.service');
 const promptGeneratorService = require('./prompt_generator.service');
 
