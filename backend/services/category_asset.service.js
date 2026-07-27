@@ -133,6 +133,7 @@ class CategoryAssetService {
                     version: nextVersion,
                     status: 'REJECTED',
                     reason: validation.reason,
+                    provider: genResult.provider || providerName,
                     message: 'Quality check failed. Previous active image version retained without downtime.'
                 };
             }
@@ -159,6 +160,7 @@ class CategoryAssetService {
                 version: nextVersion,
                 imageUrl: genResult.imageUrl,
                 status: 'READY',
+                provider: genResult.provider || providerName,
                 approved: true
             };
         } catch (err) {
@@ -175,6 +177,7 @@ class CategoryAssetService {
                 version: nextVersion,
                 status: 'FAILED',
                 error: err.message,
+                provider: providerName,
                 message: 'AI Generation failed. Previous active image version retained without downtime.'
             };
         }
