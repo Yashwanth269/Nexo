@@ -139,17 +139,13 @@ class ImageUtils {
 
     // If path is a local asset
     if (safePath.startsWith('assets/')) {
-      if (safePath.contains('logo') || safePath.contains('refer_banner') || safePath.contains('worker_auth')) {
-        return Image.asset(
-          safePath,
-          width: width,
-          height: height,
-          fit: fit,
-          errorBuilder: (context, error, stackTrace) => fallbackWidget,
-        );
-      }
-      // Non-existent category asset path - fallback cleanly to category icon
-      return fallbackWidget;
+      return Image.asset(
+        safePath,
+        width: width,
+        height: height,
+        fit: fit,
+        errorBuilder: (context, error, stackTrace) => fallbackWidget,
+      );
     }
 
     // Fallback URL relative path
