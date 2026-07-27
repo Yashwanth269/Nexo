@@ -87,21 +87,29 @@ class CategoryAssetService {
         `, [promptRecord.subcategory_id]);
         const nextVersion = versionRes.rows[0].next_version;
 
-        console.log(`⏳ [AI-GEN] Found master prompt for "${promptRecord.job_title}" (${promptRecord.subcat_name}). Generating Version v${nextVersion}...`);
+        // Determine AI Provider (Cloudflare Workers AI vs Gemini)
+        const useCloudflare = process.env.AI_IMAGE_PROVIDER === 'CLOUDFLARE' || 
+            Boolean(process.env.CLOUDFLARE_WORKER_URL) || 
+            Boolean(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN);
+
+        const providerName = useCloudflare ? 'CLOUDFLARE' : 'GEMINI';
+        const imageEngine = useCloudflare ? cloudflareImageService : geminiImageService;
+
+        console.log(`⏳ [AI-GEN] Found master prompt for "${promptRecord.job_title}" (${promptRecord.subcat_name}). Engine: ${providerName}. Generating Version v${nextVersion}...`);
 
         // 3. Create initial GENERATING record
         const insertRes = await db.query(`
             INSERT INTO category_images 
                 (category_id, subcategory_id, version, provider, prompt_id, prompt_used, image_url, status, approved)
             VALUES 
-                ($1, $2, $3, 'GEMINI', $4, $5, 'PENDING_GENERATION', 'GENERATING', false)
+                ($1, $2, $3, $4, $5, $6, 'PENDING_GENERATION', 'GENERATING', false)
             RETURNING id;
-        `, [promptRecord.category_id, promptRecord.subcategory_id, nextVersion, promptRecord.id, promptRecord.master_prompt]);
+        `, [promptRecord.category_id, promptRecord.subcategory_id, nextVersion, providerName, promptRecord.id, promptRecord.master_prompt]);
         const imageId = insertRes.rows[0].id;
 
         try {
-            // 4. Call Gemini API to generate image
-            const genResult = await geminiImageService.generateImage({
+            // 4. Call AI Image Generation Engine (Cloudflare Workers AI / Gemini)
+            const genResult = await imageEngine.generateImage({
                 masterPrompt: promptRecord.master_prompt,
                 negativePrompt: promptRecord.negative_prompt,
                 subcategorySlug: promptRecord.subcat_slug
