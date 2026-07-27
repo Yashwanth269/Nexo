@@ -96,7 +96,7 @@ async function seedCategoryPrompts() {
             const jobTitle = sub.subcat_name;
             const jobTool = SUB_TOOLS[jobTitle] || `${jobTitle} professional equipment & toolkit`;
 
-            const masterPrompt = PromptGeneratorService.generateMasterPrompt(jobTitle, jobTool);
+            const masterPrompt = PromptGeneratorService.generateMasterPrompt(jobTitle, jobTool, sub.cat_name);
             const negativePrompt = PromptGeneratorService.STANDARD_NEGATIVE_PROMPT;
 
             // Validate prompt before saving
