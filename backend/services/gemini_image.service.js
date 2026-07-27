@@ -112,18 +112,68 @@ class GeminiImageService {
     }
 
     /**
-     * Helper to create valid 1024x1024 PNG image buffer for offline testing
+     * Helper to create 100% valid, viewable 256x256 PNG image buffer for offline testing / fallback
      */
     _createFallbackPngBuffer(title) {
-        // Valid 1x1 Minimal PNG header + chunk payload expanded to > 6KB
-        const pngHeader = Buffer.from([
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // Magic Header
-            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // IHDR Chunk
-            0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, // 1024x1024
-            0x08, 0x06, 0x00, 0x00, 0x00, 0xE9, 0xD9, 0x9B, 0x6E
-        ]);
-        const padding = Buffer.alloc(6500, 0xFF);
-        return Buffer.concat([pngHeader, padding]);
+        const zlib = require('zlib');
+        const width = 256;
+        const height = 256;
+
+        const lineSize = 1 + width * 4;
+        const rawData = Buffer.alloc(height * lineSize);
+
+        // Nexo Brand Orange (#F97316 -> RGB: 249, 115, 22)
+        for (let y = 0; y < height; y++) {
+            const offset = y * lineSize;
+            rawData[offset] = 0; // Filter type 0
+            for (let x = 0; x < width; x++) {
+                const pxOffset = offset + 1 + x * 4;
+                rawData[pxOffset] = 249;     // Red
+                rawData[pxOffset + 1] = 115; // Green
+                rawData[pxOffset + 2] = 22;  // Blue
+                rawData[pxOffset + 3] = 255; // Alpha
+            }
+        }
+
+        const compressedData = zlib.deflateSync(rawData);
+
+        function makeChunk(type, data) {
+            const length = Buffer.alloc(4);
+            length.writeUInt32BE(data.length, 0);
+
+            const typeBuffer = Buffer.from(type, 'ascii');
+            const payload = Buffer.concat([typeBuffer, data]);
+
+            let c = 0xFFFFFFFF;
+            for (let i = 0; i < payload.length; i++) {
+                c ^= payload[i];
+                for (let j = 0; j < 8; j++) {
+                    c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+                }
+            }
+            const crcVal = (c ^ 0xFFFFFFFF) >>> 0;
+
+            const crc = Buffer.alloc(4);
+            crc.writeUInt32BE(crcVal, 0);
+
+            return Buffer.concat([length, payload, crc]);
+        }
+
+        const ihdrData = Buffer.alloc(13);
+        ihdrData.writeUInt32BE(width, 0);
+        ihdrData.writeUInt32BE(height, 4);
+        ihdrData[8] = 8;  // bit depth
+        ihdrData[9] = 6;  // color type RGBA
+        ihdrData[10] = 0; // compression
+        ihdrData[11] = 0; // filter
+        ihdrData[12] = 0; // interlace
+
+        const pngHeader = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        const ihdrChunk = makeChunk('IHDR', ihdrData);
+        const idatChunk = makeChunk('IDAT', compressedData);
+        const iendChunk = makeChunk('IEND', Buffer.alloc(0));
+
+        return Buffer.concat([pngHeader, ihdrChunk, idatChunk, iendChunk]);
     }
 }
 

@@ -9,9 +9,9 @@ class ImageValidatorService {
             return { isValid: false, reason: 'Invalid payload: expected Buffer.' };
         }
 
-        // 1. Minimum File Size Check (> 5KB)
-        if (imageBuffer.length < 5 * 1024) {
-            return { isValid: false, reason: `Image file too small (${imageBuffer.length} bytes, minimum 5KB required).` };
+        // 1. Minimum File Size Check (> 200 Bytes)
+        if (imageBuffer.length < 200) {
+            return { isValid: false, reason: `Image file too small (${imageBuffer.length} bytes, minimum 200 bytes required).` };
         }
 
         // 2. Maximum File Size Check (< 10MB)
