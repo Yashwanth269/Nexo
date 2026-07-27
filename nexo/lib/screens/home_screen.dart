@@ -393,11 +393,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
 
   void _handleBannerAction(String? action, String? payload) {
     if (action == 'OPEN_CATEGORY') {
+      final categoryName = payload ?? 'Home Services';
+      final categoryData = ServiceData.categories.firstWhere(
+        (cat) => cat["name"] == categoryName,
+        orElse: () => <String, dynamic>{
+          "workers": <String>["General Service"],
+          "color": const Color(0xFFFF6A00)
+        },
+      );
+      final List<String> workers = (categoryData["workers"] as List?)?.cast<String>() ?? ["General Service"];
+      final Color color = (categoryData["color"] as Color?) ?? const Color(0xFFFF6A00);
+
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => WorkerTypesScreen(
-            categoryName: payload ?? 'Home Services',
+            categoryName: categoryName,
+            workerTypes: workers,
+            color: color,
           ),
         ),
       );
@@ -1470,7 +1483,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                             ),
                             child: Text(
                               badge,
-                              style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.extrabold, color: const Color(0xFF78350F)),
+                              style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF78350F)),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -1480,7 +1493,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                               title,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.outfit(fontSize: 19, fontWeight: FontWeight.extrabold, color: const Color(0xFF1E293B)),
+                              style: GoogleFonts.outfit(fontSize: 19, fontWeight: FontWeight.w800, color: const Color(0xFF1E293B)),
                             ),
                           ),
                           const SizedBox(height: 3),
@@ -1747,7 +1760,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                         ),
                         child: Text(
                           badge,
-                          style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.extrabold, color: const Color(0xFF1E293B)),
+                          style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF1E293B)),
                         ),
                       ),
                       Column(
