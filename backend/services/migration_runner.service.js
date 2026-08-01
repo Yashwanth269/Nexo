@@ -444,7 +444,6 @@ const MIGRATIONS = [
         name: 'clean_stock_photo_placeholders',
         up: [
             "UPDATE workers SET photo_url = NULL WHERE photo_url LIKE '%unsplash%' OR photo_url LIKE '%pravatar%' OR photo_url LIKE '%adventurer%' OR photo_url LIKE '%i.pravatar.cc%';",
-            "UPDATE users SET photo_url = NULL WHERE photo_url LIKE '%unsplash%' OR photo_url LIKE '%pravatar%' OR photo_url LIKE '%adventurer%' OR photo_url LIKE '%i.pravatar.cc%';",
             "UPDATE users SET avatar_url = NULL WHERE avatar_url LIKE '%unsplash%' OR avatar_url LIKE '%pravatar%' OR avatar_url LIKE '%adventurer%' OR avatar_url LIKE '%i.pravatar.cc%';"
         ],
         down: []
@@ -615,6 +614,301 @@ const MIGRATIONS = [
         down: [
             "DROP TABLE IF EXISTS category_images CASCADE;",
             "DROP TABLE IF EXISTS category_prompts CASCADE;"
+        ]
+    },
+    {
+        version: 23,
+        name: 'team_jobs_marketplace_module',
+        up: [
+            `CREATE TABLE IF NOT EXISTS team_jobs (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                category VARCHAR(100) NOT NULL,
+                subcategory_id UUID NOT NULL REFERENCES marketplace_subcategories(id) ON DELETE CASCADE,
+                description TEXT NOT NULL,
+                workers_required INT NOT NULL,
+                duration_days INT NOT NULL,
+                start_time TIME NOT NULL,
+                end_time TIME NOT NULL,
+                pricing_type VARCHAR(20) NOT NULL,
+                overall_budget DECIMAL(10, 2),
+                daily_wage_per_worker DECIMAL(10, 2),
+                calculated_total DECIMAL(10, 2),
+                photos TEXT[] DEFAULT '{}'::TEXT[],
+                video_url TEXT,
+                location_lat DECIMAL(9, 6) NOT NULL,
+                location_lng DECIMAL(9, 6) NOT NULL,
+                address TEXT,
+                preferred_start_date DATE NOT NULL,
+                status VARCHAR(50) DEFAULT 'BROADCASTING',
+                leader_id UUID REFERENCES workers(id) ON DELETE SET NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS verified_teams (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                leader_id UUID REFERENCES workers(id) ON DELETE CASCADE UNIQUE,
+                team_name VARCHAR(150) NOT NULL UNIQUE,
+                rating DECIMAL(3, 2) DEFAULT 5.00,
+                projects_completed INT DEFAULT 0,
+                members_count INT DEFAULT 1,
+                attendance_rate DECIMAL(5, 2) DEFAULT 100.00,
+                completion_rate DECIMAL(5, 2) DEFAULT 100.00,
+                is_verified BOOLEAN DEFAULT true,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS team_members (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                team_job_id UUID REFERENCES team_jobs(id) ON DELETE CASCADE,
+                worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                role VARCHAR(50) DEFAULT 'MEMBER',
+                joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT unique_team_member UNIQUE (team_job_id, worker_id)
+            );`,
+            `CREATE TABLE IF NOT EXISTS team_proposals (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                team_job_id UUID REFERENCES team_jobs(id) ON DELETE CASCADE,
+                leader_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                budget DECIMAL(10, 2) NOT NULL,
+                workers_count INT NOT NULL,
+                duration_days INT NOT NULL,
+                estimated_completion_date DATE,
+                message TEXT,
+                status VARCHAR(30) DEFAULT 'PENDING',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS team_attendance (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                team_job_id UUID REFERENCES team_jobs(id) ON DELETE CASCADE,
+                worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                work_date DATE NOT NULL,
+                check_in_time TIMESTAMP WITH TIME ZONE,
+                check_out_time TIMESTAMP WITH TIME ZONE,
+                check_in_lat DECIMAL(9, 6),
+                check_in_lng DECIMAL(9, 6),
+                check_out_lat DECIMAL(9, 6),
+                check_out_lng DECIMAL(9, 6),
+                status VARCHAR(30) DEFAULT 'ABSENT',
+                check_in_confirmed BOOLEAN DEFAULT false,
+                check_out_confirmed BOOLEAN DEFAULT false,
+                face_verified BOOLEAN DEFAULT false,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT unique_worker_date_attendance UNIQUE (team_job_id, worker_id, work_date)
+            );`,
+            `CREATE TABLE IF NOT EXISTS daily_progress (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                team_job_id UUID REFERENCES team_jobs(id) ON DELETE CASCADE,
+                work_date DATE NOT NULL,
+                percentage_completed INT NOT NULL,
+                remarks TEXT,
+                materials_used JSONB DEFAULT '[]'::jsonb,
+                problems_faced TEXT,
+                photos TEXT[] DEFAULT '{}'::TEXT[],
+                video_url TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT unique_job_date_progress UNIQUE (team_job_id, work_date)
+            );`,
+            `CREATE TABLE IF NOT EXISTS team_ratings (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                team_job_id UUID REFERENCES team_jobs(id) ON DELETE CASCADE,
+                rated_by_id UUID NOT NULL,
+                target_id UUID NOT NULL,
+                rating_type VARCHAR(50) NOT NULL,
+                rating DECIMAL(3, 2) NOT NULL,
+                review TEXT,
+                attendance_rating INT,
+                quality_rating INT,
+                behaviour_rating INT,
+                teamwork_rating INT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS leader_bonus (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                leader_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                team_job_id UUID REFERENCES team_jobs(id) ON DELETE CASCADE,
+                bonus_amount DECIMAL(10, 2) NOT NULL,
+                reason VARCHAR(255) NOT NULL,
+                status VARCHAR(30) DEFAULT 'PENDING',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS attendance_logs (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                team_job_id UUID REFERENCES team_jobs(id) ON DELETE CASCADE,
+                worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                log_type VARCHAR(50) NOT NULL,
+                location_lat DECIMAL(9, 6),
+                location_lng DECIMAL(9, 6),
+                distance_from_site_meters DECIMAL,
+                details JSONB,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS team_invitations (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                team_job_id UUID REFERENCES team_jobs(id) ON DELETE CASCADE,
+                leader_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                status VARCHAR(30) DEFAULT 'PENDING',
+                expected_earnings DECIMAL(10, 2) NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS team_notifications (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID,
+                worker_id UUID,
+                team_job_id UUID REFERENCES team_jobs(id) ON DELETE CASCADE,
+                title VARCHAR(255) NOT NULL,
+                message TEXT NOT NULL,
+                notification_type VARCHAR(50) NOT NULL,
+                is_read BOOLEAN DEFAULT false,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS team_wallet_distribution (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                team_job_id UUID REFERENCES team_jobs(id) ON DELETE CASCADE,
+                worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                amount DECIMAL(10, 2) NOT NULL,
+                role_at_time VARCHAR(50) NOT NULL,
+                status VARCHAR(30) DEFAULT 'ESCROWED',
+                payout_date TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS team_incentives (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                achievement_type VARCHAR(50) NOT NULL,
+                tier VARCHAR(30) NOT NULL,
+                bonus_applied DECIMAL(10, 2) DEFAULT 0.00,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS additional_work_requests (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                team_job_id UUID REFERENCES team_jobs(id) ON DELETE CASCADE,
+                requested_by UUID REFERENCES workers(id) ON DELETE SET NULL,
+                extra_budget DECIMAL(10, 2) DEFAULT 0.00,
+                extra_time_days INT DEFAULT 0,
+                extra_materials TEXT,
+                reason TEXT NOT NULL,
+                status VARCHAR(30) DEFAULT 'PENDING',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );`
+        ],
+        down: [
+            "DROP TABLE IF EXISTS team_jobs CASCADE;",
+            "DROP TABLE IF EXISTS verified_teams CASCADE;",
+            "DROP TABLE IF EXISTS team_members CASCADE;",
+            "DROP TABLE IF EXISTS team_proposals CASCADE;",
+            "DROP TABLE IF EXISTS team_attendance CASCADE;",
+            "DROP TABLE IF EXISTS daily_progress CASCADE;",
+            "DROP TABLE IF EXISTS team_ratings CASCADE;",
+            "DROP TABLE IF EXISTS leader_bonus CASCADE;",
+            "DROP TABLE IF EXISTS attendance_logs CASCADE;",
+            "DROP TABLE IF EXISTS team_invitations CASCADE;",
+            "DROP TABLE IF EXISTS team_notifications CASCADE;",
+            "DROP TABLE IF EXISTS team_wallet_distribution CASCADE;",
+            "DROP TABLE IF EXISTS team_incentives CASCADE;",
+            "DROP TABLE IF EXISTS additional_work_requests CASCADE;"
+        ]
+    },
+    {
+        version: 24,
+        name: 'categories_refactor_3tier',
+        up: [
+            // Drop legacy tables in dependency order
+            `TRUNCATE TABLE jobs, team_jobs CASCADE;`,
+            `DROP TABLE IF EXISTS category_metadata CASCADE;`,
+            `DROP TABLE IF EXISTS service_pricing CASCADE;`,
+            `DROP TABLE IF EXISTS worker_skills CASCADE;`,
+            `DROP TABLE IF EXISTS marketplace_subcategories CASCADE;`,
+            `DROP TABLE IF EXISTS marketplace_categories CASCADE;`,
+
+            // Create new 3-tier tables
+            `CREATE TABLE IF NOT EXISTS marketplace_categories (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name VARCHAR(100) NOT NULL UNIQUE,
+                slug VARCHAR(100) NOT NULL UNIQUE,
+                icon VARCHAR(100),
+                emoji VARCHAR(10),
+                description TEXT,
+                color VARCHAR(7),
+                sort_order INT DEFAULT 0,
+                is_active BOOLEAN DEFAULT true,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );`,
+
+            `CREATE TABLE IF NOT EXISTS marketplace_subcategories (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                category_id UUID NOT NULL REFERENCES marketplace_categories(id) ON DELETE CASCADE,
+                name VARCHAR(100) NOT NULL,
+                slug VARCHAR(100) NOT NULL UNIQUE,
+                icon VARCHAR(100),
+                image_1x1 TEXT,
+                image_16x9 TEXT,
+                sort_order INT DEFAULT 0,
+                is_active BOOLEAN DEFAULT true,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );`,
+
+            `CREATE TABLE IF NOT EXISTS marketplace_jobs (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                category_id UUID NOT NULL REFERENCES marketplace_categories(id) ON DELETE CASCADE,
+                subcategory_id UUID NOT NULL REFERENCES marketplace_subcategories(id) ON DELETE CASCADE,
+                name VARCHAR(150) NOT NULL,
+                slug VARCHAR(150) NOT NULL UNIQUE,
+                image_1x1 TEXT,
+                image_16x9 TEXT,
+                is_team_job BOOLEAN DEFAULT false,
+                min_workers INT DEFAULT 1,
+                max_workers INT DEFAULT 1,
+                default_pricing_type VARCHAR(20) DEFAULT 'FIXED',
+                min_price NUMERIC(10,2) DEFAULT 0,
+                max_price NUMERIC(10,2) DEFAULT 0,
+                keywords TEXT[],
+                is_active BOOLEAN DEFAULT true,
+                sort_order INT DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );`,
+
+            `CREATE TABLE IF NOT EXISTS worker_skills (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                worker_id UUID NOT NULL REFERENCES workers(id) ON DELETE CASCADE,
+                job_id UUID REFERENCES marketplace_jobs(id) ON DELETE CASCADE,
+                subcategory_id UUID REFERENCES marketplace_subcategories(id) ON DELETE CASCADE,
+                skill_name VARCHAR(100) NOT NULL,
+                experience_years INT DEFAULT 1,
+                hourly_rate NUMERIC(10,2),
+                fixed_rate NUMERIC(10,2),
+                pricing_type VARCHAR(20) DEFAULT 'HOURLY',
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT unique_worker_job UNIQUE (worker_id, job_id)
+            );`,
+
+            // Add job_id FK to team_jobs
+            `ALTER TABLE team_jobs ADD COLUMN IF NOT EXISTS job_id UUID REFERENCES marketplace_jobs(id);`,
+
+            // Restore subcategory foreign key on team_jobs
+            `ALTER TABLE team_jobs ADD CONSTRAINT fk_team_jobs_subcategory FOREIGN KEY (subcategory_id) REFERENCES marketplace_subcategories(id) ON DELETE CASCADE;`,
+
+            // Indexes
+            `CREATE INDEX IF NOT EXISTS idx_marketplace_jobs_category ON marketplace_jobs(category_id);`,
+            `CREATE INDEX IF NOT EXISTS idx_marketplace_jobs_subcategory ON marketplace_jobs(subcategory_id);`,
+            `CREATE INDEX IF NOT EXISTS idx_marketplace_jobs_team ON marketplace_jobs(is_team_job) WHERE is_team_job = true;`,
+            `CREATE INDEX IF NOT EXISTS idx_marketplace_jobs_slug ON marketplace_jobs(slug);`,
+            `CREATE INDEX IF NOT EXISTS idx_worker_skills_worker ON worker_skills(worker_id);`,
+            `CREATE INDEX IF NOT EXISTS idx_worker_skills_job ON worker_skills(job_id);`
+        ],
+        down: [
+            "ALTER TABLE team_jobs DROP COLUMN IF EXISTS job_id;",
+            "DROP TABLE IF EXISTS worker_skills CASCADE;",
+            "DROP TABLE IF EXISTS marketplace_jobs CASCADE;",
+            "DROP TABLE IF EXISTS marketplace_subcategories CASCADE;",
+            "DROP TABLE IF EXISTS marketplace_categories CASCADE;"
         ]
     }
 ];

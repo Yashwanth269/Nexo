@@ -393,24 +393,78 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
 
   void _handleBannerAction(String? action, String? payload) {
     if (action == 'OPEN_CATEGORY') {
-      final categoryName = payload ?? 'Home Services';
-      final categoryData = ServiceData.categories.firstWhere(
-        (cat) => cat["name"] == categoryName,
-        orElse: () => <String, dynamic>{
-          "workers": <String>["General Service"],
-          "color": const Color(0xFFFF6A00)
-        },
+      final searchPayload = (payload ?? 'Home Services').toLowerCase().trim();
+      String resolvedCategoryName = 'Home Services';
+      String? initialSubcategory;
+      Map<String, dynamic>? resolvedCategory;
+
+      // 1. Direct category match
+      for (var cat in ServiceData.categories) {
+        if (cat["name"].toString().toLowerCase() == searchPayload) {
+          resolvedCategory = cat;
+          resolvedCategoryName = cat["name"];
+          break;
+        }
+      }
+
+      // 2. Subcategory / Specialization match
+      if (resolvedCategory == null) {
+        for (var cat in ServiceData.categories) {
+          final subcats = (cat["subcategories"] as List?) ?? [];
+          for (var sub in subcats) {
+            final subName = sub["name"].toString().toLowerCase();
+            if (subName == searchPayload ||
+                (searchPayload == 'electrician' && subName == 'electrical') ||
+                (searchPayload == 'plumber' && subName == 'plumbing') ||
+                subName.contains(searchPayload) || searchPayload.contains(subName)) {
+              resolvedCategory = cat;
+              resolvedCategoryName = cat["name"];
+              initialSubcategory = sub["name"];
+              break;
+            }
+          }
+          if (resolvedCategory != null) break;
+        }
+      }
+
+      // 3. Task level match
+      if (resolvedCategory == null) {
+        for (var cat in ServiceData.categories) {
+          final subcats = (cat["subcategories"] as List?) ?? [];
+          for (var sub in subcats) {
+            final tasks = (sub["tasks"] as List?) ?? [];
+            for (var t in tasks) {
+              final tName = t["name"].toString().toLowerCase();
+              if (tName == searchPayload || tName.contains(searchPayload)) {
+                resolvedCategory = cat;
+                resolvedCategoryName = cat["name"];
+                initialSubcategory = sub["name"];
+                break;
+              }
+            }
+            if (resolvedCategory != null) break;
+          }
+          if (resolvedCategory != null) break;
+        }
+      }
+
+      // 4. Default fallback
+      resolvedCategory ??= ServiceData.categories.firstWhere(
+        (cat) => cat["name"] == "Home Services",
+        orElse: () => ServiceData.categories.first,
       );
-      final List<String> workers = (categoryData["workers"] as List?)?.cast<String>() ?? ["General Service"];
-      final Color color = (categoryData["color"] as Color?) ?? const Color(0xFFFF6A00);
+
+      final List<String> workers = (resolvedCategory["workers"] as List?)?.cast<String>() ?? ["General Service"];
+      final Color color = (resolvedCategory["color"] as Color?) ?? const Color(0xFFFF6A00);
 
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => WorkerTypesScreen(
-            categoryName: categoryName,
+            categoryName: resolvedCategoryName,
             workerTypes: workers,
             color: color,
+            initialSubcategory: initialSubcategory,
           ),
         ),
       );
@@ -1157,14 +1211,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                     const SizedBox(height: 18),
 
                     // Dynamic Backend-Driven Sections Engine
-                    ...(_dynamicSections.isNotEmpty ? _dynamicSections : [
-                      {'type': 'hero_banner', 'data': []},
-                      {'type': 'quick_actions', 'data': []},
-                      {'type': 'top_picks', 'data': []},
-                      {'type': 'deals_and_events', 'data': []},
-                      {'type': 'all_categories', 'data': []},
-                      {'type': 'promo_toast', 'data': null}
-                    ]).map((sec) {
+                    ...(() {
+                      final List<dynamic> rawSecList = _dynamicSections.isNotEmpty ? _dynamicSections : [
+                        {'type': 'hero_banner', 'data': []},
+                        {'type': 'quick_actions', 'data': []},
+                        {'type': 'top_picks', 'data': []},
+                        {'type': 'deals_and_events', 'data': []},
+                        {'type': 'all_categories', 'data': []},
+                        {'type': 'promo_toast', 'data': null}
+                      ];
+                      final Set<String> uniqueTypes = {};
+                      return rawSecList.where((sec) {
+                        final type = sec['type'] ?? '';
+                        if (type.isNotEmpty) {
+                          if (uniqueTypes.contains(type)) return false;
+                          uniqueTypes.add(type);
+                        }
+                        return true;
+                      }).toList();
+                    })().map((sec) {
                       final String type = sec['type'] ?? '';
                       final data = sec['data'];
 

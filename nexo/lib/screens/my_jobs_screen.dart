@@ -13,6 +13,8 @@ import 'package:nexo/utils/network_helper.dart';
 import 'package:nexo/utils/image_utils.dart';
 import 'package:nexo/services/socket_service.dart';
 import 'package:nexo/components/glass_components.dart';
+import 'package:nexo/screens/team_job_proposals_screen.dart';
+import 'package:nexo/screens/team_attendance_screen.dart';
 
 class TabItem {
   final String label;
@@ -43,8 +45,12 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
   List<dynamic> _jobs = [];
   bool _isLoading = true;
   String? _userPhoto;
+  
+  // Team Contracts state variables
+  bool _showTeamContracts = false;
+  List<dynamic> _teamJobs = [];
 
-  // Cached credentials â€” loaded once in initState to avoid repeated SharedPrefs disk reads
+  // Cached credentials — loaded once in initState to avoid repeated SharedPrefs disk reads
   String? _cachedUserId;
   String? _cachedToken;
 
@@ -81,6 +87,28 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
     _initAll();
   }
 
+  Future<void> _fetchTeamJobs() async {
+    try {
+      final token = _cachedToken ?? await SharedPrefsHelper.getToken();
+      final response = await http.get(
+        Uri.parse('${NetworkHelper.baseUrl}/api/team-jobs/active'),
+        headers: {
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (mounted) {
+          setState(() {
+            _teamJobs = data['teamJobs'] ?? [];
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Error fetching team jobs: $e");
+    }
+  }
+
   /// Load credentials once, then kick off all parallel async work
   Future<void> _initAll() async {
     _cachedUserId = await SharedPrefsHelper.getUserId();
@@ -88,6 +116,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
     // Run fetch + profile + socket in parallel now that credentials are cached
     await Future.wait([
       _fetchJobs(),
+      _fetchTeamJobs(),
       _loadProfile(),
     ]);
     _initSocket();
@@ -796,7 +825,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
           ),
         ],
         // Replace old PreferredSize TabBar with our custom animated floating segmented island
-        bottom: PreferredSize(
+        bottom: _showTeamContracts ? null : PreferredSize(
           preferredSize: const Size.fromHeight(64),
           child: _buildDynamicTabSelector(),
         ),
@@ -805,32 +834,98 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
         child: SafeArea(
           child: Column(
             children: [
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    RefreshIndicator(
-                      onRefresh: _fetchJobs,
-                      color: primaryColor,
-                      child: _buildJobsList("New"),
-                    ),
-                    RefreshIndicator(
-                      onRefresh: _fetchJobs,
-                      color: primaryColor,
-                      child: _buildJobsList("Active"),
-                    ),
-                    RefreshIndicator(
-                      onRefresh: _fetchJobs,
-                      color: primaryColor,
-                      child: _buildJobsList("Completed"),
-                    ),
-                    RefreshIndicator(
-                      onRefresh: _fetchJobs,
-                      color: primaryColor,
-                      child: _buildJobsList("Cancelled"),
-                    ),
-                  ],
+              // Dynamic island-style switcher between Individual Gigs and Team Contracts
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _showTeamContracts = false),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: !_showTeamContracts ? const Color(0xFFFF6A00) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: Text(
+                                "Individual Gigs",
+                                style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color: !_showTeamContracts ? Colors.white : textPrimary.withOpacity(0.7),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _showTeamContracts = true),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: _showTeamContracts ? const Color(0xFFFF6A00) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: Text(
+                                "👥 Team Contracts",
+                                style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color: _showTeamContracts ? Colors.white : textPrimary.withOpacity(0.7),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              ),
+              Expanded(
+                child: _showTeamContracts
+                    ? RefreshIndicator(
+                        onRefresh: _fetchTeamJobs,
+                        color: primaryColor,
+                        child: _buildTeamJobsList(),
+                      )
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          RefreshIndicator(
+                            onRefresh: _fetchJobs,
+                            color: primaryColor,
+                            child: _buildJobsList("New"),
+                          ),
+                          RefreshIndicator(
+                            onRefresh: _fetchJobs,
+                            color: primaryColor,
+                            child: _buildJobsList("Active"),
+                          ),
+                          RefreshIndicator(
+                            onRefresh: _fetchJobs,
+                            color: primaryColor,
+                            child: _buildJobsList("Completed"),
+                          ),
+                          RefreshIndicator(
+                            onRefresh: _fetchJobs,
+                            color: primaryColor,
+                            child: _buildJobsList("Cancelled"),
+                          ),
+                        ],
+                      ),
               ),
               
               // Bottom Promotion/Alert Banner Card
@@ -1636,6 +1731,172 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
         margin: const EdgeInsets.only(bottom: 12),
         color: isActive ? primaryColor : (isDark ? Colors.white10 : Colors.black.withOpacity(0.08)),
       ),
+    );
+  }
+
+  Widget _buildTeamJobsList() {
+    if (_teamJobs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.groups_rounded, size: 48, color: Color(0xFF94A3B8)),
+            const SizedBox(height: 12),
+            Text("No Team Contracts Active", style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF475569))),
+            const SizedBox(height: 4),
+            Text("You haven't posted any team jobs yet.", style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      itemCount: _teamJobs.length,
+      itemBuilder: (context, index) {
+        final job = _teamJobs[index];
+        final String status = job['status'] ?? "BROADCASTING";
+        final double budget = double.tryParse(job['calculated_total']?.toString() ?? '0') ?? 0.0;
+        final String category = job['category'] ?? "Contract Job";
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              )
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF6A00).withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.groups, color: Color(0xFFFF6A00), size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(category, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: const Color(0xFF0F172A))),
+                            const SizedBox(height: 2),
+                            Text("${job['workers_required'] ?? 4} Workers Needed", style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Text("₹${budget.toStringAsFixed(0)}", style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18, color: const Color(0xFFFF6A00))),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: Color(0xFFF1F5F9)),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  job['description'] ?? "No description.",
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569), height: 1.4),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: status == 'BROADCASTING' ? const Color(0xFFEFF6FF) : const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        status,
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                          color: status == 'BROADCASTING' ? const Color(0xFF2563EB) : const Color(0xFF16A34A),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF6A00),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
+                    ),
+                    onPressed: () {
+                      if (status == 'BROADCASTING') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => TeamJobProposalsScreen(
+                              job: {
+                                'id': job['id'],
+                                'category': job['category'],
+                                'description': job['description'],
+                                'workers_required': job['workers_required'],
+                                'duration_days': job['duration_days'],
+                                'calculated_total': budget,
+                              },
+                            ),
+                          ),
+                        ).then((_) => _fetchTeamJobs());
+                      } else {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => TeamAttendanceScreen(
+                              teamJob: {
+                                'id': job['id'],
+                                'category': job['category'],
+                                'description': job['description'],
+                                'workers_required': job['workers_required'],
+                                'duration_days': job['duration_days'],
+                                'calculated_total': budget,
+                                'preferred_start_date': job['preferred_start_date'],
+                              },
+                            ),
+                          ),
+                        ).then((_) => _fetchTeamJobs());
+                      }
+                    },
+                    child: Text(
+                      status == 'BROADCASTING' ? "Compare Proposals" : "Track Attendance & Timeline",
+                      style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

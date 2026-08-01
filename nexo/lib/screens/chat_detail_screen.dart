@@ -10,6 +10,7 @@ import 'package:nexo/services/shared_prefs_helper.dart';
 import 'package:nexo/screens/report_worker_screen.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:nexo/utils/network_helper.dart';
+import 'package:nexo/utils/image_utils.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final String jobId;
@@ -268,7 +269,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               children: [
                 CircleAvatar(
                   radius: 35,
-                  backgroundImage: AssetImage(widget.image),
+                  backgroundImage: ImageUtils.getImageProvider(widget.image),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -375,7 +376,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             children: [
               CircleAvatar(
                 radius: 18,
-                backgroundImage: AssetImage(widget.image),
+                backgroundImage: ImageUtils.getImageProvider(widget.image),
                 onBackgroundImageError: (e, s) => const Icon(Icons.person),
               ),
               const SizedBox(width: 12),

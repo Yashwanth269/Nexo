@@ -8,12 +8,14 @@ class WorkerTypesScreen extends StatefulWidget {
   final String categoryName;
   final List<String> workerTypes;
   final Color color;
+  final String? initialSubcategory;
 
   const WorkerTypesScreen({
     super.key,
     required this.categoryName,
     required this.workerTypes,
     required this.color,
+    this.initialSubcategory,
   });
 
   @override
@@ -26,6 +28,23 @@ class _WorkerTypesScreenState extends State<WorkerTypesScreen> {
   static const Color bgColor = Color(0xFFF6F7F9);
 
   int? _selectedIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialSubcategory != null) {
+      final index = widget.workerTypes.indexWhere(
+        (type) => type.toLowerCase() == widget.initialSubcategory!.toLowerCase() ||
+                  (widget.initialSubcategory!.toLowerCase() == 'electrician' && type.toLowerCase() == 'electrical') ||
+                  (widget.initialSubcategory!.toLowerCase() == 'plumber' && type.toLowerCase() == 'plumbing') ||
+                  type.toLowerCase().contains(widget.initialSubcategory!.toLowerCase()) ||
+                  widget.initialSubcategory!.toLowerCase().contains(type.toLowerCase())
+      );
+      if (index != -1) {
+        _selectedIndex = index;
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

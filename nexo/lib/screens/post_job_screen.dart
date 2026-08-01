@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -14,6 +15,8 @@ import 'package:nexo/screens/searching_workers_screen.dart';
 import 'package:nexo/screens/map_location_picker_screen.dart';
 import 'package:nexo/components/glass_components.dart';
 import 'package:nexo/screens/auth_screen.dart';
+import 'package:nexo/screens/team_job_proposals_screen.dart';
+import 'package:image_picker/image_picker.dart';
 
 class PostJobScreen extends StatefulWidget {
   final String? initialTask;
@@ -63,6 +66,19 @@ class _PostJobScreenState extends State<PostJobScreen> {
   StreamSubscription? _locationSubscription;
   final String baseUrl = NetworkHelper.baseUrl;
   
+  // Team Jobs state variables
+  bool _isTeamJob = false;
+  int _workersRequired = 4;
+  int _teamDurationDays = 5;
+  String _teamStartTime = "09:00 AM";
+  String _teamEndTime = "06:00 PM";
+  String _teamPricingType = "OVERALL_BUDGET"; // "OVERALL_BUDGET" or "DAILY_WAGE"
+  final TextEditingController _teamBudgetController = TextEditingController(text: "30000");
+  final TextEditingController _teamDailyWageController = TextEditingController(text: "900");
+  DateTime _teamPreferredStartDate = DateTime.now().add(const Duration(days: 1));
+  final List<XFile> _teamMediaFiles = [];
+  bool _isPickingMedia = false;
+  
   // Removed local _categories list as it's now in ServiceData
 
   @override
@@ -88,12 +104,30 @@ class _PostJobScreenState extends State<PostJobScreen> {
 
   void _resolveInitialTask(String? taskName) {
     if (taskName == null || taskName.isEmpty) return;
+    
+    // 1. Try resolving as a specific task/job first
+    final taskInfo = ServiceData.findTaskByName(taskName);
+    if (taskInfo != null) {
+      setState(() {
+        _selectedCategory = taskInfo['name'];
+        _selectedTaskId = taskInfo['id'];
+        _selectedIcon = taskInfo['categoryIcon'];
+        _selectedImage = taskInfo['image'];
+        _isTeamJob = taskInfo['isTeamJob'] ?? false;
+        _workersRequired = taskInfo['minWorkers'] ?? 4;
+        _showPopularGrid = false;
+      });
+      return;
+    }
+
+    // 2. Fallback to direct categories/subcategories name match loop
     for (var cat in ServiceData.categories) {
       if (cat['name'].toString().toLowerCase() == taskName.toLowerCase()) {
         setState(() {
           _selectedCategory = cat['name'];
           _selectedIcon = cat['icon'];
           _selectedImage = cat['image'];
+          _isTeamJob = false;
           _showPopularGrid = false;
         });
         return;
@@ -105,23 +139,10 @@ class _PostJobScreenState extends State<PostJobScreen> {
               _selectedCategory = sub['name'];
               _selectedIcon = cat['icon'];
               _selectedImage = sub['image'];
+              _isTeamJob = false;
               _showPopularGrid = false;
             });
             return;
-          }
-          if (sub['tasks'] != null) {
-            for (var task in sub['tasks']) {
-              if (task['name'].toString().toLowerCase() == taskName.toLowerCase()) {
-                setState(() {
-                  _selectedCategory = task['name'];
-                  _selectedTaskId = task['id'];
-                  _selectedIcon = cat['icon'];
-                  _selectedImage = task['image'];
-                  _showPopularGrid = false;
-                });
-                return;
-              }
-            }
           }
         }
       }
@@ -180,13 +201,116 @@ class _PostJobScreenState extends State<PostJobScreen> {
     try {
         final userId = await SharedPrefsHelper.getUserId();
         final token = await SharedPrefsHelper.getToken();
-        print("Requesting workers for userId: $userId");
+        print("Requesting workers/teams for userId: $userId");
         if (userId == null) {
           Navigator.pop(context); // Close loading
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (context) => const AuthScreen()),
             (route) => false,
           );
+          return;
+        }
+
+        if (_isTeamJob) {
+          // Upload local media files first to get S3 or backend static URLs
+          final List<String> uploadedPhotos = [];
+          String? uploadedVideoUrl;
+
+          for (final file in _teamMediaFiles) {
+            final isVideo = file.name.endsWith('.mp4') || file.name.endsWith('.mov') || file.name.endsWith('.avi');
+            
+            try {
+              final request = http.MultipartRequest(
+                'POST',
+                Uri.parse('$baseUrl/api/user/upload-photo'),
+              );
+              
+              if (token != null) {
+                request.headers['Authorization'] = 'Bearer $token';
+              }
+              
+              request.files.add(await http.MultipartFile.fromPath('photo', file.path));
+              
+              final streamedResponse = await request.send();
+              final uploadResponse = await http.Response.fromStream(streamedResponse);
+              
+              if (uploadResponse.statusCode == 200) {
+                final uploadData = json.decode(uploadResponse.body);
+                if (uploadData['success'] == true && uploadData['photoUrl'] != null) {
+                  final String uploadedUrl = uploadData['photoUrl'];
+                  if (isVideo) {
+                    uploadedVideoUrl = uploadedUrl;
+                  } else {
+                    uploadedPhotos.add(uploadedUrl);
+                  }
+                }
+              }
+            } catch (uploadErr) {
+              debugPrint('[TEAM_JOB_UPLOAD] Failed uploading ${file.name}: $uploadErr');
+            }
+          }
+
+          // Team Job posting flow with remote photo/video URLs
+          final Map<String, dynamic> bodyPayload = {
+            'userId': userId,
+            'category': _selectedCategory,
+            'subcategory_id': _selectedTaskId ?? "eaf44247-f94c-47c6-af3d-528567c95252",
+            'description': _descriptionController.text.isNotEmpty 
+                ? _descriptionController.text 
+                : "Team contract for $_selectedCategory",
+            'workersRequired': _workersRequired,
+            'durationDays': _teamDurationDays,
+            'startTime': '09:00:00',
+            'endTime': '18:00:00',
+            'pricingType': _teamPricingType,
+            'overallBudget': double.tryParse(_teamBudgetController.text) ?? 30000.0,
+            'dailyWagePerWorker': double.tryParse(_teamDailyWageController.text) ?? 900.0,
+            'locationLat': _lat ?? 12.9716,
+            'locationLng': _lng ?? 77.5946,
+            'address': _location,
+            'preferredStartDate': _teamPreferredStartDate.toIso8601String().split('T')[0],
+            'photos': uploadedPhotos,
+            'videoUrl': uploadedVideoUrl
+          };
+
+          final response = await http.post(
+            Uri.parse('$baseUrl/api/team-jobs/create'),
+            headers: {
+              'Content-Type': 'application/json',
+              if (token != null) 'Authorization': 'Bearer $token',
+            },
+            body: json.encode(bodyPayload),
+          );
+
+          Navigator.pop(context); // Close loading
+
+          if (response.statusCode == 201) {
+            final data = json.decode(response.body);
+            final job = data['job'];
+            
+            // Navigate to Proposals Comparison Screen
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => TeamJobProposalsScreen(
+                    job: {
+                      'id': job['id'],
+                      'category': job['category'],
+                      'description': job['description'],
+                      'workers_required': job['workers_required'],
+                      'duration_days': job['duration_days'],
+                      'calculated_total': job['calculated_total'],
+                    },
+                  ),
+                ),
+              );
+            }
+          } else {
+            final errorData = json.decode(response.body);
+            final errorMsg = errorData['error'] ?? 'Unknown error';
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed: $errorMsg")));
+          }
           return;
         }
 
@@ -397,6 +521,10 @@ class _PostJobScreenState extends State<PostJobScreen> {
                                   _selectedTaskId = item is Map ? item['id'] : null;
                                   _selectedImage = taskImage.isNotEmpty ? taskImage : currentCat!['image'];
                                   _selectedIcon = currentCat!['icon'];
+                                  _isTeamJob = item is Map ? (item['isTeamJob'] ?? false) : false;
+                                  if (_isTeamJob) {
+                                    _workersRequired = item is Map ? (item['minWorkers'] ?? 4) : 4;
+                                  }
                                   _showPopularGrid = false;
                                   _descriptionController.clear();
                                 });
@@ -617,7 +745,9 @@ class _PostJobScreenState extends State<PostJobScreen> {
           const SizedBox(height: 12),
         ],
         _buildSelectedCategoryDisplay(),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
+        // _buildJobTypeSelector(),
+        // const SizedBox(height: 16),
         
         if (!widget.isCategoryLocked) ...[
           Row(
@@ -1072,11 +1202,639 @@ class _PostJobScreenState extends State<PostJobScreen> {
     );
   }
 
+  Widget _buildJobTypeSelector() {
+    return Row(
+      children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: () => setState(() => _isTeamJob = false),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: !_isTeamJob ? const Color(0xFFFFF7ED) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: !_isTeamJob ? const Color(0xFFFF6A00) : const Color(0xFFE2E8F0),
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.person, color: !_isTeamJob ? const Color(0xFFFF6A00) : const Color(0xFF64748B), size: 24),
+                  const SizedBox(height: 6),
+                  Text(
+                    "Individual Worker",
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: !_isTeamJob ? const Color(0xFFFF6A00) : const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: GestureDetector(
+            onTap: () => setState(() => _isTeamJob = true),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: _isTeamJob ? const Color(0xFFFFF7ED) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: _isTeamJob ? const Color(0xFFFF6A00) : const Color(0xFFE2E8F0),
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.groups, color: _isTeamJob ? const Color(0xFFFF6A00) : const Color(0xFF64748B), size: 24),
+                  const SizedBox(height: 6),
+                  Text(
+                    "👥 Team Job",
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: _isTeamJob ? const Color(0xFFFF6A00) : const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTeamJobForm() {
+    double calculatedTotal = 0;
+    if (_teamPricingType == "OVERALL_BUDGET") {
+      calculatedTotal = double.tryParse(_teamBudgetController.text) ?? 0.0;
+    } else {
+      calculatedTotal = _workersRequired * _teamDurationDays * (double.tryParse(_teamDailyWageController.text) ?? 0.0);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Category, Description and Location Card
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(_selectedIcon is IconData ? _selectedIcon : Icons.work_outline_rounded, color: const Color(0xFFFF6A00), size: 20),
+                  const SizedBox(width: 10),
+                  Text(_selectedCategory ?? "Service", style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+                ],
+              ),
+              const Divider(height: 20, color: Color(0xFFF1F5F9)),
+              Text(
+                _descriptionController.text.isNotEmpty ? _descriptionController.text : "No description provided.",
+                style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569)),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(Icons.location_on_rounded, color: Color(0xFF64748B), size: 14),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(_location, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)))),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Workers Required Row
+        Text("Number of Workers Required", style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                onPressed: () {
+                  if (_workersRequired > 1) {
+                    setState(() => _workersRequired--);
+                  }
+                },
+                icon: const Icon(Icons.remove_circle_outline_rounded, color: Color(0xFFFF6A00)),
+              ),
+              Text(
+                "$_workersRequired Workers",
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+              ),
+              IconButton(
+                onPressed: () {
+                  setState(() => _workersRequired++);
+                },
+                icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFFFF6A00)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Duration Days Row
+        Text("Duration", style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                onPressed: () {
+                  if (_teamDurationDays > 1) {
+                    setState(() => _teamDurationDays--);
+                  }
+                },
+                icon: const Icon(Icons.remove_circle_outline_rounded, color: Color(0xFFFF6A00)),
+              ),
+              Text(
+                "$_teamDurationDays Days",
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+              ),
+              IconButton(
+                onPressed: () {
+                  setState(() => _teamDurationDays++);
+                },
+                icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFFFF6A00)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Working Hours
+        Text("Working Hours", style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () async {
+                  final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                  if (time != null) {
+                    setState(() => _teamStartTime = time.format(context));
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                  ),
+                  child: Center(
+                    child: Text("Start: $_teamStartTime", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF475569))),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: GestureDetector(
+                onTap: () async {
+                  final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                  if (time != null) {
+                    setState(() => _teamEndTime = time.format(context));
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                  ),
+                  child: Center(
+                    child: Text("End: $_teamEndTime", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFF475569))),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Preferred Start Date
+        Text("Preferred Start Date", style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: () async {
+            final date = await showDatePicker(
+              context: context,
+              initialDate: _teamPreferredStartDate,
+              firstDate: DateTime.now(),
+              lastDate: DateTime.now().add(const Duration(days: 90)),
+            );
+            if (date != null) {
+              setState(() => _teamPreferredStartDate = date);
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "${_teamPreferredStartDate.day}/${_teamPreferredStartDate.month}/${_teamPreferredStartDate.year}",
+                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF0F172A)),
+                ),
+                const Icon(Icons.calendar_month_rounded, color: Color(0xFFFF6A00)),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Pricing Type Options
+        Text("Pricing Type", style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _teamPricingType = "OVERALL_BUDGET"),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: _teamPricingType == "OVERALL_BUDGET" ? const Color(0xFFFFF7ED) : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _teamPricingType == "OVERALL_BUDGET" ? const Color(0xFFFF6A00) : const Color(0xFFE2E8F0),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text("Overall Budget", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13, color: _teamPricingType == "OVERALL_BUDGET" ? const Color(0xFFFF6A00) : const Color(0xFF475569))),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _teamPricingType = "DAILY_WAGE"),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: _teamPricingType == "DAILY_WAGE" ? const Color(0xFFFFF7ED) : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _teamPricingType == "DAILY_WAGE" ? const Color(0xFFFF6A00) : const Color(0xFFE2E8F0),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text("Daily Wage", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13, color: _teamPricingType == "DAILY_WAGE" ? const Color(0xFFFF6A00) : const Color(0xFF475569))),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Budget Input Field
+        if (_teamPricingType == "OVERALL_BUDGET") ...[
+          Text("Project Budget", style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: TextField(
+              controller: _teamBudgetController,
+              keyboardType: TextInputType.number,
+              style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00)),
+              decoration: InputDecoration(
+                prefixText: "₹ ",
+                prefixStyle: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00)),
+                border: InputBorder.none,
+                hintText: "Enter total budget",
+              ),
+            ),
+          ),
+        ] else ...[
+          Text("Daily Wage Per Worker", style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: TextField(
+              controller: _teamDailyWageController,
+              keyboardType: TextInputType.number,
+              onChanged: (_) => setState(() {}),
+              style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00)),
+              decoration: InputDecoration(
+                prefixText: "₹ ",
+                prefixStyle: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFFFF6A00)),
+                border: InputBorder.none,
+                hintText: "Enter daily wage per worker",
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFBBF7D0)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calculate_rounded, color: Color(0xFF16A34A), size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  "Total calculated wage: ₹${calculatedTotal.toStringAsFixed(0)}",
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF16A34A)),
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 24),
+
+        // Upload Photos & Videos
+        Text("Upload Photos & Videos (Optional)", style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            // Add Photo Button
+            GestureDetector(
+              onTap: _isPickingMedia ? null : () async {
+                showModalBottomSheet(
+                  context: context,
+                  builder: (ctx) => SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.camera_alt_rounded, color: Color(0xFFFF6A00)),
+                          title: Text('Take Photo', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                          onTap: () async {
+                            Navigator.pop(ctx);
+                            setState(() => _isPickingMedia = true);
+                            try {
+                              final XFile? file = await ImagePicker().pickImage(
+                                source: ImageSource.camera,
+                                imageQuality: 85,
+                              );
+                              if (file != null && mounted) {
+                                setState(() => _teamMediaFiles.add(file));
+                              }
+                            } finally {
+                              if (mounted) setState(() => _isPickingMedia = false);
+                            }
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.photo_library_rounded, color: Color(0xFFFF6A00)),
+                          title: Text('Choose from Gallery', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                          onTap: () async {
+                            Navigator.pop(ctx);
+                            setState(() => _isPickingMedia = true);
+                            try {
+                              final List<XFile> files = await ImagePicker().pickMultiImage(
+                                imageQuality: 85,
+                              );
+                              if (files.isNotEmpty && mounted) {
+                                setState(() => _teamMediaFiles.addAll(files));
+                              }
+                            } finally {
+                              if (mounted) setState(() => _isPickingMedia = false);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              child: Container(
+                width: 75,
+                height: 70,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                ),
+                child: _isPickingMedia
+                    ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF6A00))))
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.add_a_photo_rounded, color: Color(0xFFFF6A00), size: 20),
+                          const SizedBox(height: 4),
+                          Text("Add Photo", style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                        ],
+                      ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Add Video Button
+            GestureDetector(
+              onTap: _isPickingMedia ? null : () async {
+                showModalBottomSheet(
+                  context: context,
+                  builder: (ctx) => SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.videocam_rounded, color: Color(0xFFFF6A00)),
+                          title: Text('Record Video', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                          onTap: () async {
+                            Navigator.pop(ctx);
+                            setState(() => _isPickingMedia = true);
+                            try {
+                              final XFile? file = await ImagePicker().pickVideo(
+                                source: ImageSource.camera,
+                                maxDuration: const Duration(minutes: 2),
+                              );
+                              if (file != null && mounted) {
+                                setState(() => _teamMediaFiles.add(file));
+                              }
+                            } finally {
+                              if (mounted) setState(() => _isPickingMedia = false);
+                            }
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.video_library_rounded, color: Color(0xFFFF6A00)),
+                          title: Text('Choose from Gallery', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                          onTap: () async {
+                            Navigator.pop(ctx);
+                            setState(() => _isPickingMedia = true);
+                            try {
+                              final XFile? file = await ImagePicker().pickVideo(
+                                source: ImageSource.gallery,
+                              );
+                              if (file != null && mounted) {
+                                setState(() => _teamMediaFiles.add(file));
+                              }
+                            } finally {
+                              if (mounted) setState(() => _isPickingMedia = false);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              child: Container(
+                width: 75,
+                height: 70,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.video_call_rounded, color: Color(0xFFFF6A00), size: 22),
+                    const SizedBox(height: 4),
+                    Text("Add Video", style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFF64748B))),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Media Preview
+            if (_teamMediaFiles.isNotEmpty)
+              Expanded(
+                child: SizedBox(
+                  height: 70,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _teamMediaFiles.length,
+                    itemBuilder: (context, index) {
+                      final file = _teamMediaFiles[index];
+                      final isVideo = file.name.endsWith('.mp4') || file.name.endsWith('.mov') || file.name.endsWith('.avi');
+
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.only(right: 12),
+                            width: 70,
+                            height: 70,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE2E8F0),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFCBD5E1)),
+                              image: !isVideo
+                                  ? DecorationImage(
+                                      image: FileImage(File(file.path)),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
+                            ),
+                            child: isVideo
+                                ? const Center(child: Icon(Icons.play_circle_fill_rounded, color: Color(0xFFFF6A00), size: 32))
+                                : null,
+                          ),
+                          Positioned(
+                            top: -4,
+                            right: 4,
+                            child: GestureDetector(
+                              onTap: () => setState(() => _teamMediaFiles.removeAt(index)),
+                              child: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                child: const Icon(Icons.close, color: Colors.white, size: 10),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 32),
+
+        // Submit button
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton(
+            onPressed: () {
+              setState(() => _currentWizardStep = 2);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF6A00),
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  "Continue",
+                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
   // ==========================================
   // STEP 2 WIDGETS
   // ==========================================
 
   Widget _buildStep2Review() {
+    if (_isTeamJob) {
+      return _buildTeamJobForm();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -4,371 +4,442 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ServiceData {
+  // S3 base URL for job images
+  static const String s3Base = 'https://nexoassets.s3.ap-south-1.amazonaws.com/images';
+  static String s3Url(String name, String ratio) =>
+      '$s3Base/$ratio/${Uri.encodeComponent(name)}2.jpeg';
+
   static final List<Map<String, dynamic>> categories = [
     {
-      "name": "Agriculture",
-      "icon": FontAwesomeIcons.tractor,
-      "image": "assets/images/Agriculture/Equipment Rental/tractor ploughing.jpg",
-      "color": Color(0xFF10B981),
-      "workers": [
-        "Equipment & Machine Rental",
-        "Field Work & Labour",
-        "Irrigation & Water",
-        "Animal & Farm Support",
-      ],
+      "name": "Home Care",
+      "icon": FontAwesomeIcons.house,
+      "image": s3Url("House Cleaning", "16:9"),
+      "color": const Color(0xFF3B82F6),
+      "emoji": "🏡",
+      "slug": "home-care",
+      "workers": ["Home Care"],
       "subcategories": [
         {
-          "name": "Equipment & Machine Rental",
-          "image": "assets/images/Agriculture/Equipment Rental/tractor tilling.jpg",
+          "name": "Home Care",
+          "image": s3Url("House Cleaning", "1:1"),
           "tasks": [
-            {"id": "AGR_EQ_001", "name": "Tractor for ploughing", "image": "assets/images/Agriculture/Equipment Rental/tractor ploughing.jpg"},
-            {"id": "AGR_EQ_002", "name": "Tractor for tilling", "image": "assets/images/Agriculture/Equipment Rental/tractor tilling.jpg"},
-            {"id": "AGR_EQ_003", "name": "Tractor for harrowing", "image": "assets/images/Agriculture/Equipment Rental/tractor harrowing.png"},
-            {"id": "AGR_EQ_004", "name": "Rotavator work", "image": "assets/images/Agriculture/Equipment Rental/rotavator.jpg"},
-            {"id": "AGR_EQ_005", "name": "Cultivator work", "image": "assets/images/Agriculture/Equipment Rental/cultivator.webp"},
-            {"id": "AGR_EQ_006", "name": "Seed drill / sowing machine", "image": "assets/images/Agriculture/Equipment Rental/Seed-Drill.webp"},
-            {"id": "AGR_EQ_007", "name": "Sprayer machine (pesticide/fertilizer)", "image": "assets/images/Agriculture/Equipment Rental/sprayer  machine.avif"},
-            {"id": "AGR_EQ_008", "name": "Combine harvester", "image": "assets/images/Agriculture/Equipment Rental/combine harvester.webp"},
-            {"id": "AGR_EQ_009", "name": "Thresher", "image": "assets/images/Agriculture/Equipment Rental/thresher.jpeg"},
-            {"id": "AGR_EQ_010", "name": "Power weeder", "image": "assets/images/Agriculture/Equipment Rental/power weeder.jpg"},
+            {"name": "House Cleaning", "image": s3Url("House Cleaning", "1:1"), "image16x9": s3Url("House Cleaning", "16:9"), "isTeamJob": false},
+            {"name": "Deep Cleaning", "image": s3Url("Deep Cleaning", "1:1"), "image16x9": s3Url("Deep Cleaning", "16:9"), "isTeamJob": false},
+            {"name": "Home Cook", "image": s3Url("Home Cook", "1:1"), "image16x9": s3Url("Home Cook", "16:9"), "isTeamJob": false},
+            {"name": "Babysitter", "image": s3Url("Babysitter", "1:1"), "image16x9": s3Url("Babysitter", "16:9"), "isTeamJob": false},
+            {"name": "Elder Care", "image": s3Url("Elder Care", "1:1"), "image16x9": s3Url("Elder Care", "16:9"), "isTeamJob": false},
+            {"name": "Home Nurse", "image": s3Url("Home Nurse", "1:1"), "image16x9": s3Url("Home Nurse", "16:9"), "isTeamJob": false},
+            {"name": "Laundry", "image": s3Url("Laundry", "1:1"), "image16x9": s3Url("Laundry", "16:9"), "isTeamJob": false},
+            {"name": "Ironing", "image": s3Url("Ironing", "1:1"), "image16x9": s3Url("Ironing", "16:9"), "isTeamJob": false},
+            {"name": "Housekeeping", "image": s3Url("Housekeeping", "1:1"), "image16x9": s3Url("Housekeeping", "16:9"), "isTeamJob": false},
+            {"name": "Maid (Full Time)", "image": s3Url("Maid (Full Time)", "1:1"), "image16x9": s3Url("Maid (Full Time)", "16:9"), "isTeamJob": false},
+            {"name": "Maid (Part Time)", "image": s3Url("Maid (Part Time)", "1:1"), "image16x9": s3Url("Maid (Part Time)", "16:9"), "isTeamJob": false},
           ]
-        },
-        {
-          "name": "Field Work & Labour",
-          "image": "assets/images/Agriculture/Field Work and Labour/land preparation.webp",
-          "tasks": [
-            {"id": "AGR_LB_001", "name": "Land preparation", "image": "assets/images/Agriculture/Field Work and Labour/land preparation.webp"},
-            {"id": "AGR_LB_002", "name": "Sowing / planting", "image": "assets/images/Agriculture/Field Work and Labour/sowing,planting.jpg"},
-            {"id": "AGR_LB_003", "name": "Transplanting (paddy)", "image": "assets/images/Agriculture/Field Work and Labour/transplanting paddy.jpg"},
-            {"id": "AGR_LB_004", "name": "Weeding", "image": "assets/images/Agriculture/Field Work and Labour/weeding.jpg"},
-            {"id": "AGR_LB_005", "name": "Fertilizer application", "image": "assets/images/Agriculture/Field Work and Labour/fertilizer application.jpg"},
-            {"id": "AGR_LB_006", "name": "Pesticide spraying", "image": "assets/images/Agriculture/Field Work and Labour/pesticide spraying.jpg"},
-            {"id": "AGR_LB_007", "name": "Harvesting (manual)", "image": "assets/images/Agriculture/Field Work and Labour/harvesting manual"},
-            {"id": "AGR_LB_008", "name": "Crop cutting", "image": "assets/images/Agriculture/Field Work and Labour/crop cutting.jpg"},
-            {"id": "AGR_LB_009", "name": "Loading crops", "image": "assets/images/Agriculture/Field Work and Labour/landing crops.avif"},
-          ]
-        },
-        {
-          "name": "Irrigation & Water",
-          "image": "assets/images/Agriculture/Irrigation and water/pump installation.webp",
-          "tasks": [
-            {"id": "AGR_IR_001", "name": "Borewell drilling", "image": "assets/images/Agriculture/Irrigation and water/borewell drilling.jpg"},
-            {"id": "AGR_IR_002", "name": "Pump installation", "image": "assets/images/Agriculture/Irrigation and water/pump installation.webp"},
-            {"id": "AGR_IR_003", "name": "Pipe fitting", "image": "assets/images/Agriculture/Irrigation and water/pipe fitting.webp"},
-            {"id": "AGR_IR_004", "name": "Drip irrigation setup", "image": "assets/images/Agriculture/Irrigation and water/drip irrigation setup.jpg"},
-            {"id": "AGR_IR_005", "name": "Sprinkler setup", "image": "assets/images/Agriculture/Irrigation and water/sprinkler setup.jpg"},
-            {"id": "AGR_IR_006", "name": "Motor repair", "image": "assets/images/Agriculture/Irrigation and water/motor repair.webp"},
-          ]
-        },
-        {
-          "name": "Animal & Farm Support",
-          "image": "assets/images/Agriculture/Animal and farm support/dairy farm helper.jpg",
-          "tasks": [
-            {"id": "AGR_AS_001", "name": "Dairy farm helper", "image": "assets/images/Agriculture/Animal and farm support/dairy farm helper.jpg"},
-            {"id": "AGR_AS_002", "name": "Cow/buffalo caretaker", "image": "assets/images/Agriculture/Animal and farm support/cow buffalo caretaker.webp"},
-            {"id": "AGR_AS_003", "name": "Poultry farm worker", "image": "assets/images/Agriculture/Animal and farm support/poultry farm worker.webp"},
-            {"id": "AGR_AS_004", "name": "Goat/sheep caretaker", "image": "assets/images/Agriculture/Animal and farm support/goat sheep caretaker.jpg"},
-          ]
-        },
+        }
       ]
     },
     {
-      "name": "Construction",
-      "icon": FontAwesomeIcons.helmetSafety,
-      "image": "assets/images/construction/core work/mason brick work.webp",
-      "color": Color(0xFFF97316),
-      "workers": [
-        "Core Work",
-        "Helpers",
-        "Finishing Work",
-        "Specialised",
-      ],
-      "subcategories": [
-        {
-          "name": "Core Work",
-          "image": "assets/images/construction/core work/concrete work.jpg",
-          "tasks": [
-            {"id": "CON_CR_001", "name": "Mason (brick work)", "image": "assets/images/construction/core work/mason brick work.webp"},
-            {"id": "CON_CR_002", "name": "Concrete work", "image": "assets/images/construction/core work/concrete work.jpg"},
-            {"id": "CON_CR_003", "name": "Foundation work", "image": "assets/images/construction/core work/foundation work.png"},
-            {"id": "CON_CR_004", "name": "Slab work", "image": "assets/images/construction/core work/slab work.jpg"},
-          ]
-        },
-        {
-          "name": "Helpers",
-          "image": "assets/images/construction/helper/general labour.jpg",
-          "tasks": [
-            {"id": "CON_HL_001", "name": "General labor", "image": "assets/images/construction/helper/general labour.jpg"},
-            {"id": "CON_HL_002", "name": "Sand/brick loading", "image": "assets/images/construction/helper/sand or brick loading.webp"},
-            {"id": "CON_HL_003", "name": "Cement mixing", "image": "assets/images/construction/helper/cement mixing.webp"},
-            {"id": "CON_HL_004", "name": "Site cleaning", "image": "assets/images/construction/helper/site cleaning.jpg"},
-          ]
-        },
-        {
-          "name": "Finishing Work",
-          "image": "assets/images/construction/finishing work/painter.jpg",
-          "tasks": [
-            {"id": "CON_FN_001", "name": "Painter", "image": "assets/images/construction/finishing work/painter.jpg"},
-            {"id": "CON_FN_002", "name": "Putty work", "image": "assets/images/construction/finishing work/putty work.jpg"},
-            {"id": "CON_FN_003", "name": "Tiles laying", "image": "assets/images/construction/finishing work/tiles laying.webp"},
-            {"id": "CON_FN_004", "name": "Granite work", "image": "assets/images/construction/finishing work/granite work.jpg"},
-            {"id": "CON_FN_005", "name": "POP / false ceiling", "image": "assets/images/construction/finishing work/pop or false ceiling.webp"},
-          ]
-        },
-        {
-          "name": "Specialised",
-          "image": "assets/images/construction/specialised/scaffolding.jpg",
-          "tasks": [
-            {"id": "CON_SP_001", "name": "Steel binding", "image": "assets/images/construction/specialised/steel binding.webp"},
-            {"id": "CON_SP_002", "name": "Centering/shuttering", "image": "assets/images/construction/specialised/centering or shuttering.jpg"},
-            {"id": "CON_SP_003", "name": "Scaffolding", "image": "assets/images/construction/specialised/scaffolding.jpg"},
-          ]
-        },
-      ]
-    },
-    {
-      "name": "Home Services",
-      "icon": FontAwesomeIcons.houseUser,
-      "image": "assets/images/home services/cleaning/full house cleaner.jpeg",
-      "color": Color(0xFF3B82F6),
-      "workers": ["Electrical", "Plumbing", "Appliance Repair", "Cleaning"],
+      "name": "Home Repair",
+      "icon": FontAwesomeIcons.hammer,
+      "image": s3Url("Electrician", "16:9"),
+      "color": const Color(0xFFF97316),
+      "emoji": "🔨",
+      "slug": "home-repair",
+      "workers": ["Electrical", "Plumbing", "Carpentry", "Masonry", "Others"],
       "subcategories": [
         {
           "name": "Electrical",
-          "image": "assets/images/home services/electrical/wiring.webp",
+          "image": s3Url("Electrician", "1:1"),
           "tasks": [
-            {"id": "HOM_EL_001", "name": "Switch repair", "image": "assets/images/home services/electrical/switch repair.webp"},
-            {"id": "HOM_EL_002", "name": "Fan installation", "image": "assets/images/home services/electrical/fan installation.webp"},
-            {"id": "HOM_EL_003", "name": "Light fitting", "image": "assets/images/home services/electrical/light fitting.jpg"},
-            {"id": "HOM_EL_004", "name": "Wiring", "image": "assets/images/home services/electrical/wiring.webp"},
-            {"id": "HOM_EL_005", "name": "Inverter setup", "image": "assets/images/home services/electrical/inverter setup.jpg"},
-            {"id": "HOM_EL_006", "name": "Meter repair", "image": "assets/images/home services/electrical/meter repair.avif"}
+            {"name": "Electrician", "image": s3Url("Electrician", "1:1"), "image16x9": s3Url("Electrician", "16:9"), "isTeamJob": false},
+            {"name": "Switch Repair", "image": s3Url("Switch Repair", "1:1"), "image16x9": s3Url("Switch Repair", "16:9"), "isTeamJob": false},
+            {"name": "Wiring Repair", "image": s3Url("Wiring Repair", "1:1"), "image16x9": s3Url("Wiring Repair", "16:9"), "isTeamJob": false},
+            {"name": "MCB Repair", "image": s3Url("MCB Repair", "1:1"), "image16x9": s3Url("MCB Repair", "16:9"), "isTeamJob": false},
+            {"name": "Inverter Repair", "image": s3Url("Inverter Repair", "1:1"), "image16x9": s3Url("Inverter Repair", "16:9"), "isTeamJob": false},
           ]
         },
         {
           "name": "Plumbing",
-          "image": "assets/images/home services/plumbing/tap repair.jpg",
+          "image": s3Url("Plumber", "1:1"),
           "tasks": [
-            {"id": "HOM_PL_001", "name": "Pipe leakage", "image": "assets/images/home services/plumbing/pipe leakage.webp"},
-            {"id": "HOM_PL_002", "name": "Tap repair", "image": "assets/images/home services/plumbing/tap repair.jpg"},
-            {"id": "HOM_PL_003", "name": "Tank cleaning", "image": "assets/images/home services/plumbing/tank cleaning.webp"},
-            {"id": "HOM_PL_004", "name": "Motor repair", "image": "assets/images/home services/plumbing/motor repair.jpg"},
-            {"id": "HOM_PL_005", "name": "Bathroom fittings", "image": "assets/images/home services/plumbing/bathroom fitting.jpg"}
+            {"name": "Plumber", "image": s3Url("Plumber", "1:1"), "image16x9": s3Url("Plumber", "16:9"), "isTeamJob": false},
+            {"name": "Tap Repair", "image": s3Url("Tap Repair", "1:1"), "image16x9": s3Url("Tap Repair", "16:9"), "isTeamJob": false},
+            {"name": "Pipe Leakage", "image": s3Url("Pipe Leakage", "1:1"), "image16x9": s3Url("Pipe Leakage", "16:9"), "isTeamJob": false},
+            {"name": "Drain Blockage", "image": s3Url("Drain Blockage", "1:1"), "image16x9": s3Url("Drain Blockage", "16:9"), "isTeamJob": false},
+            {"name": "Toilet Repair", "image": s3Url("Toilet Repair", "1:1"), "image16x9": s3Url("Toilet Repair", "16:9"), "isTeamJob": false},
           ]
         },
         {
-          "name": "Appliance Repair",
-          "image": "assets/images/home services/appliance repair/ac repair.jpg",
+          "name": "Carpentry",
+          "image": s3Url("Carpenter", "1:1"),
           "tasks": [
-            {"id": "HOM_AR_001", "name": "Refrigerator repair", "image": "assets/images/home services/appliance repair/refrigerator repair.webp"},
-            {"id": "HOM_AR_002", "name": "Washing machine repair", "image": "assets/images/home services/appliance repair/washing machine repair.jpg"},
-            {"id": "HOM_AR_003", "name": "AC repair", "image": "assets/images/home services/appliance repair/ac repair.jpg"},
-            {"id": "HOM_AR_004", "name": "Microwave repair", "image": "assets/images/home services/appliance repair/microwave repair.webp"},
-            {"id": "HOM_AR_005", "name": "TV repair", "image": "assets/images/home services/appliance repair/tv repair.jpg"}
+            {"name": "Carpenter", "image": s3Url("Carpenter", "1:1"), "image16x9": s3Url("Carpenter", "16:9"), "isTeamJob": false},
+            {"name": "Furniture Repair", "image": s3Url("Furniture Repair", "1:1"), "image16x9": s3Url("Furniture Repair", "16:9"), "isTeamJob": false},
+            {"name": "Door Repair", "image": s3Url("Door Repair", "1:1"), "image16x9": s3Url("Door Repair", "16:9"), "isTeamJob": false},
+            {"name": "Window Repair", "image": s3Url("Window Repair", "1:1"), "image16x9": s3Url("Window Repair", "16:9"), "isTeamJob": false},
+            {"name": "Lock Repair", "image": s3Url("Lock Repair", "1:1"), "image16x9": s3Url("Lock Repair", "16:9"), "isTeamJob": false},
           ]
         },
         {
-          "name": "Cleaning",
-          "image": "assets/images/home services/cleaning/full house cleaner.jpeg",
+          "name": "Masonry",
+          "image": s3Url("Mason", "1:1"),
           "tasks": [
-            {"id": "HOM_CL_001", "name": "Full house cleaning", "image": "assets/images/home services/cleaning/full house cleaner.jpeg"},
-            {"id": "HOM_CL_002", "name": "Kitchen cleaning", "image": "assets/images/home services/cleaning/kitchen cleaner.avif"},
-            {"id": "HOM_CL_003", "name": "Bathroom cleaning", "image": "assets/images/home services/cleaning/bathroom cleaner.avif"},
-            {"id": "HOM_CL_004", "name": "Sofa cleaning", "image": "assets/images/home services/cleaning/sofa cleaner.webp"},
-            {"id": "HOM_CL_005", "name": "Water tank cleaning", "image": "assets/images/home services/cleaning/water tank cleaning.jpg"}
-          ]
-        }
-      ]
-    },
-    {
-      "name": "Transport",
-      "icon": FontAwesomeIcons.truckMoving,
-      "image": "assets/images/transport/vehicles/pickup vehicle.webp",
-      "color": Color(0xFF8B5CF6),
-      "workers": ["Vehicles", "Moving", "Support", "Drivers"],
-      "subcategories": [
-        {
-          "name": "Vehicles",
-          "image": "assets/images/transport/vehicles/mini truck.avif",
-          "tasks": [
-            {"id": "TRA_VH_001", "name": "Mini truck rental", "image": "assets/images/transport/vehicles/mini truck.avif"},
-            {"id": "TRA_VH_002", "name": "Pickup vehicle", "image": "assets/images/transport/vehicles/pickup vehicle.webp"},
-            {"id": "TRA_VH_003", "name": "Tractor transport", "image": "assets/images/transport/vehicles/tractor transport.png"}
+            {"name": "Mason", "image": s3Url("Mason", "1:1"), "image16x9": s3Url("Mason", "16:9"), "isTeamJob": false},
+            {"name": "Tile Repair", "image": s3Url("Tile Repair", "1:1"), "image16x9": s3Url("Tile Repair", "16:9"), "isTeamJob": false},
+            {"name": "Marble Repair", "image": s3Url("Marble Repair", "1:1"), "image16x9": s3Url("Marble Repair", "16:9"), "isTeamJob": false},
+            {"name": "Granite Repair", "image": s3Url("Granite Repair", "1:1"), "image16x9": s3Url("Granite Repair", "16:9"), "isTeamJob": false},
+            {"name": "POP Repair", "image": s3Url("POP Repair", "1:1"), "image16x9": s3Url("POP Repair", "16:9"), "isTeamJob": false},
+            {"name": "Roof Repair", "image": s3Url("Roof Repair", "1:1"), "image16x9": s3Url("Roof Repair", "16:9"), "isTeamJob": false},
+            {"name": "Waterproofing", "image": s3Url("Waterproofing", "1:1"), "image16x9": s3Url("Waterproofing", "16:9"), "isTeamJob": false},
           ]
         },
         {
-          "name": "Moving",
-          "image": "assets/images/transport/moving/house shifting.webp",
+          "name": "Others",
+          "image": s3Url("Welder", "1:1"),
           "tasks": [
-            {"id": "TRA_MV_001", "name": "House shifting", "image": "assets/images/transport/moving/house shifting.webp"},
-            {"id": "TRA_MV_002", "name": "Office shifting", "image": "assets/images/transport/moving/office shifting.png"},
-            {"id": "TRA_MV_003", "name": "Furniture moving", "image": "assets/images/transport/moving/furniture moving.jpg"}
-          ]
-        },
-        {
-          "name": "Support",
-          "image": "assets/images/transport/support/loading labour.jpeg",
-          "tasks": [
-            {"id": "TRA_SP_001", "name": "Loading labor", "image": "assets/images/transport/support/loading labour.jpeg"},
-            {"id": "TRA_SP_002", "name": "Unloading labor", "image": "assets/images/transport/support/unloading labour.avif"},
-            {"id": "TRA_SP_003", "name": "Packing help", "image": "assets/images/transport/support/packing helper.jpg"}
-          ]
-        },
-        {
-          "name": "Drivers",
-          "image": "assets/images/transport/drivers/personal driver.webp",
-          "tasks": [
-            {"id": "TRA_DR_001", "name": "Personal driver", "image": "assets/images/transport/drivers/personal driver.webp"},
-            {"id": "TRA_DR_002", "name": "Commercial driver", "image": "assets/images/transport/drivers/commercial driver.avif"},
-            {"id": "TRA_DR_003", "name": "Tractor driver", "image": "assets/images/transport/drivers/tractor driver.avif"}
+            {"name": "Welder", "image": s3Url("Welder", "1:1"), "image16x9": s3Url("Welder", "16:9"), "isTeamJob": false},
+            {"name": "Glass Repair", "image": s3Url("Glass Repair", "1:1"), "image16x9": s3Url("Glass Repair", "16:9"), "isTeamJob": false},
+            {"name": "Pest Control", "image": s3Url("Pest Control", "1:1"), "image16x9": s3Url("Pest Control", "16:9"), "isTeamJob": false},
           ]
         }
       ]
     },
     {
-      "name": "Mechanic",
-      "icon": FontAwesomeIcons.wrench,
-      "image": "assets/images/mechanic/vehicle repair/bike repair.webp",
-      "color": Color(0xFFEF4444),
-      "workers": ["Vehicle Repair", "General Repair"],
-      "subcategories": [
-        {
-          "name": "Vehicle Repair",
-          "image": "assets/images/mechanic/vehicle repair/car repair.webp",
-          "tasks": [
-            {"id": "MEC_VR_001", "name": "Bike repair", "image": "assets/images/mechanic/vehicle repair/bike repair.webp"},
-            {"id": "MEC_VR_002", "name": "Car repair", "image": "assets/images/mechanic/vehicle repair/car repair.webp"},
-            {"id": "MEC_VR_003", "name": "Tractor repair", "image": "assets/images/mechanic/vehicle repair/tractor repair.webp"}
-          ]
-        },
-        {
-          "name": "General Repair",
-          "image": "assets/images/mechanic/general repair/engine repair.jpg",
-          "tasks": [
-            {"id": "MEC_GR_001", "name": "Engine repair", "image": "assets/images/mechanic/general repair/engine repair.jpg"},
-            {"id": "MEC_GR_002", "name": "Brake repair", "image": "assets/images/mechanic/general repair/brake repair.jpg"},
-            {"id": "MEC_GR_003", "name": "Electrical repair", "image": "assets/images/mechanic/general repair/electrical repair.jpg"},
-            {"id": "MEC_GR_004", "name": "Tyre puncture", "image": "assets/images/mechanic/general repair/tyre puncture.jpg"}
-          ]
-        }
-      ]
-    },
-    {
-      "name": "Household",
-      "icon": FontAwesomeIcons.handsHoldingChild,
-      "image": "assets/images/household/care and help/maid.jpg",
-      "color": Color(0xFFEC4899),
-      "workers": ["Care & Help"],
-      "subcategories": [
-        {
-          "name": "Care & Help",
-          "image": "assets/images/household/care and help/cook.jpg",
-          "tasks": [
-            {"id": "HOU_CH_001", "name": "Maid", "image": "assets/images/household/care and help/maid.jpg"},
-            {"id": "HOU_CH_002", "name": "Cook", "image": "assets/images/household/care and help/cook.jpg"},
-            {"id": "HOU_CH_003", "name": "Babysitter", "image": "assets/images/household/care and help/babysitter.png"},
-            {"id": "HOU_CH_004", "name": "Elder care", "image": "assets/images/household/care and help/elder care.webp"},
-            {"id": "HOU_CH_005", "name": "Laundry", "image": "assets/images/household/care and help/laundry.webp"}
-          ]
-        }
-      ]
-    },
-    {
-      "name": "Shops",
-      "icon": FontAwesomeIcons.store,
-      "image": "assets/images/shops/business help/sales assistant.jpg",
-      "color": Color(0xFF14B8A6),
-      "workers": ["Business Help"],
-      "subcategories": [
-        {
-          "name": "Business Help",
-          "image": "assets/images/shops/business help/store keeper.jpg",
-          "tasks": [
-            {"id": "SHO_BH_001", "name": "Shop helper", "image": "assets/images/shops/business help/shop helper.avif"},
-            {"id": "SHO_BH_002", "name": "Sales assistant", "image": "assets/images/shops/business help/sales assistant.jpg"},
-            {"id": "SHO_BH_003", "name": "Billing operator", "image": "assets/images/shops/business help/billing operator.webp"},
-            {"id": "SHO_BH_004", "name": "Store keeper", "image": "assets/images/shops/business help/store keeper.jpg"}
-          ]
-        }
-      ]
-    },
-    {
-      "name": "Delivery",
-      "icon": FontAwesomeIcons.boxOpen,
-      "image": "assets/images/delivery/errands/parcel delivery.jpg",
-      "color": Color(0xFF6366F1),
-      "workers": ["Errands"],
-      "subcategories": [
-        {
-          "name": "Errands",
-          "image": "assets/images/delivery/errands/parcel delivery.jpg",
-          "tasks": [
-            {"id": "DEL_ER_001", "name": "Parcel delivery", "image": "assets/images/delivery/errands/parcel delivery.jpg"},
-            {"id": "DEL_ER_002", "name": "Grocery pickup", "image": "assets/images/delivery/errands/grocery pickup.webp"},
-            {"id": "DEL_ER_003", "name": "Medicine pickup", "image": "assets/images/delivery/errands/medicine pickup.jpg"},
-            {"id": "DEL_ER_004", "name": "Document delivery", "image": "assets/images/delivery/errands/document delivery.jpg"}
-          ]
-        }
-      ]
-    },
-    {
-      "name": "Events",
-      "icon": FontAwesomeIcons.cakeCandles,
-      "image": "assets/images/events/event staff/sound or light setup.jpg",
-      "color": Color(0xFFEAB308),
-      "workers": ["Event Staff"],
-      "subcategories": [
-        {
-          "name": "Event Staff",
-          "image": "assets/images/events/event staff/catering staff.webp",
-          "tasks": [
-            {"id": "EVE_ES_001", "name": "Event helpers", "image": "assets/images/events/event staff/event helpers.avif"},
-            {"id": "EVE_ES_002", "name": "Catering staff", "image": "assets/images/events/event staff/catering staff.webp"},
-            {"id": "EVE_ES_003", "name": "Decoration setup", "image": "assets/images/events/event staff/decoration setup.avif"},
-            {"id": "EVE_ES_004", "name": "Sound/light setup", "image": "assets/images/events/event staff/sound or light setup.jpg"}
-          ]
-        }
-      ]
-    },
-    {
-      "name": "Skilled",
+      "name": "Installation Services",
       "icon": FontAwesomeIcons.screwdriverWrench,
-      "image": "assets/images/skilled/trades/ac technician.jpg",
-      "color": Color(0xFF78716C),
-      "workers": ["Trades"],
-      "subcategories": [
-        {
-          "name": "Trades",
-          "image": "assets/images/skilled/trades/carpenter.webp",
-          "tasks": [
-            {"id": "SKI_TR_001", "name": "Carpenter", "image": "assets/images/skilled/trades/carpenter.webp"},
-            {"id": "SKI_TR_002", "name": "Welder", "image": "assets/images/skilled/trades/welder.png"},
-            {"id": "SKI_TR_003", "name": "Electric motor technician", "image": "assets/images/skilled/trades/electric motor technician.jpg"},
-            {"id": "SKI_TR_004", "name": "AC technician", "image": "assets/images/skilled/trades/ac technician.jpg"}
-          ]
-        }
-      ]
-    },
-    {
-      "name": "Smart Tech",
-      "icon": FontAwesomeIcons.solarPanel,
-      "image": "assets/images/smart tech/installation/solar panel installation.jpg",
-      "color": Color(0xFF22C55E),
+      "image": s3Url("AC Installation", "16:9"),
+      "color": const Color(0xFF06B6D4),
+      "emoji": "🛠️",
+      "slug": "installation-services",
       "workers": ["Installation"],
       "subcategories": [
         {
           "name": "Installation",
-          "image": "assets/images/smart tech/installation/cctv installation.png",
+          "image": s3Url("AC Installation", "1:1"),
           "tasks": [
-            {"id": "SMA_IN_001", "name": "Solar panel installation", "image": "assets/images/smart tech/installation/solar panel installation.jpg"},
-            {"id": "SMA_IN_002", "name": "CCTV installation", "image": "assets/images/smart tech/installation/cctv installation.png"},
-            {"id": "SMA_IN_003", "name": "Internet setup", "image": "assets/images/smart tech/installation/internet setup.jpg"}
+            {"name": "AC Installation", "image": s3Url("AC Installation", "1:1"), "image16x9": s3Url("AC Installation", "16:9"), "isTeamJob": false},
+            {"name": "TV Installation", "image": s3Url("TV Installation", "1:1"), "image16x9": s3Url("TV Installation", "16:9"), "isTeamJob": false},
+            {"name": "Geyser Installation", "image": s3Url("Geyser Installation", "1:1"), "image16x9": s3Url("Geyser Installation", "16:9"), "isTeamJob": false},
+            {"name": "RO Installation", "image": s3Url("RO Installation", "1:1"), "image16x9": s3Url("RO Installation", "16:9"), "isTeamJob": false},
+            {"name": "Fan Installation", "image": s3Url("Fan Installation", "1:1"), "image16x9": s3Url("Fan Installation", "16:9"), "isTeamJob": false},
+            {"name": "Chimney Installation", "image": s3Url("Chimney Installation", "1:1"), "image16x9": s3Url("Chimney Installation", "16:9"), "isTeamJob": false},
+            {"name": "Washing Machine Installation", "image": s3Url("Washing Machine Installation", "1:1"), "image16x9": s3Url("Washing Machine Installation", "16:9"), "isTeamJob": false},
+            {"name": "CCTV Installation", "image": s3Url("CCTV Installation", "1:1"), "image16x9": s3Url("CCTV Installation", "16:9"), "isTeamJob": false},
+            {"name": "Intercom Installation", "image": s3Url("Intercom Installation", "1:1"), "image16x9": s3Url("Intercom Installation", "16:9"), "isTeamJob": false},
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Appliance Repair",
+      "icon": FontAwesomeIcons.wrench,
+      "image": s3Url("AC Repair", "16:9"),
+      "color": const Color(0xFFEF4444),
+      "emoji": "🔧",
+      "slug": "appliance-repair",
+      "workers": ["Appliance Repair"],
+      "subcategories": [
+        {
+          "name": "Appliance Repair",
+          "image": s3Url("AC Repair", "1:1"),
+          "tasks": [
+            {"name": "AC Repair", "image": s3Url("AC Repair", "1:1"), "image16x9": s3Url("AC Repair", "16:9"), "isTeamJob": false},
+            {"name": "AC Technician", "image": s3Url("AC Technician", "1:1"), "image16x9": s3Url("AC Technician", "16:9"), "isTeamJob": false},
+            {"name": "Refrigerator Repair", "image": s3Url("Refrigerator Repair", "1:1"), "image16x9": s3Url("Refrigerator Repair", "16:9"), "isTeamJob": false},
+            {"name": "Washing Machine Repair", "image": s3Url("Washing Machine Repair", "1:1"), "image16x9": s3Url("Washing Machine Repair", "16:9"), "isTeamJob": false},
+            {"name": "TV Repair", "image": s3Url("TV Repair", "1:1"), "image16x9": s3Url("TV Repair", "16:9"), "isTeamJob": false},
+            {"name": "Microwave Repair", "image": s3Url("Microwave Repair", "1:1"), "image16x9": s3Url("Microwave Repair", "16:9"), "isTeamJob": false},
+            {"name": "Geyser Repair", "image": s3Url("Geyser Repair", "1:1"), "image16x9": s3Url("Geyser Repair", "16:9"), "isTeamJob": false},
+            {"name": "RO Repair", "image": s3Url("RO Repair", "1:1"), "image16x9": s3Url("RO Repair", "16:9"), "isTeamJob": false},
+            {"name": "Chimney Repair", "image": s3Url("Chimney Repair", "1:1"), "image16x9": s3Url("Chimney Repair", "16:9"), "isTeamJob": false},
+            {"name": "Mixer Grinder Repair", "image": s3Url("Mixer Grinder Repair", "1:1"), "image16x9": s3Url("Mixer Grinder Repair", "16:9"), "isTeamJob": false},
+            {"name": "Laptop Repair", "image": s3Url("Laptop Repair", "1:1"), "image16x9": s3Url("Laptop Repair", "16:9"), "isTeamJob": false},
+            {"name": "Mobile Repair", "image": s3Url("Mobile Repair", "1:1"), "image16x9": s3Url("Mobile Repair", "16:9"), "isTeamJob": false},
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Automotive Services",
+      "icon": FontAwesomeIcons.car,
+      "image": s3Url("Car Mechanic", "16:9"),
+      "color": const Color(0xFF8B5CF6),
+      "emoji": "🚗",
+      "slug": "automotive-services",
+      "workers": ["Two Wheeler", "Four Wheeler", "Others"],
+      "subcategories": [
+        {
+          "name": "Two Wheeler",
+          "image": s3Url("Bike Mechanic", "1:1"),
+          "tasks": [
+            {"name": "Bike Mechanic", "image": s3Url("Bike Mechanic", "1:1"), "image16x9": s3Url("Bike Mechanic", "16:9"), "isTeamJob": false},
+            {"name": "Bike Puncture", "image": s3Url("Bike Puncture", "1:1"), "image16x9": s3Url("Bike Puncture", "16:9"), "isTeamJob": false},
+            {"name": "Bike Wash", "image": s3Url("Bike Wash", "1:1"), "image16x9": s3Url("Bike Wash", "16:9"), "isTeamJob": false},
+            {"name": "Bike Battery", "image": s3Url("Bike Battery", "1:1"), "image16x9": s3Url("Bike Battery", "16:9"), "isTeamJob": false},
+          ]
+        },
+        {
+          "name": "Four Wheeler",
+          "image": s3Url("Car Mechanic", "1:1"),
+          "tasks": [
+            {"name": "Car Mechanic", "image": s3Url("Car Mechanic", "1:1"), "image16x9": s3Url("Car Mechanic", "16:9"), "isTeamJob": false},
+            {"name": "Car Wash", "image": s3Url("Car Wash", "1:1"), "image16x9": s3Url("Car Wash", "16:9"), "isTeamJob": false},
+            {"name": "Car Detailing", "image": s3Url("Car Detailing", "1:1"), "image16x9": s3Url("Car Detailing", "16:9"), "isTeamJob": false},
+            {"name": "Car Battery", "image": s3Url("Car Battery", "1:1"), "image16x9": s3Url("Car Battery", "16:9"), "isTeamJob": false},
+            {"name": "Car Tyre", "image": s3Url("Car Tyre", "1:1"), "image16x9": s3Url("Car Tyre", "16:9"), "isTeamJob": false},
+            {"name": "Dent & Paint", "image": s3Url("Dent & Paint", "1:1"), "image16x9": s3Url("Dent & Paint", "16:9"), "isTeamJob": false},
+          ]
+        },
+        {
+          "name": "Others",
+          "image": s3Url("Towing", "1:1"),
+          "tasks": [
+            {"name": "Towing", "image": s3Url("Towing", "1:1"), "image16x9": s3Url("Towing", "16:9"), "isTeamJob": false},
+            {"name": "Auto Mechanic", "image": s3Url("Auto Mechanic", "1:1"), "image16x9": s3Url("Auto Mechanic", "16:9"), "isTeamJob": false},
+            {"name": "Fuel Delivery", "image": s3Url("Fuel Delivery", "1:1"), "image16x9": s3Url("Fuel Delivery", "16:9"), "isTeamJob": false},
+            {"name": "Tractor Mechanic", "image": s3Url("Tractor Mechanic", "1:1"), "image16x9": s3Url("Tractor Mechanic", "16:9"), "isTeamJob": false},
+            {"name": "Roadside Assistance", "image": s3Url("Roadside Assistance", "1:1"), "image16x9": s3Url("Roadside Assistance", "16:9"), "isTeamJob": false},
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Construction & Labour",
+      "icon": FontAwesomeIcons.helmetSafety,
+      "image": s3Url("House Painting", "16:9"),
+      "color": const Color(0xFFD97706),
+      "emoji": "🏗️",
+      "slug": "construction-labour",
+      "workers": ["Construction & Labour"],
+      "subcategories": [
+        {
+          "name": "Construction & Labour",
+          "image": s3Url("House Painting", "1:1"),
+          "tasks": [
+            {"name": "House Painting", "image": s3Url("House Painting", "1:1"), "image16x9": s3Url("House Painting", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "Construction Labour", "image": s3Url("Construction Labour", "1:1"), "image16x9": s3Url("Construction Labour", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "Centering Work", "image": s3Url("Centering Work", "1:1"), "image16x9": s3Url("Centering Work", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "Steel Binding", "image": s3Url("Steel Binding", "1:1"), "image16x9": s3Url("Steel Binding", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "Slab Work", "image": s3Url("Slab Work", "1:1"), "image16x9": s3Url("Slab Work", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "Civil Contractor", "image": s3Url("Civil Contractor", "1:1"), "image16x9": s3Url("Civil Contractor", "16:9"), "isTeamJob": false},
+            {"name": "Architect", "image": s3Url("Architect", "1:1"), "image16x9": s3Url("Architect", "16:9"), "isTeamJob": false},
+            {"name": "Interior Designer", "image": s3Url("Interior Designer", "1:1"), "image16x9": s3Url("Interior Designer", "16:9"), "isTeamJob": false},
+            {"name": "Scaffolding", "image": s3Url("Scaffolding", "1:1"), "image16x9": s3Url("Scaffolding", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "JCB Rental", "image": s3Url("JCB Rental", "1:1"), "image16x9": s3Url("JCB Rental", "16:9"), "isTeamJob": false},
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Agriculture",
+      "icon": FontAwesomeIcons.tractor,
+      "image": s3Url("Tractor Work", "16:9"),
+      "color": const Color(0xFF10B981),
+      "emoji": "🌾",
+      "slug": "agriculture",
+      "workers": ["Agriculture"],
+      "subcategories": [
+        {
+          "name": "Agriculture",
+          "image": s3Url("Tractor Work", "1:1"),
+          "tasks": [
+            {"name": "Farm Labour", "image": s3Url("Farm Labour", "1:1"), "image16x9": s3Url("Farm Labour", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "Tractor Work", "image": s3Url("Tractor Work", "1:1"), "image16x9": s3Url("Tractor Work", "16:9"), "isTeamJob": false},
+            {"name": "Harvesting", "image": s3Url("Harvesting", "1:1"), "image16x9": s3Url("Harvesting", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "Sowing", "image": s3Url("Sowing", "1:1"), "image16x9": s3Url("Sowing", "16:9"), "isTeamJob": false},
+            {"name": "Irrigation Work", "image": s3Url("Irrigation Work", "1:1"), "image16x9": s3Url("Irrigation Work", "16:9"), "isTeamJob": false},
+            {"name": "Pesticide Spraying", "image": s3Url("Pesticide Spraying", "1:1"), "image16x9": s3Url("Pesticide Spraying", "16:9"), "isTeamJob": false},
+            {"name": "Animal Care", "image": s3Url("Animal Care", "1:1"), "image16x9": s3Url("Animal Care", "16:9"), "isTeamJob": false},
+            {"name": "Equipment Rental", "image": s3Url("Equipment Rental", "1:1"), "image16x9": s3Url("Equipment Rental", "16:9"), "isTeamJob": false},
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Beauty & Wellness",
+      "icon": FontAwesomeIcons.spa,
+      "image": s3Url("Salon at Home", "16:9"),
+      "color": const Color(0xFFEC4899),
+      "emoji": "💇",
+      "slug": "beauty-wellness",
+      "workers": ["Beauty & Wellness"],
+      "subcategories": [
+        {
+          "name": "Beauty & Wellness",
+          "image": s3Url("Salon at Home", "1:1"),
+          "tasks": [
+            {"name": "Barber", "image": s3Url("Barber", "1:1"), "image16x9": s3Url("Barber", "16:9"), "isTeamJob": false},
+            {"name": "Salon at Home", "image": s3Url("Salon at Home", "1:1"), "image16x9": s3Url("Salon at Home", "16:9"), "isTeamJob": false},
+            {"name": "Makeup Artist", "image": s3Url("Makeup Artist", "1:1"), "image16x9": s3Url("Makeup Artist", "16:9"), "isTeamJob": false},
+            {"name": "Mehendi Artist", "image": s3Url("Mehendi Artist", "1:1"), "image16x9": s3Url("Mehendi Artist", "16:9"), "isTeamJob": false},
+            {"name": "Massage", "image": s3Url("Massage", "1:1"), "image16x9": s3Url("Massage", "16:9"), "isTeamJob": false},
+            {"name": "Spa", "image": s3Url("Spa", "1:1"), "image16x9": s3Url("Spa", "16:9"), "isTeamJob": false},
+            {"name": "Personal Trainer", "image": s3Url("Personal Trainer", "1:1"), "image16x9": s3Url("Personal Trainer", "16:9"), "isTeamJob": false},
+            {"name": "Yoga Trainer", "image": s3Url("Yoga Trainer", "1:1"), "image16x9": s3Url("Yoga Trainer", "16:9"), "isTeamJob": false},
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Event Services",
+      "icon": FontAwesomeIcons.champagneGlasses,
+      "image": s3Url("Event Helpers", "16:9"),
+      "color": const Color(0xFFEAB308),
+      "emoji": "🎉",
+      "slug": "event-services",
+      "workers": ["Event Services"],
+      "subcategories": [
+        {
+          "name": "Event Services",
+          "image": s3Url("Event Helpers", "1:1"),
+          "tasks": [
+            {"name": "Event Helpers", "image": s3Url("Event Helpers", "1:1"), "image16x9": s3Url("Event Helpers", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "Catering Staff", "image": s3Url("Catering Staff", "1:1"), "image16x9": s3Url("Catering Staff", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "Decoration Setup", "image": s3Url("Decoration Setup", "1:1"), "image16x9": s3Url("Decoration Setup", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "Sound/Light Setup", "image": s3Url("Sound/Light Setup", "1:1"), "image16x9": s3Url("Sound/Light Setup", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "Photographer", "image": s3Url("Photographer", "1:1"), "image16x9": s3Url("Photographer", "16:9"), "isTeamJob": false},
+            {"name": "Videographer", "image": s3Url("Videographer", "1:1"), "image16x9": s3Url("Videographer", "16:9"), "isTeamJob": false},
+            {"name": "Wedding Planner", "image": s3Url("Wedding Planner", "1:1"), "image16x9": s3Url("Wedding Planner", "16:9"), "isTeamJob": false},
+            {"name": "Birthday Planner", "image": s3Url("Birthday Planner", "1:1"), "image16x9": s3Url("Birthday Planner", "16:9"), "isTeamJob": false},
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Education",
+      "icon": FontAwesomeIcons.graduationCap,
+      "image": s3Url("Home Tutor", "16:9"),
+      "color": const Color(0xFF6366F1),
+      "emoji": "📚",
+      "slug": "education",
+      "workers": ["Education"],
+      "subcategories": [
+        {
+          "name": "Education",
+          "image": s3Url("Home Tutor", "1:1"),
+          "tasks": [
+            {"name": "Home Tutor", "image": s3Url("Home Tutor", "1:1"), "image16x9": s3Url("Home Tutor", "16:9"), "isTeamJob": false},
+            {"name": "Music Teacher", "image": s3Url("Music Teacher", "1:1"), "image16x9": s3Url("Music Teacher", "16:9"), "isTeamJob": false},
+            {"name": "Language Classes", "image": s3Url("Language Classes", "1:1"), "image16x9": s3Url("Language Classes", "16:9"), "isTeamJob": false},
+            {"name": "Coding Tutor", "image": s3Url("Coding Tutor", "1:1"), "image16x9": s3Url("Coding Tutor", "16:9"), "isTeamJob": false},
+            {"name": "Spoken English", "image": s3Url("Spoken English", "1:1"), "image16x9": s3Url("Spoken English", "16:9"), "isTeamJob": false},
+            {"name": "Dance Trainer", "image": s3Url("Dance Trainer", "1:1"), "image16x9": s3Url("Dance Trainer", "16:9"), "isTeamJob": false},
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pet Care",
+      "icon": FontAwesomeIcons.paw,
+      "image": s3Url("Dog Walking", "16:9"),
+      "color": const Color(0xFF14B8A6),
+      "emoji": "🐾",
+      "slug": "pet-care",
+      "workers": ["Pet Care"],
+      "subcategories": [
+        {
+          "name": "Pet Care",
+          "image": s3Url("Dog Walking", "1:1"),
+          "tasks": [
+            {"name": "Dog Walking", "image": s3Url("Dog Walking", "1:1"), "image16x9": s3Url("Dog Walking", "16:9"), "isTeamJob": false},
+            {"name": "Pet Grooming", "image": s3Url("Pet Grooming", "1:1"), "image16x9": s3Url("Pet Grooming", "16:9"), "isTeamJob": false},
+            {"name": "Vet Visit", "image": s3Url("Vet Visit", "1:1"), "image16x9": s3Url("Vet Visit", "16:9"), "isTeamJob": false},
+            {"name": "Pet Boarding", "image": s3Url("Pet Boarding", "1:1"), "image16x9": s3Url("Pet Boarding", "16:9"), "isTeamJob": false},
+            {"name": "Pet Training", "image": s3Url("Pet Training", "1:1"), "image16x9": s3Url("Pet Training", "16:9"), "isTeamJob": false},
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Creative Services",
+      "icon": FontAwesomeIcons.paintbrush,
+      "image": s3Url("Graphic Designer", "16:9"),
+      "color": const Color(0xFFF43F5E),
+      "emoji": "🎨",
+      "slug": "creative-services",
+      "workers": ["Creative Services"],
+      "subcategories": [
+        {
+          "name": "Creative Services",
+          "image": s3Url("Graphic Designer", "1:1"),
+          "tasks": [
+            {"name": "Graphic Designer", "image": s3Url("Graphic Designer", "1:1"), "image16x9": s3Url("Graphic Designer", "16:9"), "isTeamJob": false},
+            {"name": "Logo Designer", "image": s3Url("Logo Designer", "1:1"), "image16x9": s3Url("Logo Designer", "16:9"), "isTeamJob": false},
+            {"name": "Video Editor", "image": s3Url("Video Editor", "1:1"), "image16x9": s3Url("Video Editor", "16:9"), "isTeamJob": false},
+            {"name": "Content Writer", "image": s3Url("Content Writer", "1:1"), "image16x9": s3Url("Content Writer", "16:9"), "isTeamJob": false},
+            {"name": "Social Media Manager", "image": s3Url("Social Media Manager", "1:1"), "image16x9": s3Url("Social Media Manager", "16:9"), "isTeamJob": false},
+            {"name": "Voice Artist", "image": s3Url("Voice Artist", "1:1"), "image16x9": s3Url("Voice Artist", "16:9"), "isTeamJob": false},
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Logistics & Transport",
+      "icon": FontAwesomeIcons.truckMoving,
+      "image": s3Url("Packers & Movers", "16:9"),
+      "color": const Color(0xFF7C3AED),
+      "emoji": "🚚",
+      "slug": "logistics-transport",
+      "workers": ["Logistics & Transport"],
+      "subcategories": [
+        {
+          "name": "Logistics & Transport",
+          "image": s3Url("Packers & Movers", "1:1"),
+          "tasks": [
+            {"name": "Packers & Movers", "image": s3Url("Packers & Movers", "1:1"), "image16x9": s3Url("Packers & Movers", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "Loading", "image": s3Url("Loading", "1:1"), "image16x9": s3Url("Loading", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "Unloading", "image": s3Url("Unloading", "1:1"), "image16x9": s3Url("Unloading", "16:9"), "isTeamJob": true, "minWorkers": 2, "maxWorkers": 20},
+            {"name": "Mini Truck", "image": s3Url("Mini Truck", "1:1"), "image16x9": s3Url("Mini Truck", "16:9"), "isTeamJob": false},
+            {"name": "Personal Driver", "image": s3Url("Personal Driver", "1:1"), "image16x9": s3Url("Personal Driver", "16:9"), "isTeamJob": false},
+            {"name": "Courier Service", "image": s3Url("Courier Service", "1:1"), "image16x9": s3Url("Courier Service", "16:9"), "isTeamJob": false},
+            {"name": "Parcel Delivery", "image": s3Url("Parcel Delivery", "1:1"), "image16x9": s3Url("Parcel Delivery", "16:9"), "isTeamJob": false},
+            {"name": "Furniture Moving", "image": s3Url("Furniture Moving", "1:1"), "image16x9": s3Url("Furniture Moving", "16:9"), "isTeamJob": false},
           ]
         }
       ]
     },
   ];
 
+  /// Helper: find a task by name across all categories
+  static Map<String, dynamic>? findTaskByName(String name) {
+    for (var cat in categories) {
+      for (var sub in (cat['subcategories'] as List)) {
+        for (var task in (sub['tasks'] as List)) {
+          if (task['name'].toString().toLowerCase() == name.toLowerCase()) {
+            return {
+              ...task,
+              'categoryName': cat['name'],
+              'categoryColor': cat['color'],
+              'categoryIcon': cat['icon'],
+              'subcategoryName': sub['name'],
+            };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Helper: get all tasks as a flat list
+  static List<Map<String, dynamic>> getAllTasks() {
+    final List<Map<String, dynamic>> tasks = [];
+    for (var cat in categories) {
+      for (var sub in (cat['subcategories'] as List)) {
+        for (var task in (sub['tasks'] as List)) {
+          tasks.add({
+            ...Map<String, dynamic>.from(task),
+            'categoryName': cat['name'],
+            'categoryColor': cat['color'],
+            'categoryIcon': cat['icon'],
+            'subcategoryName': sub['name'],
+          });
+        }
+      }
+    }
+    return tasks;
+  }
+
+  /// Fetch categories from backend API (with fallback to static data)
   static Future<List<Map<String, dynamic>>> fetchCategoriesFromApi(String baseUrl) async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/api/marketplace/categories'));
@@ -376,21 +447,43 @@ class ServiceData {
         final data = json.decode(response.body);
         if (data['success'] == true && data['categories'] != null) {
           final List<dynamic> apiCats = data['categories'];
-          return apiCats.map((c) => {
+          return apiCats.map((c) => <String, dynamic>{
             "name": c['name'],
             "icon": FontAwesomeIcons.layerGroup,
-            "description": c['description'],
-            "subcategories": (c['subcategories'] as List? ?? []).map((s) => {
+            "image": c['subcategories'] is List && (c['subcategories'] as List).isNotEmpty
+                ? (c['subcategories'][0]['image_16x9'] ?? '')
+                : '',
+            "color": _parseColor(c['color']),
+            "emoji": c['emoji'] ?? '',
+            "slug": c['slug'] ?? '',
+            "workers": (c['subcategories'] as List? ?? []).map((s) => s['name'].toString()).toList(),
+            "subcategories": (c['subcategories'] as List? ?? []).map((s) => <String, dynamic>{
+              "id": s['id'],
               "name": s['name'],
-              "defaultPricingType": s['defaultPricingType'],
-              "minPrice": s['minPrice'],
-              "maxPrice": s['maxPrice'],
-              "keywords": s['keywords'] ?? []
+              "image": s['image_1x1'] ?? '',
+              "tasks": (s['jobs'] as List? ?? []).map((j) => <String, dynamic>{
+                "id": j['id'],
+                "name": j['name'],
+                "image": j['image_1x1'] ?? '',
+                "image16x9": j['image_16x9'] ?? '',
+                "isTeamJob": j['is_team_job'] ?? false,
+                "minWorkers": j['min_workers'] ?? 1,
+                "maxWorkers": j['max_workers'] ?? 1,
+              }).toList()
             }).toList()
           }).toList();
         }
       }
     } catch (_) {}
     return categories;
+  }
+
+  static Color _parseColor(String? hex) {
+    if (hex == null || hex.isEmpty) return const Color(0xFF6366F1);
+    try {
+      return Color(int.parse(hex.replaceFirst('#', '0xFF')));
+    } catch (_) {
+      return const Color(0xFF6366F1);
+    }
   }
 }

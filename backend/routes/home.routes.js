@@ -11,12 +11,10 @@ const { invalidateTrendCache } = require('../services/market.service');
 const CACHE_TTL_SECONDS = 45;
 
 const ALL_CATEGORIES = [
-    'Home Services', 'Appliance Repair', 'Automobile', 'Moving & Logistics',
-    'Cleaning', 'Outdoor Services', 'Beauty & Wellness', 'Education',
-    'Photography & Creative', 'IT & Digital', 'Business & Legal', 'Healthcare',
-    'Pet Services', 'Food & Catering', 'Events', 'Construction',
-    'Rentals', 'Security', 'Care Services', 'Emergency',
-    'Delivery & Errands', 'Industrial Services'
+    'Home Care', 'Home Repair', 'Installation Services', 'Appliance Repair',
+    'Automotive Services', 'Construction & Labour', 'Agriculture', 'Beauty & Wellness',
+    'Event Services', 'Education', 'Pet Care', 'Creative Services',
+    'Logistics & Transport'
 ];
 
 const getTimeSegment = (hour) => {
@@ -30,12 +28,12 @@ const getTimeSegment = (hour) => {
 
 const getSegmentBoosts = (segment) => {
     const boosts = {
-        dawn: { Agriculture: 1.6, Labour: 1.4, Transport: 1.3, Delivery: 1.2 },
-        morning: { Cleaning: 1.5, Household: 1.4, Agriculture: 1.3, Construction: 1.3, Healthcare: 1.2 },
-        afternoon: { Labour: 1.4, Agriculture: 1.3, Construction: 1.3, Delivery: 1.2, Transport: 1.2 },
-        evening: { Electrical: 1.5, 'AC Repair': 1.5, Plumbing: 1.3, Mechanic: 1.2, 'Home Services': 1.3, Events: 1.2 },
-        night: { Delivery: 1.5, Security: 1.4, Electrical: 1.2, Mechanic: 1.2 },
-        latenight: { Delivery: 1.3, Security: 1.5 },
+        dawn: { Agriculture: 1.6, 'Construction & Labour': 1.4, 'Logistics & Transport': 1.3 },
+        morning: { 'Home Care': 1.5, Agriculture: 1.3, 'Construction & Labour': 1.3, Education: 1.2 },
+        afternoon: { 'Construction & Labour': 1.4, Agriculture: 1.3, 'Logistics & Transport': 1.2 },
+        evening: { 'Home Repair': 1.5, 'Appliance Repair': 1.5, 'Automotive Services': 1.2, 'Event Services': 1.2 },
+        night: { 'Logistics & Transport': 1.5, 'Home Repair': 1.2, 'Automotive Services': 1.2 },
+        latenight: { 'Logistics & Transport': 1.3, 'Home Repair': 1.2 },
     };
     return boosts[segment] || {};
 };

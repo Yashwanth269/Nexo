@@ -54,37 +54,30 @@ class ImageUtils {
       }
     }
 
-    // 2. Precise keyword matching
-    if (cat.contains('electric')) return 'assets/images/home services/electrical/wiring.webp';
-    if (cat.contains('ac') || cat.contains('air condition') || cat.contains('appliance')) return 'assets/images/home services/appliance repair/ac repair.jpg';
-    if (cat.contains('plumb') || cat.contains('pipe') || cat.contains('tap') || cat.contains('leak')) return 'assets/images/home services/plumbing/tap repair.jpg';
-    if (cat.contains('clean') || cat.contains('house keep')) return 'assets/images/home services/cleaning/full house cleaner.jpeg';
-    if (cat.contains('tractor') || cat.contains('plough') || cat.contains('agri') || cat.contains('farm')) return 'assets/images/Agriculture/Equipment Rental/tractor ploughing.jpg';
-    if (cat.contains('mason') || cat.contains('brick') || cat.contains('construct')) return 'assets/images/construction/core work/mason brick work.webp';
-    if (cat.contains('delivery') || cat.contains('parcel') || cat.contains('errand')) return 'assets/images/delivery/errands/parcel delivery.jpg';
-    if (cat.contains('mechanic') || cat.contains('bike') || cat.contains('car') || cat.contains('vehicle')) return 'assets/images/mechanic/vehicle repair/bike repair.webp';
-    if (cat.contains('driver') || cat.contains('transport')) return 'assets/images/transport/vehicles/pickup vehicle.webp';
-    if (cat.contains('maid') || cat.contains('cook') || cat.contains('house')) return 'assets/images/household/care and help/maid.jpg';
-    if (cat.contains('cctv') || cat.contains('camera') || cat.contains('solar') || cat.contains('tech')) return 'assets/images/smart tech/installation/solar panel installation.jpg';
-    if (cat.contains('event') || cat.contains('stage') || cat.contains('sound')) return 'assets/images/events/event staff/sound or light setup.jpg';
-    if (cat.contains('paint')) return 'assets/images/construction/finishing work/painter.jpg';
-    if (cat.contains('carpenter') || cat.contains('wood')) return 'assets/images/skilled/trades/carpenter.webp';
-    if (cat.contains('home repair') || cat.contains('repair')) return 'assets/images/home services/electrical/wiring.webp';
+    // 2. Keyword-based fallback to S3 URLs
+    if (cat.contains('electric')) return ServiceData.s3Url('Electrician', '1:1');
+    if (cat.contains('ac') || cat.contains('air condition') || cat.contains('appliance')) return ServiceData.s3Url('AC Repair', '1:1');
+    if (cat.contains('plumb') || cat.contains('pipe') || cat.contains('tap') || cat.contains('leak')) return ServiceData.s3Url('Plumber', '1:1');
+    if (cat.contains('clean') || cat.contains('house keep')) return ServiceData.s3Url('House Cleaning', '1:1');
+    if (cat.contains('tractor') || cat.contains('plough') || cat.contains('agri') || cat.contains('farm')) return ServiceData.s3Url('Tractor Work', '1:1');
+    if (cat.contains('mason') || cat.contains('brick') || cat.contains('construct')) return ServiceData.s3Url('Construction Labour', '1:1');
+    if (cat.contains('delivery') || cat.contains('parcel') || cat.contains('errand')) return ServiceData.s3Url('Parcel Delivery', '1:1');
+    if (cat.contains('mechanic') || cat.contains('bike') || cat.contains('car') || cat.contains('vehicle')) return ServiceData.s3Url('Car Mechanic', '1:1');
+    if (cat.contains('driver') || cat.contains('transport')) return ServiceData.s3Url('Personal Driver', '1:1');
+    if (cat.contains('maid') || cat.contains('cook') || cat.contains('house')) return ServiceData.s3Url('Home Cook', '1:1');
+    if (cat.contains('cctv') || cat.contains('camera') || cat.contains('solar') || cat.contains('tech')) return ServiceData.s3Url('CCTV Installation', '1:1');
+    if (cat.contains('event') || cat.contains('stage') || cat.contains('sound')) return ServiceData.s3Url('Event Helpers', '1:1');
+    if (cat.contains('paint')) return ServiceData.s3Url('House Painting', '1:1');
+    if (cat.contains('carpenter') || cat.contains('wood')) return ServiceData.s3Url('Carpenter', '1:1');
+    if (cat.contains('beauty') || cat.contains('salon') || cat.contains('barber')) return ServiceData.s3Url('Salon at Home', '1:1');
+    if (cat.contains('pet') || cat.contains('dog') || cat.contains('vet')) return ServiceData.s3Url('Dog Walking', '1:1');
+    if (cat.contains('education') || cat.contains('tutor') || cat.contains('teacher')) return ServiceData.s3Url('Home Tutor', '1:1');
+    if (cat.contains('creative') || cat.contains('design') || cat.contains('logo')) return ServiceData.s3Url('Graphic Designer', '1:1');
+    if (cat.contains('logistics') || cat.contains('packer') || cat.contains('mover')) return ServiceData.s3Url('Packers & Movers', '1:1');
+    if (cat.contains('home repair') || cat.contains('repair')) return ServiceData.s3Url('Electrician', '1:1');
 
-    switch (category?.trim()) {
-      case 'Agriculture': return 'assets/images/Agriculture/Equipment Rental/tractor ploughing.jpg';
-      case 'Construction': return 'assets/images/construction/core work/mason brick work.webp';
-      case 'Home Services': return 'assets/images/home services/cleaning/full house cleaner.jpeg';
-      case 'Transport': return 'assets/images/transport/vehicles/pickup vehicle.webp';
-      case 'Mechanic': return 'assets/images/mechanic/vehicle repair/bike repair.webp';
-      case 'Household': return 'assets/images/household/care and help/maid.jpg';
-      case 'Shops': return 'assets/images/shops/business help/sales assistant.jpg';
-      case 'Delivery': return 'assets/images/delivery/errands/parcel delivery.jpg';
-      case 'Events': return 'assets/images/events/event staff/sound or light setup.jpg';
-      case 'Skilled': return 'assets/images/skilled/trades/ac technician.jpg';
-      case 'Smart Tech': return 'assets/images/smart tech/installation/solar panel installation.jpg';
-      default: return 'assets/images/home services/electrical/wiring.webp';
-    }
+    // 3. Direct name match fallback
+    return ServiceData.s3Url(category?.trim() ?? 'Electrician', '1:1');
   }
 
   static Widget buildFallbackIcon(String? taskName, {double? width, double? height, Color? color}) {
@@ -123,45 +116,42 @@ class ImageUtils {
       return fallbackWidget;
     }
 
-    final safePath = resolvedPath;
-
-    // If path starts with http/https, render network image directly
-    if (safePath.startsWith('http')) {
-      final finalUrl = Uri.encodeFull(safePath);
-      return Image.network(
-        finalUrl,
-        width: width,
-        height: height,
-        fit: fit,
-        errorBuilder: (context, error, stackTrace) => fallbackWidget,
-      );
-    }
-
-    // If path is a local asset
-    if (safePath.startsWith('assets/')) {
-      return Image.asset(
-        safePath,
-        width: width,
-        height: height,
-        fit: fit,
-        errorBuilder: (context, error, stackTrace) => fallbackWidget,
-      );
-    }
-
-    // Fallback URL relative path
-    final relativeUrl = Uri.encodeFull(
-      safePath.startsWith('/')
-          ? '${NetworkHelper.baseUrl}$safePath'
-          : '${NetworkHelper.baseUrl}/$safePath',
-    );
-
-    return Image.network(
-      relativeUrl,
+    return Image(
+      image: getImageProvider(resolvedPath),
       width: width,
       height: height,
       fit: fit,
       errorBuilder: (context, error, stackTrace) => fallbackWidget,
     );
+  }
+
+  static ImageProvider getImageProvider(String? path, {String? fallbackAsset}) {
+    if (path == null || path.isEmpty || path == 'null') {
+      return AssetImage(fallbackAsset ?? placeholderUser);
+    }
+
+    if (path.startsWith('http')) {
+      return NetworkImage(Uri.encodeFull(path));
+    }
+
+    if (path.startsWith('assets/')) {
+      final lower = path.toLowerCase();
+      // Keep only these specific assets in the local Flutter bundle
+      if (lower.contains('/logo/') ||
+          lower.contains('refer_banner.png') ||
+          lower.contains('worker_auth.png') ||
+          lower.contains('placeholder_user.png')) {
+        return AssetImage(path);
+      }
+      // Redirect all other assets (like job/category images) to backend static file hosting
+      return NetworkImage(Uri.encodeFull('${NetworkHelper.baseUrl}/$path'));
+    }
+
+    // Default fallback to backend relative path
+    final relativeUrl = path.startsWith('/')
+        ? '${NetworkHelper.baseUrl}$path'
+        : '${NetworkHelper.baseUrl}/$path';
+    return NetworkImage(Uri.encodeFull(relativeUrl));
   }
 
   static Widget buildProfileImage(String? url, {double radius = 24, String? name}) {

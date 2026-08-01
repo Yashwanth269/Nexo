@@ -238,11 +238,31 @@ app.use('/api/trust', authenticateToken, require('./routes/trust.routes'));
 app.use('/api/fatigue', authenticateToken, require('./routes/fatigue.routes'));
 app.use('/api/metrics', authenticateToken, require('./routes/metrics.routes'));
 app.use('/api/multi-booking', authenticateToken, require('./routes/multi_service_booking.routes'));
+app.use('/api/team-jobs', authenticateToken, require('./routes/team_job.routes'));
+app.use('/api/team-leader', authenticateToken, require('./routes/team_leader.routes'));
+app.use('/api/team-worker', authenticateToken, require('./routes/team_worker.routes'));
 
 // Shared Photo Upload (requires auth)
-app.post('/api/user/upload-photo', authenticateToken, upload.single('photo'), (req, res) => {
+app.post('/api/user/upload-photo', authenticateToken, upload.single('photo'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    res.json({ success: true, photoUrl: `/uploads/${req.file.filename}` });
+    try {
+        const s3Service = require('./services/s3.service');
+        const photoUrl = await s3Service.uploadFile(req.file.path, req.file.originalname, req.file.mimetype);
+        
+        // Clean up the local temp upload file if S3 was successfully used
+        if (s3Service.isEnabled) {
+            try {
+                fs.unlinkSync(req.file.path);
+            } catch (unlinkErr) {
+                console.warn('[UPLOAD] Temp file deletion failed:', unlinkErr.message);
+            }
+        }
+        
+        res.json({ success: true, photoUrl });
+    } catch (err) {
+        console.error('[UPLOAD-ERROR] Failed to process upload:', err);
+        res.status(500).json({ success: false, error: 'Upload failed' });
+    }
 });
 
 app.get('/', (req, res) => res.send('GigLink Smart Engine API — Production Architecture Active'));
