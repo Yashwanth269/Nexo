@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nexo/utils/network_helper.dart';
 import 'package:nexo/services/service_data.dart';
 
@@ -116,12 +117,54 @@ class ImageUtils {
       return fallbackWidget;
     }
 
-    return Image(
-      image: getImageProvider(resolvedPath),
+    if (resolvedPath.startsWith('http')) {
+      final decoded = Uri.decodeFull(resolvedPath);
+      return CachedNetworkImage(
+        imageUrl: Uri.encodeFull(decoded),
+        width: width,
+        height: height,
+        fit: fit,
+        placeholder: (context, url) => fallbackWidget,
+        errorWidget: (context, url, error) => fallbackWidget,
+      );
+    }
+
+    if (resolvedPath.startsWith('assets/')) {
+      final lower = resolvedPath.toLowerCase();
+      if (lower.contains('/logo/') ||
+          lower.contains('refer_banner.png') ||
+          lower.contains('worker_auth.png') ||
+          lower.contains('placeholder_user.png')) {
+        return Image.asset(
+          resolvedPath,
+          width: width,
+          height: height,
+          fit: fit,
+          errorBuilder: (context, error, stackTrace) => fallbackWidget,
+        );
+      }
+      final redirectUrl = '${NetworkHelper.baseUrl}/$resolvedPath';
+      return CachedNetworkImage(
+        imageUrl: Uri.encodeFull(redirectUrl),
+        width: width,
+        height: height,
+        fit: fit,
+        placeholder: (context, url) => fallbackWidget,
+        errorWidget: (context, url, error) => fallbackWidget,
+      );
+    }
+
+    final relativeUrl = resolvedPath.startsWith('/')
+        ? '${NetworkHelper.baseUrl}$resolvedPath'
+        : '${NetworkHelper.baseUrl}/$resolvedPath';
+
+    return CachedNetworkImage(
+      imageUrl: Uri.encodeFull(relativeUrl),
       width: width,
       height: height,
       fit: fit,
-      errorBuilder: (context, error, stackTrace) => fallbackWidget,
+      placeholder: (context, url) => fallbackWidget,
+      errorWidget: (context, url, error) => fallbackWidget,
     );
   }
 
@@ -132,27 +175,24 @@ class ImageUtils {
 
     if (path.startsWith('http')) {
       final decoded = Uri.decodeFull(path);
-      return NetworkImage(Uri.encodeFull(decoded));
+      return CachedNetworkImageProvider(Uri.encodeFull(decoded));
     }
 
     if (path.startsWith('assets/')) {
       final lower = path.toLowerCase();
-      // Keep only these specific assets in the local Flutter bundle
       if (lower.contains('/logo/') ||
           lower.contains('refer_banner.png') ||
           lower.contains('worker_auth.png') ||
           lower.contains('placeholder_user.png')) {
         return AssetImage(path);
       }
-      // Redirect all other assets (like job/category images) to backend static file hosting
-      return NetworkImage(Uri.encodeFull('${NetworkHelper.baseUrl}/$path'));
+      return CachedNetworkImageProvider(Uri.encodeFull('${NetworkHelper.baseUrl}/$path'));
     }
 
-    // Default fallback to backend relative path
     final relativeUrl = path.startsWith('/')
         ? '${NetworkHelper.baseUrl}$path'
         : '${NetworkHelper.baseUrl}/$path';
-    return NetworkImage(Uri.encodeFull(relativeUrl));
+    return CachedNetworkImageProvider(Uri.encodeFull(relativeUrl));
   }
 
   static Widget buildProfileImage(String? url, {double radius = 24, String? name}) {
@@ -180,7 +220,7 @@ class ImageUtils {
       return CircleAvatar(
         radius: radius,
         backgroundColor: const Color(0xFF2563EB),
-        backgroundImage: NetworkImage(fallbackUrl),
+        backgroundImage: CachedNetworkImageProvider(fallbackUrl),
       );
     }
 
@@ -188,19 +228,24 @@ class ImageUtils {
       radius: radius,
       backgroundColor: const Color(0xFF2563EB),
       child: ClipOval(
-        child: Image.network(
-          resolvedUrl!,
+        child: CachedNetworkImage(
+          imageUrl: resolvedUrl!,
           width: radius * 2,
           height: radius * 2,
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return Image.network(
-              fallbackUrl,
-              width: radius * 2,
-              height: radius * 2,
-              fit: BoxFit.cover,
-            );
-          },
+          placeholder: (context, url) => const Center(
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            ),
+          ),
+          errorWidget: (context, url, error) => CachedNetworkImage(
+            imageUrl: fallbackUrl,
+            width: radius * 2,
+            height: radius * 2,
+            fit: BoxFit.cover,
+          ),
         ),
       ),
     );
