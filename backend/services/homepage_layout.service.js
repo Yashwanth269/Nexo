@@ -58,39 +58,39 @@ class HomepageLayoutService {
 
                 case 'quick_actions':
                     dataPayload = [
-                        { id: 'qa_1', label: 'Instant Book', icon: 'bolt', color: '#F97316', action: 'OPEN_CATEGORY', payload: 'Home Services' },
+                        { id: 'qa_1', label: 'Instant Book', icon: 'bolt', color: '#F97316', action: 'OPEN_CATEGORY', payload: 'Home Care' },
                         { id: 'qa_2', label: 'Near You', icon: 'location_on', color: '#10B981', action: 'OPEN_SEARCH', payload: 'nearby' },
                         { id: 'qa_3', label: 'Best Rated', icon: 'star', color: '#F59E0B', action: 'OPEN_SEARCH', payload: 'top_rated' },
                         { id: 'qa_4', label: 'Offers', icon: 'local_offer', color: '#EF4444', action: 'OPEN_OFFER', payload: 'deals' },
-                        { id: 'qa_5', label: 'Emergency', icon: 'warning', color: '#DC2626', action: 'OPEN_CATEGORY', payload: 'Emergency' },
+                        { id: 'qa_5', label: 'Home Repair', icon: 'build', color: '#DC2626', action: 'OPEN_CATEGORY', payload: 'Home Repair' },
                         { id: 'qa_6', label: 'My Jobs', icon: 'assignment', color: '#2563EB', action: 'OPEN_ACTION', payload: 'my_jobs' }
                     ];
                     break;
-
+ 
                 case 'top_picks':
                     dataPayload = [
-                        { name: 'Electrician', category: 'Home Services', rating: 4.6, prosCount: '120+ pros', image: 'assets/images/home services/electrical/wiring.webp', action: 'OPEN_CATEGORY', payload: 'Electrician' },
-                        { name: 'Plumber', category: 'Home Services', rating: 4.7, prosCount: '95+ pros', image: 'assets/images/home services/plumbing/tap repair.jpg', action: 'OPEN_CATEGORY', payload: 'Plumber' },
-                        { name: 'Home Cleaning', category: 'Cleaning', rating: 4.6, prosCount: '180+ pros', image: 'assets/images/home services/cleaning/full house cleaner.jpeg', action: 'OPEN_CATEGORY', payload: 'Home Cleaning' },
-                        { name: 'AC Repair', category: 'Appliance Repair', rating: 4.5, prosCount: '80+ pros', image: 'assets/images/home services/appliance repair/ac repair.jpg', action: 'OPEN_CATEGORY', payload: 'AC Repair' },
-                        { name: 'Car Wash', category: 'Automobile', rating: 4.6, prosCount: '60+ pros', image: 'assets/images/mechanic/vehicle repair/bike repair.webp', action: 'OPEN_CATEGORY', payload: 'Car Wash' }
+                        { name: 'Electrician', category: 'Home Repair', rating: 4.6, prosCount: '120+ pros', image: 'https://nexoassets.s3.ap-south-1.amazonaws.com/images/1:1/Electrician2.jpeg', action: 'OPEN_CATEGORY', payload: 'Electrician' },
+                        { name: 'Plumber', category: 'Home Repair', rating: 4.7, prosCount: '95+ pros', image: 'https://nexoassets.s3.ap-south-1.amazonaws.com/images/1:1/Plumber2.jpeg', action: 'OPEN_CATEGORY', payload: 'Plumber' },
+                        { name: 'Home Cleaning', category: 'Home Care', rating: 4.6, prosCount: '180+ pros', image: 'https://nexoassets.s3.ap-south-1.amazonaws.com/images/1:1/House%20Cleaning2.jpeg', action: 'OPEN_CATEGORY', payload: 'House Cleaning' },
+                        { name: 'AC Repair', category: 'Appliance Repair', rating: 4.5, prosCount: '80+ pros', image: 'https://nexoassets.s3.ap-south-1.amazonaws.com/images/1:1/AC%20Repair2.jpeg', action: 'OPEN_CATEGORY', payload: 'AC Repair' },
+                        { name: 'Car Wash', category: 'Automotive Services', rating: 4.6, prosCount: '60+ pros', image: 'https://nexoassets.s3.ap-south-1.amazonaws.com/images/1:1/Car%20Wash2.jpeg', action: 'OPEN_CATEGORY', payload: 'Car Wash' }
                     ];
                     break;
-
+ 
                 case 'deals_and_events':
                     dataPayload = [
-                        { id: 'deal_1', badge: 'MEGA SAVINGS', title: 'Up to 50% OFF', subtitle: 'On Home Services', bg_color: '#F3E8FF', text_color: '#6B21A8', action: 'OPEN_CATEGORY', payload: 'Home Services' },
-                        { id: 'deal_2', badge: 'FESTIVAL', title: 'Care Bonanza', subtitle: 'Special offers for Festive season', bg_color: '#FEF3C7', text_color: '#92400E', action: 'OPEN_CATEGORY', payload: 'Cleaning' },
+                        { id: 'deal_1', badge: 'MEGA SAVINGS', title: 'Up to 50% OFF', subtitle: 'On Home Care', bg_color: '#F3E8FF', text_color: '#6B21A8', action: 'OPEN_CATEGORY', payload: 'Home Care' },
+                        { id: 'deal_2', badge: 'FESTIVAL', title: 'Care Bonanza', subtitle: 'Special offers for Festive season', bg_color: '#FEF3C7', text_color: '#92400E', action: 'OPEN_CATEGORY', payload: 'Home Care' },
                         { id: 'deal_3', badge: 'WEEKEND', title: 'Maintenance', subtitle: 'Flat 20% OFF on Repairs', bg_color: '#E0F2FE', text_color: '#075985', action: 'OPEN_CATEGORY', payload: 'Appliance Repair' }
                     ];
                     break;
-
+ 
                 case 'all_categories':
                     dataPayload = categories.length > 0 ? categories : [
-                        { name: 'Home Services', icon: 'home' },
+                        { name: 'Home Care', icon: 'home' },
+                        { name: 'Home Repair', icon: 'build' },
                         { name: 'Appliance Repair', icon: 'kitchen' },
-                        { name: 'Automobile', icon: 'directions_car' },
-                        { name: 'Cleaning', icon: 'cleaning_services' },
+                        { name: 'Automotive Services', icon: 'directions_car' },
                         { name: 'Beauty & Wellness', icon: 'spa' }
                     ];
                     break;
