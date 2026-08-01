@@ -1,6 +1,6 @@
 const db = require('../config/db');
 
-const S3_BASE = 'https://nexoassets.s3.ap-south-1.amazonaws.com/images';
+const S3_BASE = 'https://nexoassets.s3.ap-south-2.amazonaws.com/images';
 const s3Url = (name, ratio) => `${S3_BASE}/${ratio}/${encodeURIComponent(name)}2.jpeg`;
 
 const CATEGORY_DATA = [

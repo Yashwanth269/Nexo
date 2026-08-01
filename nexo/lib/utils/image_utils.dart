@@ -131,7 +131,8 @@ class ImageUtils {
     }
 
     if (path.startsWith('http')) {
-      return NetworkImage(Uri.encodeFull(path));
+      final decoded = Uri.decodeFull(path);
+      return NetworkImage(Uri.encodeFull(decoded));
     }
 
     if (path.startsWith('assets/')) {

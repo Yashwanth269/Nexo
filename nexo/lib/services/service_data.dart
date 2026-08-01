@@ -5,7 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ServiceData {
   // S3 base URL for job images
-  static const String s3Base = 'https://nexoassets.s3.ap-south-1.amazonaws.com/images';
+  static const String s3Base = 'https://nexoassets.s3.ap-south-2.amazonaws.com/images';
   static String s3Url(String name, String ratio) =>
       '$s3Base/$ratio/${Uri.encodeComponent(name)}2.jpeg';
 

@@ -69,11 +69,11 @@ class HomepageLayoutService {
  
                 case 'top_picks':
                     dataPayload = [
-                        { name: 'Electrician', category: 'Home Repair', rating: 4.6, prosCount: '120+ pros', image: 'https://nexoassets.s3.ap-south-1.amazonaws.com/images/1:1/Electrician2.jpeg', action: 'OPEN_CATEGORY', payload: 'Electrician' },
-                        { name: 'Plumber', category: 'Home Repair', rating: 4.7, prosCount: '95+ pros', image: 'https://nexoassets.s3.ap-south-1.amazonaws.com/images/1:1/Plumber2.jpeg', action: 'OPEN_CATEGORY', payload: 'Plumber' },
-                        { name: 'Home Cleaning', category: 'Home Care', rating: 4.6, prosCount: '180+ pros', image: 'https://nexoassets.s3.ap-south-1.amazonaws.com/images/1:1/House%20Cleaning2.jpeg', action: 'OPEN_CATEGORY', payload: 'House Cleaning' },
-                        { name: 'AC Repair', category: 'Appliance Repair', rating: 4.5, prosCount: '80+ pros', image: 'https://nexoassets.s3.ap-south-1.amazonaws.com/images/1:1/AC%20Repair2.jpeg', action: 'OPEN_CATEGORY', payload: 'AC Repair' },
-                        { name: 'Car Wash', category: 'Automotive Services', rating: 4.6, prosCount: '60+ pros', image: 'https://nexoassets.s3.ap-south-1.amazonaws.com/images/1:1/Car%20Wash2.jpeg', action: 'OPEN_CATEGORY', payload: 'Car Wash' }
+                        { name: 'Electrician', category: 'Home Repair', rating: 4.6, prosCount: '120+ pros', image: 'https://nexoassets.s3.ap-south-2.amazonaws.com/images/1:1/Electrician2.jpeg', action: 'OPEN_CATEGORY', payload: 'Electrician' },
+                        { name: 'Plumber', category: 'Home Repair', rating: 4.7, prosCount: '95+ pros', image: 'https://nexoassets.s3.ap-south-2.amazonaws.com/images/1:1/Plumber2.jpeg', action: 'OPEN_CATEGORY', payload: 'Plumber' },
+                        { name: 'Home Cleaning', category: 'Home Care', rating: 4.6, prosCount: '180+ pros', image: 'https://nexoassets.s3.ap-south-2.amazonaws.com/images/1:1/House%20Cleaning2.jpeg', action: 'OPEN_CATEGORY', payload: 'House Cleaning' },
+                        { name: 'AC Repair', category: 'Appliance Repair', rating: 4.5, prosCount: '80+ pros', image: 'https://nexoassets.s3.ap-south-2.amazonaws.com/images/1:1/AC%20Repair2.jpeg', action: 'OPEN_CATEGORY', payload: 'AC Repair' },
+                        { name: 'Car Wash', category: 'Automotive Services', rating: 4.6, prosCount: '60+ pros', image: 'https://nexoassets.s3.ap-south-2.amazonaws.com/images/1:1/Car%20Wash2.jpeg', action: 'OPEN_CATEGORY', payload: 'Car Wash' }
                     ];
                     break;
  
