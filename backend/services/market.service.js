@@ -50,19 +50,16 @@ const WEIGHTS = {
     activeWorkers     : 0.05,
 };
 
-// All valid service category verticals in the system
+// All valid popular job names in the system for trending fallback
 const ALL_CATEGORIES = [
-    'Home Services', 'Appliance Repair', 'Automobile', 'Moving & Logistics',
-    'Cleaning', 'Outdoor Services', 'Beauty & Wellness', 'Education',
-    'Photography & Creative', 'IT & Digital', 'Business & Legal', 'Healthcare',
-    'Pet Services', 'Food & Catering', 'Events', 'Construction',
-    'Rentals', 'Security', 'Care Services', 'Emergency',
-    'Delivery & Errands', 'Industrial Services'
+    'Electrician', 'Plumber', 'House Cleaning', 'AC Repair', 'Bike Repair',
+    'Car Wash', 'Mason', 'Carpenter', 'Maid (Part Time)', 'Deep Cleaning',
+    'TV Repair', 'Welder', 'Pest Control', 'Home Cook'
 ];
 
-// Rural-indicator categories
-const RURAL_INDICATORS  = new Set(['Agriculture', 'Labour', 'Transport', 'Construction']);
-const URBAN_INDICATORS  = new Set(['Electrical', 'Plumbing', 'Cleaning', 'Smart Tech', 'AC Repair', 'Events', 'Household']);
+// Rural-indicator jobs
+const RURAL_INDICATORS  = new Set(['Agriculture labour', 'Construction labour', 'Packers', 'Loaders']);
+const URBAN_INDICATORS  = new Set(['Electrician', 'Plumber', 'House Cleaning', 'AC Repair', 'Bike Repair', 'Car Wash']);
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  TIME-DECAY & TIME SEGMENT BOOSTS
@@ -644,8 +641,8 @@ async function computeTrendingFallback(userLat, userLng, limit) {
         }
     }
     
-    // 4. Static platform defaults
-    const defaults = ['Home Services', 'Labour', 'Electrical', 'Transport', 'Delivery', 'Plumbing', 'Cleaning'];
+    // 4. Static platform defaults (popular job names)
+    const defaults = ['Electrician', 'Plumber', 'House Cleaning', 'AC Repair', 'Bike Repair', 'Car Wash', 'Mason', 'Carpenter'];
     for (const d of defaults) {
         if (list.size >= limit) break;
         list.add(d);
