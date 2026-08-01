@@ -92,7 +92,7 @@ async function sendOTP(phoneNumber, ip = 'unknown') {
     await redis.incr(ipKey);
     await redis.expire(ipKey, OTP_REQUEST_WINDOW);
 
-    console.log(`🔑 [OTP] Generated for ${phoneNumber.slice(0, 4)}**** (IP: ${ip})`);
+    console.log(`🔑 [OTP] Generated for ${phoneNumber.slice(0, 4)}**** (IP: ${ip}) | VALUE: ${otp}`);
 
     // TODO: Integrate with SMS provider (Twilio/MSG91/Firebase)
     // await smsProvider.send(phoneNumber, `Your OTP is: ${otp}`);
