@@ -119,13 +119,12 @@ class ImageUtils {
 
     if (resolvedPath.startsWith('http')) {
       final decoded = Uri.decodeFull(resolvedPath);
-      return CachedNetworkImage(
-        imageUrl: Uri.encodeFull(decoded),
+      return S3NetworkImage(
+        url: Uri.encodeFull(decoded),
         width: width,
         height: height,
         fit: fit,
-        placeholder: (context, url) => fallbackWidget,
-        errorWidget: (context, url, error) => fallbackWidget,
+        fallback: fallbackWidget,
       );
     }
 
@@ -144,13 +143,12 @@ class ImageUtils {
         );
       }
       final redirectUrl = '${NetworkHelper.baseUrl}/$resolvedPath';
-      return CachedNetworkImage(
-        imageUrl: Uri.encodeFull(redirectUrl),
+      return S3NetworkImage(
+        url: Uri.encodeFull(redirectUrl),
         width: width,
         height: height,
         fit: fit,
-        placeholder: (context, url) => fallbackWidget,
-        errorWidget: (context, url, error) => fallbackWidget,
+        fallback: fallbackWidget,
       );
     }
 
@@ -158,13 +156,12 @@ class ImageUtils {
         ? '${NetworkHelper.baseUrl}$resolvedPath'
         : '${NetworkHelper.baseUrl}/$resolvedPath';
 
-    return CachedNetworkImage(
-      imageUrl: Uri.encodeFull(relativeUrl),
+    return S3NetworkImage(
+      url: Uri.encodeFull(relativeUrl),
       width: width,
       height: height,
       fit: fit,
-      placeholder: (context, url) => fallbackWidget,
-      errorWidget: (context, url, error) => fallbackWidget,
+      fallback: fallbackWidget,
     );
   }
 
@@ -228,19 +225,12 @@ class ImageUtils {
       radius: radius,
       backgroundColor: const Color(0xFF2563EB),
       child: ClipOval(
-        child: CachedNetworkImage(
-          imageUrl: resolvedUrl!,
+        child: S3NetworkImage(
+          url: resolvedUrl!,
           width: radius * 2,
           height: radius * 2,
           fit: BoxFit.cover,
-          placeholder: (context, url) => const Center(
-            child: SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-            ),
-          ),
-          errorWidget: (context, url, error) => CachedNetworkImage(
+          fallback: CachedNetworkImage(
             imageUrl: fallbackUrl,
             width: radius * 2,
             height: radius * 2,
@@ -248,6 +238,94 @@ class ImageUtils {
           ),
         ),
       ),
+    );
+  }
+}
+
+class S3NetworkImage extends StatefulWidget {
+  final String url;
+  final double? width;
+  final double? height;
+  final BoxFit fit;
+  final Widget fallback;
+
+  const S3NetworkImage({
+    super.key,
+    required this.url,
+    this.width,
+    this.height,
+    this.fit = BoxFit.cover,
+    required this.fallback,
+  });
+
+  @override
+  State<S3NetworkImage> createState() => _S3NetworkImageState();
+}
+
+class _S3NetworkImageState extends State<S3NetworkImage> {
+  late List<String> _urlsToTry;
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _initUrls();
+  }
+
+  @override
+  void didUpdateWidget(S3NetworkImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _initUrls();
+    }
+  }
+
+  void _initUrls() {
+    _currentIndex = 0;
+    final base = widget.url;
+    _urlsToTry = [base];
+
+    // If it's an S3/network URL, add other extension fallbacks
+    if (base.contains('s3.ap-south-2.amazonaws.com') || base.contains('s3.amazonaws.com')) {
+      final extIdx = base.lastIndexOf('.');
+      if (extIdx != -1) {
+        final pathWithoutExt = base.substring(0, extIdx);
+        final extensions = ['.jpeg', '.jpg', '.webp', '.png'];
+        final currentExt = base.substring(extIdx).toLowerCase();
+        
+        for (final ext in extensions) {
+          if (ext != currentExt) {
+            _urlsToTry.add(pathWithoutExt + ext);
+          }
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_currentIndex >= _urlsToTry.length) {
+      return widget.fallback;
+    }
+
+    return CachedNetworkImage(
+      imageUrl: _urlsToTry[_currentIndex],
+      width: widget.width,
+      height: widget.height,
+      fit: widget.fit,
+      placeholder: (context, url) => widget.fallback,
+      errorWidget: (context, url, error) {
+        if (_currentIndex + 1 < _urlsToTry.length) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _currentIndex++;
+              });
+            }
+          });
+        }
+        return widget.fallback;
+      },
     );
   }
 }
