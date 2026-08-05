@@ -377,8 +377,10 @@ class _PostJobScreenState extends State<PostJobScreen> {
         }
       }
     } catch (e) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Matching failed: $e")));
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Matching failed: $e")));
+      }
     }
   }
 
