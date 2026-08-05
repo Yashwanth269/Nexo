@@ -910,6 +910,53 @@ const MIGRATIONS = [
             "DROP TABLE IF EXISTS marketplace_subcategories CASCADE;",
             "DROP TABLE IF EXISTS marketplace_categories CASCADE;"
         ]
+    },
+    {
+        version: 25,
+        name: 'learning_management_system_schema',
+        up: [
+            `CREATE TABLE IF NOT EXISTS lms_courses (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                title VARCHAR(200) NOT NULL,
+                description TEXT,
+                category VARCHAR(100),
+                target_audience VARCHAR(20) DEFAULT 'WORKER', -- WORKER, CUSTOMER, ALL
+                thumbnail_url TEXT,
+                is_published BOOLEAN DEFAULT true,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS lms_lessons (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                course_id UUID NOT NULL REFERENCES lms_courses(id) ON DELETE CASCADE,
+                title VARCHAR(200) NOT NULL,
+                content_type VARCHAR(20) DEFAULT 'VIDEO', -- VIDEO, PDF, QUIZ, TEXT
+                content_url TEXT,
+                sort_order INT DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS lms_enrollments (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                worker_id UUID REFERENCES workers(id) ON DELETE CASCADE,
+                course_id UUID NOT NULL REFERENCES lms_courses(id) ON DELETE CASCADE,
+                progress_pct DECIMAL(5,2) DEFAULT 0.00,
+                completed BOOLEAN DEFAULT false,
+                completed_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );`,
+            `CREATE TABLE IF NOT EXISTS lms_certificates (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                enrollment_id UUID NOT NULL REFERENCES lms_enrollments(id) ON DELETE CASCADE,
+                certificate_number VARCHAR(100) NOT NULL UNIQUE,
+                issued_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );`
+        ],
+        down: [
+            "DROP TABLE IF EXISTS lms_certificates CASCADE;",
+            "DROP TABLE IF EXISTS lms_enrollments CASCADE;",
+            "DROP TABLE IF EXISTS lms_lessons CASCADE;",
+            "DROP TABLE IF EXISTS lms_courses CASCADE;"
+        ]
     }
 ];
 

@@ -190,7 +190,7 @@ class ChatService {
 
         return result.rows.map(row => {
             const photo = row.user_photo;
-            let photoUrl = `https://i.pravatar.cc/150?u=${encodeURIComponent(row.user_name)}`;
+            let photoUrl = null;
             if (photo) {
                 photoUrl = photo.startsWith('http') ? photo : `${req.protocol}://${req.get('host')}${photo}`;
             }
@@ -258,7 +258,7 @@ class ChatService {
 
         return result.rows.map(row => {
             const photo = row.worker_photo;
-            let photoUrl = `https://i.pravatar.cc/150?u=${encodeURIComponent(row.worker_name)}`;
+            let photoUrl = null;
             if (photo) {
                 photoUrl = photo.startsWith('http') ? photo : `${req.protocol}://${req.get('host')}${photo}`;
             }

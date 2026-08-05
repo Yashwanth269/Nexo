@@ -444,4 +444,24 @@ router.post('/verify-qr', async (req, res) => {
     }
 });
 
+// Stream Customer GST PDF Invoice
+router.get('/invoice/:jobId', async (req, res) => {
+    try {
+        const { jobId } = req.params;
+        const db = require('../config/db');
+        const jRes = await db.query("SELECT * FROM jobs WHERE id = $1", [jobId]);
+        const jobData = jRes.rowCount > 0 ? jRes.rows[0] : { id: jobId, price: 500, category: 'Home Repair', payment_method: 'RAZORPAY' };
+
+        const pdfService = require('../services/pdf_invoice.service');
+        const pdfBuffer = await pdfService.generateCustomerInvoice(jobData);
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="NEXO-INV-${jobId.slice(0, 8)}.pdf"`);
+        res.send(pdfBuffer);
+    } catch (error) {
+        console.error("Error generating PDF invoice:", error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 module.exports = router;

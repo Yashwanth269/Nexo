@@ -241,6 +241,20 @@ app.use('/api/multi-booking', authenticateToken, require('./routes/multi_service
 app.use('/api/team-jobs', authenticateToken, require('./routes/team_job.routes'));
 app.use('/api/team-leader', authenticateToken, require('./routes/team_leader.routes'));
 app.use('/api/team-worker', authenticateToken, require('./routes/team_worker.routes'));
+app.use('/api/lms', require('./routes/lms.routes'));
+
+app.get('/api/worker', authenticateToken, async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT id, full_name AS name, phone_number, is_online, rating, reliability_score, fatigue_score, verification_status
+            FROM workers
+            ORDER BY created_at DESC
+        `);
+        res.json({ success: true, workers: result.rows });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 // Shared Photo Upload (requires auth)
 app.post('/api/user/upload-photo', authenticateToken, upload.single('photo'), async (req, res) => {

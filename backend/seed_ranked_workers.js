@@ -22,7 +22,7 @@ const seed = async () => {
                 current_lng: 78.186186,
                 is_online: true,
                 is_available: true,
-                photo_url: 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=150&auto=format&fit=crop&q=80',
+                photo_url: null,
                 experience: '6 Years'
             },
             {
@@ -36,7 +36,7 @@ const seed = async () => {
                 current_lng: 78.178186,
                 is_online: true,
                 is_available: true,
-                photo_url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+                photo_url: null,
                 experience: '4 Years'
             },
             {
@@ -50,7 +50,7 @@ const seed = async () => {
                 current_lng: 78.175186,
                 is_online: true,
                 is_available: true,
-                photo_url: 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=150&auto=format&fit=crop&q=80',
+                photo_url: null,
                 experience: '8 Years'
             },
             {
@@ -64,7 +64,7 @@ const seed = async () => {
                 current_lng: 78.194186,
                 is_online: true,
                 is_available: true,
-                photo_url: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80',
+                photo_url: null,
                 experience: '1 Year'
             }
         ];

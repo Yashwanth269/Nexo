@@ -94,17 +94,17 @@ async function sendOTP(phoneNumber, ip = 'unknown') {
 
     console.log(`🔑 [OTP] Generated for ${phoneNumber.slice(0, 4)}**** (IP: ${ip}) | VALUE: ${otp}`);
 
-    // TODO: Integrate with SMS provider (Twilio/MSG91/Firebase)
-    // await smsProvider.send(phoneNumber, `Your OTP is: ${otp}`);
+    const smsProvider = require('../services/sms_provider.service');
+    const smsResult = await smsProvider.sendOTP(phoneNumber, otp);
 
-    const result = { success: true, message: 'OTP sent successfully' };
+    const result = { success: true, message: 'OTP sent successfully', provider: smsResult.provider };
     
     // Only return OTP in non-production for development testing
     if (!IS_PRODUCTION) {
         result.demoOtp = otp;
         result.deepLink = `gigs://otp?phone=${phoneNumber}&code=${otp}`;
         console.log(`🔑 [OTP-DEV] OTP value: ${otp}`);
-        console.log(`📱 [SMS Simulation] Sent message: "Your Gigs verification code is ${otp}. Tap to auto-verify: ${result.deepLink}"`);
+        console.log(`📱 [SMS Simulation] Sent message: "Your Nexo verification code is ${otp}. Tap to auto-verify: ${result.deepLink}"`);
     }
 
     return result;
@@ -117,6 +117,12 @@ async function sendOTP(phoneNumber, ip = 'unknown') {
 async function verifyOTP(phoneNumber, otp) {
     if (!phoneNumber || !otp) {
         return { success: false, error: 'MISSING_FIELDS', message: 'Phone number and OTP required' };
+    }
+
+    // Developer bypass in development mode
+    if (!IS_PRODUCTION && (otp === '123456' || otp === 123456)) {
+        console.log(`✅ [OTP-DEV-BYPASS] Bypassed verification for ${phoneNumber}`);
+        return { success: true };
     }
 
     // 1. Check lockout
