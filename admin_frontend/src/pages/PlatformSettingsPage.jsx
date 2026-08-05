@@ -10,7 +10,7 @@ export const PlatformSettingsPage = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div>
-        <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#ffffff' }}>Platform Settings & Feature Controls</h1>
+        <h1 style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-main)' }}>Platform Settings & Feature Controls</h1>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
           Realtime Feature Flags, Dispatch Overrides, AWS S3 Config & SMS Gateway Controls
         </p>
@@ -18,12 +18,12 @@ export const PlatformSettingsPage = () => {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
         <div className="glass-panel" style={{ padding: '24px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#ffffff', marginBottom: '16px' }}>Feature Toggles & Engine Controls</h3>
+          <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '16px' }}>Feature Toggles & Engine Controls</h3>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontWeight: '600', color: '#ffffff' }}>Automated PostGIS Dispatch</div>
+                <div style={{ fontWeight: '600', color: 'var(--text-main)' }}>Automated PostGIS Dispatch</div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Auto-assign closest 7km candidate workers</div>
               </div>
               <button
@@ -36,7 +36,7 @@ export const PlatformSettingsPage = () => {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontWeight: '600', color: '#ffffff' }}>Dynamic Surge Pricing</div>
+                <div style={{ fontWeight: '600', color: 'var(--text-main)' }}>Dynamic Surge Pricing</div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Enable XGBoost surge multiplier algorithm</div>
               </div>
               <button
@@ -49,7 +49,7 @@ export const PlatformSettingsPage = () => {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontWeight: '600', color: '#ffffff' }}>Shadow Ban Enforcement</div>
+                <div style={{ fontWeight: '600', color: 'var(--text-main)' }}>Shadow Ban Enforcement</div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>De-prioritize low reliability / fraud workers</div>
               </div>
               <button
@@ -63,7 +63,7 @@ export const PlatformSettingsPage = () => {
         </div>
 
         <div className="glass-panel" style={{ padding: '24px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#ffffff', marginBottom: '16px' }}>Infrastructure Configuration</h3>
+          <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '16px' }}>Infrastructure Configuration</h3>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div>

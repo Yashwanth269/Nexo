@@ -76,7 +76,7 @@ export const WorkersPage = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#ffffff' }}>Workers & KYC Control</h1>
+          <h1 style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-main)' }}>Workers & KYC Control</h1>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
             Reliability Scores, Fraud Monitoring, Selfie KYC & Shadow-Ban Governance
           </p>
@@ -134,7 +134,7 @@ export const WorkersPage = () => {
                         alt=""
                         style={{ width: '32px', height: '32px', borderRadius: '50%' }}
                       />
-                      <span style={{ fontWeight: '600', color: '#ffffff' }}>{w.name || 'Service Partner'}</span>
+                      <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{w.name || 'Service Partner'}</span>
                     </td>
                     <td>{w.phone_number || 'N/A'}</td>
                     <td>
@@ -187,7 +187,7 @@ export const WorkersPage = () => {
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
           <div className="glass-panel" style={{ width: '400px', padding: '24px' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#ffffff', marginBottom: '12px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '12px' }}>
               Shadow Ban: {banModalWorker.name}
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>

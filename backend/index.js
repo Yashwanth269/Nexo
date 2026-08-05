@@ -246,9 +246,11 @@ app.use('/api/lms', require('./routes/lms.routes'));
 app.get('/api/worker', authenticateToken, async (req, res) => {
     try {
         const result = await db.query(`
-            SELECT id, full_name AS name, phone_number, is_online, rating, reliability_score, fatigue_score, verification_status
-            FROM workers
-            ORDER BY created_at DESC
+            SELECT w.id, w.full_name AS name, w.phone_number, w.is_online, w.rating, w.reliability_score,
+                   COALESCE(f.fatigue_score, 0) AS fatigue_score, w.verification_status
+            FROM workers w
+            LEFT JOIN advanced_fatigue_scores f ON w.id = f.worker_id
+            ORDER BY w.created_at DESC
         `);
         res.json({ success: true, workers: result.rows });
     } catch (error) {

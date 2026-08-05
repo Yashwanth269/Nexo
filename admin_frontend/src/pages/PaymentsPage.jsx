@@ -11,7 +11,7 @@ export const PaymentsPage = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#ffffff' }}>Finance, Payouts & Double-Entry Ledger</h1>
+          <h1 style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-main)' }}>Finance, Payouts & Double-Entry Ledger</h1>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
             Double-Entry Financial Audit Trail (`double_entry_ledger`), Razorpay Verification & Payout Operations
           </p>
@@ -21,7 +21,7 @@ export const PaymentsPage = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
         <div className="glass-panel" style={{ padding: '20px' }}>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>SYSTEM GROSS REVENUE</div>
-          <div style={{ fontSize: '28px', fontWeight: '800', color: '#ffffff' }}>₹1,48,500.00</div>
+          <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--text-main)' }}>₹1,48,500.00</div>
           <div style={{ fontSize: '11px', color: '#34d399', marginTop: '4px' }}>✅ Double-entry verified</div>
         </div>
 
@@ -39,7 +39,7 @@ export const PaymentsPage = () => {
       </div>
 
       <div className="glass-panel" style={{ padding: '20px' }}>
-        <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#ffffff', marginBottom: '16px' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '16px' }}>
           Double-Entry Ledger Audit Trail (`double_entry_ledger`)
         </h3>
         <table className="data-table">
@@ -55,7 +55,7 @@ export const PaymentsPage = () => {
           </thead>
           <tbody>
             <tr>
-              <td style={{ fontFamily: 'monospace', color: '#ffffff' }}>LEDGER-9921</td>
+              <td style={{ fontFamily: 'monospace', color: 'var(--text-main)' }}>LEDGER-9921</td>
               <td>CUSTOMER_WALLET</td>
               <td><span className="badge badge-green"><ArrowDownLeft size={12} /> CREDIT</span></td>
               <td style={{ fontWeight: '700', color: '#34d399' }}>+₹500.00</td>
@@ -64,7 +64,7 @@ export const PaymentsPage = () => {
             </tr>
 
             <tr>
-              <td style={{ fontFamily: 'monospace', color: '#ffffff' }}>LEDGER-9922</td>
+              <td style={{ fontFamily: 'monospace', color: 'var(--text-main)' }}>LEDGER-9922</td>
               <td>WORKER_PAYOUT</td>
               <td><span className="badge badge-orange"><ArrowUpRight size={12} /> DEBIT</span></td>
               <td style={{ fontWeight: '700', color: '#fb923c' }}>-₹425.00</td>
