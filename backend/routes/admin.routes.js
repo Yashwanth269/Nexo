@@ -48,7 +48,7 @@ router.get('/overview-stats', async (req, res) => {
             db.query(`
                 SELECT COUNT(*) AS total
                 FROM jobs
-                WHERE status IN ('REQUESTED', 'MATCHING', 'ASSIGNED', 'ARRIVED', 'IN_PROGRESS')
+                WHERE status IN ('OPEN', 'REQUESTED', 'MATCHING', 'ASSIGNED', 'ARRIVED', 'IN_PROGRESS', 'REDISTRIBUTING', 'REASSIGNING', 'ON_THE_WAY', 'WORK_IN_PROGRESS', 'ACCEPTED')
             `),
             // Workers Online
             db.query(`
@@ -60,7 +60,7 @@ router.get('/overview-stats', async (req, res) => {
             db.query(`
                 SELECT COUNT(*) AS total
                 FROM jobs
-                WHERE status IN ('REQUESTED', 'MATCHING')
+                WHERE status IN ('OPEN', 'REQUESTED', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING')
             `),
             // Team Projects
             db.query(`
@@ -89,10 +89,10 @@ router.get('/overview-stats', async (req, res) => {
             // Live Status Breakdown
             db.query(`
                 SELECT
-                    COUNT(*) FILTER (WHERE status = 'MATCHING') AS searching,
-                    COUNT(*) FILTER (WHERE status = 'ASSIGNED') AS assigned,
-                    COUNT(*) FILTER (WHERE status = 'ARRIVED') AS on_route,
-                    COUNT(*) FILTER (WHERE status = 'IN_PROGRESS') AS working,
+                    COUNT(*) FILTER (WHERE status IN ('OPEN', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING')) AS searching,
+                    COUNT(*) FILTER (WHERE status IN ('ASSIGNED', 'ACCEPTED')) AS assigned,
+                    COUNT(*) FILTER (WHERE status IN ('ARRIVED', 'ON_THE_WAY')) AS on_route,
+                    COUNT(*) FILTER (WHERE status IN ('IN_PROGRESS', 'WORK_IN_PROGRESS')) AS working,
                     COUNT(*) FILTER (WHERE status = 'COMPLETED' AND updated_at >= CURRENT_DATE) AS completed_today
                 FROM jobs
             `),
@@ -207,7 +207,7 @@ router.get('/live-map', async (req, res) => {
                 address,
                 created_at
             FROM jobs
-            WHERE status IN ('REQUESTED', 'MATCHING', 'ASSIGNED', 'IN_PROGRESS')
+            WHERE status IN ('OPEN', 'REQUESTED', 'MATCHING', 'ASSIGNED', 'IN_PROGRESS', 'REDISTRIBUTING', 'REASSIGNING', 'ACCEPTED', 'ON_THE_WAY', 'WORK_IN_PROGRESS')
               AND location_lat IS NOT NULL
               AND location_lng IS NOT NULL
               AND location_lat != 0

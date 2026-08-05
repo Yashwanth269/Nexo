@@ -1165,7 +1165,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
         child: Stack(
           children: [
             IndexedStack(
-              index: _selectedIndex,
+              index: _selectedIndex.clamp(0, 3),
               children: [
                 _buildHomeContent(),
                 const CategoriesScreen(),
@@ -4344,7 +4344,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
         _refreshAllData();
         if (result != null && result is int) {
           setState(() {
-            _selectedIndex = result;
+            _selectedIndex = result.clamp(0, 3);
             if (result == 2) {
               _myJobsKey++;
             }

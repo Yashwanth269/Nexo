@@ -15,6 +15,7 @@ import 'package:nexo/services/socket_service.dart';
 import 'package:nexo/components/glass_components.dart';
 import 'package:nexo/screens/team_job_proposals_screen.dart';
 import 'package:nexo/screens/team_attendance_screen.dart';
+import 'package:nexo/screens/profile_screen.dart';
 
 class TabItem {
   final String label;
@@ -816,7 +817,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> with SingleTickerProviderSt
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: GestureDetector(
-              onTap: () => widget.onTabChange?.call(4), // navigate to profile
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
               child: ImageUtils.buildProfileImage(
                 _userPhoto != null ? '${NetworkHelper.baseUrl}$_userPhoto' : null,
                 radius: 16,

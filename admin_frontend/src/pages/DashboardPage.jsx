@@ -223,11 +223,11 @@ export const DashboardPage = () => {
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f97316' }} />
-              Searching ({realCustomers.filter(c => c.status === 'REQUESTED' || c.status === 'MATCHING').length})
+              Searching ({realCustomers.filter(c => ['OPEN', 'REQUESTED', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING'].includes(c.status)).length})
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981' }} />
-              Assigned ({realCustomers.filter(c => c.status === 'ASSIGNED' || c.status === 'IN_PROGRESS').length})
+              Assigned ({realCustomers.filter(c => ['ASSIGNED', 'ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'IN_PROGRESS', 'WORK_IN_PROGRESS'].includes(c.status)).length})
             </span>
             <span style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>Refreshes every 10s</span>
           </div>
@@ -269,7 +269,7 @@ export const DashboardPage = () => {
 
           {/* ── Customer pins ── */}
           {realCustomers.map((c) => {
-            const isSearching = c.status === 'REQUESTED' || c.status === 'MATCHING';
+            const isSearching = ['OPEN', 'REQUESTED', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING'].includes(c.status);
             return (
               <Marker
                 key={`cust-${c.id}`}
