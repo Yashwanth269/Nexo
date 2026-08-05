@@ -20,7 +20,8 @@ function setIO(io) {
  */
 function getIO() {
     if (!_io) {
-        throw new Error('[FATAL] Socket.IO not initialized. Ensure setIO() is called in index.js before any service initialization.');
+        console.warn('[SOCKET-WARN] Socket.IO not initialized yet');
+        return null;
     }
     return _io;
 }

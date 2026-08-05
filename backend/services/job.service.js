@@ -143,7 +143,9 @@ class JobService {
             });
 
             // 8. Realtime Broadcast
-            io.emit('job_taken', { jobId, workerId: worker.id, workerPhone: worker.phone_number });
+            if (io) {
+                io.emit('job_taken', { jobId, workerId: worker.id, workerPhone: worker.phone_number });
+            }
             
             // Fetch directions dynamically
             const { getDirections } = require('../utils/google_maps');
@@ -207,10 +209,12 @@ class JobService {
                 }
             };
 
-            io.to(`user:${job.user_id}`).emit('job_accepted', acceptancePayload);
-            io.to(`user:${job.user_id}`).emit('JOB_ACCEPTED', acceptancePayload);
-            io.to(`user:${job.user_id}`).emit('job_status_updated', { jobId, status: 'ACCEPTED', metadata: acceptancePayload });
-            io.to(`job:${jobId}`).emit('job_status_updated', { jobId, status: 'ACCEPTED', metadata: acceptancePayload });
+            if (io) {
+                io.to(`user:${job.user_id}`).emit('job_accepted', acceptancePayload);
+                io.to(`user:${job.user_id}`).emit('JOB_ACCEPTED', acceptancePayload);
+                io.to(`user:${job.user_id}`).emit('job_status_updated', { jobId, status: 'ACCEPTED', metadata: acceptancePayload });
+                io.to(`job:${jobId}`).emit('job_status_updated', { jobId, status: 'ACCEPTED', metadata: acceptancePayload });
+            }
 
             await this.logEvent(jobId, worker.id, 'status_change_ACCEPTED', { method: 'DIRECT_ACCEPT' });
 
