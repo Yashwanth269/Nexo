@@ -109,6 +109,8 @@ export const DashboardPage = () => {
   const [mapData, setMapData] = useState({ customers: [], workers: [] });
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [selectedWorker, setSelectedWorker] = useState(null);
   const mapPollRef = useRef(null);
 
   /* ── Fetch KPI stats ── */
@@ -134,6 +136,8 @@ export const DashboardPage = () => {
   };
 
   useEffect(() => {
+    setSelectedCustomer(null);
+    setSelectedWorker(null);
     fetchDashboardData();
     fetchLiveMap();
     // Poll map every 10 seconds
@@ -253,18 +257,14 @@ export const DashboardPage = () => {
 
           {/* ── Worker pins (blue) ── */}
           {workerPins.map((w, i) => (
-            <Marker key={`worker-${w.id || i}`} position={[w.lat, w.lng]} icon={workerIcon}>
-              <Popup>
-                <div style={{ fontSize: '12px', lineHeight: '1.6' }}>
-                  <strong>👷 {w.name}</strong><br />
-                  <span style={{ color: '#64748b' }}>Skills: {Array.isArray(w.skills) ? w.skills.slice(0, 2).join(', ') || 'General' : 'General'}</span><br />
-                  <span style={{ color: '#d97706' }}>⭐ {w.rating}</span>
-                  {w.isAvailable
-                    ? <span style={{ color: '#10b981', marginLeft: '8px' }}>● Available</span>
-                    : <span style={{ color: '#f97316', marginLeft: '8px' }}>● Busy</span>}
-                </div>
-              </Popup>
-            </Marker>
+            <Marker
+              key={`worker-${w.id || i}`}
+              position={[w.lat, w.lng]}
+              icon={workerIcon}
+              eventHandlers={{
+                click: () => setSelectedWorker(w),
+              }}
+            />
           ))}
 
           {/* ── Customer pins ── */}
@@ -275,24 +275,48 @@ export const DashboardPage = () => {
                 key={`cust-${c.id}`}
                 position={[c.lat, c.lng]}
                 icon={isSearching ? customerSearchingIcon : customerAssignedIcon}
-              >
-                <Popup>
-                  <div style={{ fontSize: '12px', lineHeight: '1.6' }}>
-                    <strong>🔍 Customer</strong><br />
-                    <span style={{ fontWeight: '700', color: '#f97316' }}>{c.category}</span><br />
-                    <span style={{
-                      display: 'inline-block', marginTop: '2px',
-                      padding: '1px 7px', borderRadius: '10px',
-                      background: isSearching ? '#fff7ed' : '#f0fdf4',
-                      color: isSearching ? '#f97316' : '#16a34a',
-                      fontWeight: '700', fontSize: '11px'
-                    }}>{c.status.replace(/_/g, ' ')}</span><br />
-                    {c.address && <span style={{ color: '#94a3b8', fontSize: '10px' }}>📍 {c.address.slice(0, 40)}</span>}
-                  </div>
-                </Popup>
-              </Marker>
+                eventHandlers={{
+                  click: () => setSelectedCustomer(c),
+                }}
+              />
             );
           })}
+
+          {selectedWorker && (
+            <Popup
+              position={[selectedWorker.lat, selectedWorker.lng]}
+              onClose={() => setSelectedWorker(null)}
+            >
+              <div style={{ fontSize: '12px', lineHeight: '1.6' }}>
+                <strong>👷 {selectedWorker.name}</strong><br />
+                <span style={{ color: '#64748b' }}>Skills: {Array.isArray(selectedWorker.skills) ? selectedWorker.skills.slice(0, 2).join(', ') || 'General' : 'General'}</span><br />
+                <span style={{ color: '#d97706' }}>⭐ {selectedWorker.rating}</span>
+                {selectedWorker.isAvailable
+                  ? <span style={{ color: '#10b981', marginLeft: '8px' }}>● Available</span>
+                  : <span style={{ color: '#f97316', marginLeft: '8px' }}>● Busy</span>}
+              </div>
+            </Popup>
+          )}
+
+          {selectedCustomer && (
+            <Popup
+              position={[selectedCustomer.lat, selectedCustomer.lng]}
+              onClose={() => setSelectedCustomer(null)}
+            >
+              <div style={{ fontSize: '12px', lineHeight: '1.6' }}>
+                <strong>🔍 Customer</strong><br />
+                <span style={{ fontWeight: '700', color: '#f97316' }}>{selectedCustomer.category}</span><br />
+                <span style={{
+                  display: 'inline-block', marginTop: '2px',
+                  padding: '1px 7px', borderRadius: '10px',
+                  background: ['OPEN', 'REQUESTED', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING'].includes(selectedCustomer.status) ? '#fff7ed' : '#f0fdf4',
+                  color: ['OPEN', 'REQUESTED', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING'].includes(selectedCustomer.status) ? '#f97316' : '#16a34a',
+                  fontWeight: '700', fontSize: '11px'
+                }}>{selectedCustomer.status.replace(/_/g, ' ')}</span><br />
+                {selectedCustomer.address && <span style={{ color: '#94a3b8', fontSize: '10px' }}>📍 {selectedCustomer.address.slice(0, 40)}</span>}
+              </div>
+            </Popup>
+          )}
         </MapContainer>
       </div>
 
