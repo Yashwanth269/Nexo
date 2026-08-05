@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgis/postgis:15-3.3-alpine
+    container_name: nexo_postgres
+    environment:
+      POSTGRES_DB: nexo_db
+      POSTGRES_USER: nexo_user
+      POSTGRES_PASSWORD: nexo_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexo_user -d nexo_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: nexo_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ml_service:
+    build:
+      context: ./ml_service
+    container_name: nexo_ml_service
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+    depends_on:
+      - redis
+
+  backend:
+    build:
+      context: ./backend
+    container_name: nexo_backend
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=nexo_db
+      - DB_USER=nexo_user
+      - DB_PASSWORD=nexo_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ML_SERVICE_URL=http://ml_service:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  admin_frontend:
+    build:
+      context: ./admin_frontend
+    container_name: nexo_admin_frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
