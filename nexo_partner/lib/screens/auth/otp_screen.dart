@@ -178,6 +178,7 @@ class _OtpScreenState extends State<OtpScreen> {
         final data = json.decode(response.body);
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('worker_token', data['token']);
+        await prefs.setString('token', data['token']);
         await prefs.setString('workerPhone', widget.phoneNumber);
         if (data['workerId'] != null) await prefs.setString('workerId', data['workerId']);
         if (data['workerName'] != null) await prefs.setString('workerName', data['workerName']);

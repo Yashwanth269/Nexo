@@ -33,7 +33,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   Future<void> _fetchExistingProfile() async {
     setState(() => _isLoading = true);
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/worker/profile/details/${widget.phoneNumber}'));
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('worker_token') ?? prefs.getString('token');
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/worker/profile/details/${widget.phoneNumber}'),
+        headers: {
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] && data['worker'] != null) {
@@ -104,7 +111,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     if (fileToUpload == null) return;
     
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('worker_token') ?? prefs.getString('token');
       var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/user/upload-photo'));
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
       request.files.add(await http.MultipartFile.fromPath(
         'photo',
         fileToUpload.path,
@@ -146,9 +158,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
     setState(() => _isLoading = true);
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('worker_token') ?? prefs.getString('token');
       final response = await http.post(
         Uri.parse('$baseUrl/api/worker/profile/setup'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
         body: json.encode({
           'phoneNumber': widget.phoneNumber,
           'name': _nameController.text,
