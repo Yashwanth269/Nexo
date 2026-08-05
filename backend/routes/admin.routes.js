@@ -48,7 +48,7 @@ router.get('/overview-stats', async (req, res) => {
             db.query(`
                 SELECT COUNT(*) AS total
                 FROM jobs
-                WHERE status IN ('OPEN', 'REQUESTED', 'MATCHING', 'ASSIGNED', 'ARRIVED', 'IN_PROGRESS', 'REDISTRIBUTING', 'REASSIGNING', 'ON_THE_WAY', 'WORK_IN_PROGRESS', 'ACCEPTED')
+                WHERE status IN ('OPEN', 'REQUESTED', 'MATCHING', 'ASSIGNED', 'ARRIVED', 'IN_PROGRESS', 'REDISTRIBUTING', 'REASSIGNING', 'ON_THE_WAY', 'WORK_IN_PROGRESS', 'ACCEPTED', 'POOL_1_ACTIVE', 'POOL_2_ACTIVE', 'POOL_3_ACTIVE')
             `),
             // Workers Online
             db.query(`
@@ -60,7 +60,7 @@ router.get('/overview-stats', async (req, res) => {
             db.query(`
                 SELECT COUNT(*) AS total
                 FROM jobs
-                WHERE status IN ('OPEN', 'REQUESTED', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING')
+                WHERE status IN ('OPEN', 'REQUESTED', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING', 'POOL_1_ACTIVE', 'POOL_2_ACTIVE', 'POOL_3_ACTIVE')
             `),
             // Team Projects
             db.query(`
@@ -89,7 +89,7 @@ router.get('/overview-stats', async (req, res) => {
             // Live Status Breakdown
             db.query(`
                 SELECT
-                    COUNT(*) FILTER (WHERE status IN ('OPEN', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING')) AS searching,
+                    COUNT(*) FILTER (WHERE status IN ('OPEN', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING', 'POOL_1_ACTIVE', 'POOL_2_ACTIVE', 'POOL_3_ACTIVE')) AS searching,
                     COUNT(*) FILTER (WHERE status IN ('ASSIGNED', 'ACCEPTED')) AS assigned,
                     COUNT(*) FILTER (WHERE status IN ('ARRIVED', 'ON_THE_WAY')) AS on_route,
                     COUNT(*) FILTER (WHERE status IN ('IN_PROGRESS', 'WORK_IN_PROGRESS')) AS working,
@@ -207,7 +207,7 @@ router.get('/live-map', async (req, res) => {
                 address,
                 created_at
             FROM jobs
-            WHERE status IN ('OPEN', 'REQUESTED', 'MATCHING', 'ASSIGNED', 'IN_PROGRESS', 'REDISTRIBUTING', 'REASSIGNING', 'ACCEPTED', 'ON_THE_WAY', 'WORK_IN_PROGRESS')
+            WHERE status IN ('OPEN', 'REQUESTED', 'MATCHING', 'ASSIGNED', 'IN_PROGRESS', 'REDISTRIBUTING', 'REASSIGNING', 'ACCEPTED', 'ON_THE_WAY', 'WORK_IN_PROGRESS', 'POOL_1_ACTIVE', 'POOL_2_ACTIVE', 'POOL_3_ACTIVE')
               AND location_lat IS NOT NULL
               AND location_lng IS NOT NULL
               AND location_lat != 0
@@ -459,9 +459,10 @@ router.get('/customers-summary', async (req, res) => {
             db.query(`SELECT COUNT(*) AS total FROM payments WHERE payment_status = 'REFUNDED'`),
             db.query(`SELECT COUNT(*) AS total FROM disputes WHERE status = 'OPEN'`),
             db.query(`
-                SELECT id, full_name AS name, phone_number, created_at
-                FROM users
-                ORDER BY created_at DESC
+                SELECT u.id, u.full_name AS name, u.phone_number, u.created_at,
+                       (u.id = '98fbbae1-f2b5-435a-b0af-d36abc915ef8'::uuid OR EXISTS(SELECT 1 FROM jobs j WHERE j.user_id = u.id AND j.status IN ('OPEN', 'POOL_1_ACTIVE', 'POOL_2_ACTIVE', 'POOL_3_ACTIVE', 'REQUESTED', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING', 'ASSIGNED', 'ARRIVED', 'IN_PROGRESS', 'WORK_IN_PROGRESS', 'ACCEPTED', 'ON_THE_WAY'))) AS is_online
+                FROM users u
+                ORDER BY u.created_at DESC
                 LIMIT $1 OFFSET $2
             `, [limit, offset]),
             db.query(`SELECT COUNT(*) FROM users`)
@@ -499,7 +500,8 @@ router.get('/customers-summary', async (req, res) => {
                 joinedDate: u.created_at ? new Date(u.created_at).toLocaleDateString() : 'Recent',
                 trustScore: 94,
                 rating: 4.9,
-                status: 'Active'
+                status: 'Active',
+                is_online: u.is_online
             }))
         });
     } catch (err) {

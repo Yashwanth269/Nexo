@@ -25,6 +25,7 @@ export const CustomersPage = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('ALL');
   const [page, setPage] = useState(1);
+  const [showOnlineOnly, setShowOnlineOnly] = useState(false);
 
   const fetchCustomers = async () => {
     setLoading(true);
@@ -46,6 +47,10 @@ export const CustomersPage = () => {
 
   const kpis = data?.kpis || {};
   const customers = data?.customers || [];
+  const filteredCustomers = customers.filter(c => {
+    if (showOnlineOnly && !c.is_online) return false;
+    return true;
+  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -143,7 +148,18 @@ export const CustomersPage = () => {
                 ⭐ VIP
               </button>
             </div>
-            <button className="btn btn-secondary" style={{ padding: '6px 12px' }}><Filter size={16} /></button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', color: 'var(--text-main)', fontWeight: '600' }}>
+                <input
+                  type="checkbox"
+                  checked={showOnlineOnly}
+                  onChange={(e) => setShowOnlineOnly(e.target.checked)}
+                  style={{ width: '15px', height: '15px', accentColor: '#10b981', cursor: 'pointer' }}
+                />
+                <span>Online Only</span>
+              </label>
+              <button className="btn btn-secondary" style={{ padding: '6px 12px' }}><Filter size={16} /></button>
+            </div>
           </div>
 
           {/* Table */}
@@ -152,21 +168,22 @@ export const CustomersPage = () => {
               <tr>
                 <th>Customer</th>
                 <th>Location</th>
+                <th>Presence</th>
                 <th>Trust / Rating</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="4"><div className="skeleton" style={{ height: '60px' }} /></td></tr>
-              ) : customers.length === 0 ? (
+                <tr><td colSpan="5"><div className="skeleton" style={{ height: '60px' }} /></td></tr>
+              ) : filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan="4" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px' }}>
+                  <td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px' }}>
                     No customer accounts recorded in zone {currentZone}.
                   </td>
                 </tr>
               ) : (
-                customers.map((c) => (
+                filteredCustomers.map((c) => (
                   <tr key={c.id}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -186,6 +203,9 @@ export const CustomersPage = () => {
                     <td>
                       <div style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '13px' }}>{c.location || currentZone}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Joined: {c.joinedDate}</div>
+                    </td>
+                    <td>
+                      {c.is_online ? <span className="badge badge-green">ONLINE</span> : <span className="badge badge-purple">OFFLINE</span>}
                     </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

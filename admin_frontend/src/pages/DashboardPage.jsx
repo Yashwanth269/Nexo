@@ -227,7 +227,7 @@ export const DashboardPage = () => {
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f97316' }} />
-              Searching ({realCustomers.filter(c => ['OPEN', 'REQUESTED', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING'].includes(c.status)).length})
+              Searching ({realCustomers.filter(c => ['OPEN', 'REQUESTED', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING', 'POOL_1_ACTIVE', 'POOL_2_ACTIVE', 'POOL_3_ACTIVE'].includes(c.status)).length})
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981' }} />
@@ -269,7 +269,7 @@ export const DashboardPage = () => {
 
           {/* ── Customer pins ── */}
           {realCustomers.map((c) => {
-            const isSearching = ['OPEN', 'REQUESTED', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING'].includes(c.status);
+            const isSearching = ['OPEN', 'REQUESTED', 'MATCHING', 'REDISTRIBUTING', 'REASSIGNING', 'POOL_1_ACTIVE', 'POOL_2_ACTIVE', 'POOL_3_ACTIVE'].includes(c.status);
             return (
               <Marker
                 key={`cust-${c.id}`}

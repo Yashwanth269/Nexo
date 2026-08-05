@@ -137,7 +137,7 @@ class ApiService {
   cancelJob(jobId, reason) { return this.request('/job-lifecycle/cancel', { method: 'POST', body: JSON.stringify({ jobId, reason }) }); }
 
   // Workers & CRM
-  getWorkers() { return this.request('/worker'); }
+  getWorkers() { return this.request('/workers'); }
   getWorkerReliability() { return this.request('/admin/reliability'); }
   getShadowBans() { return this.request('/admin/shadow-ban'); }
   setShadowBan(workerId, level, reason) { return this.request(`/admin/shadow-ban/${workerId}`, { method: 'POST', body: JSON.stringify({ level, reason }) }); }

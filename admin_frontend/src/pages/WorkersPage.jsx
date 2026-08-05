@@ -13,6 +13,7 @@ export const WorkersPage = () => {
   const [banModalWorker, setBanModalWorker] = useState(null);
   const [banLevel, setBanLevel] = useState(1);
   const [banReason, setBanReason] = useState('');
+  const [showOnlineOnly, setShowOnlineOnly] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -64,6 +65,7 @@ export const WorkersPage = () => {
   };
 
   const filteredWorkers = workers.filter(w => {
+    if (showOnlineOnly && !w.is_online) return false;
     const term = search.toLowerCase();
     return (
       (w.name && w.name.toLowerCase().includes(term)) ||
@@ -87,7 +89,7 @@ export const WorkersPage = () => {
         </button>
       </div>
 
-      <div className="glass-panel" style={{ padding: '16px', display: 'flex', gap: '16px' }}>
+      <div className="glass-panel" style={{ padding: '16px', display: 'flex', gap: '16px', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
           <Search size={18} color="var(--text-muted)" />
           <input
@@ -99,6 +101,15 @@ export const WorkersPage = () => {
             style={{ padding: '8px 12px' }}
           />
         </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer', color: 'var(--text-main)', fontWeight: '600', paddingRight: '8px' }}>
+          <input
+            type="checkbox"
+            checked={showOnlineOnly}
+            onChange={(e) => setShowOnlineOnly(e.target.checked)}
+            style={{ width: '16px', height: '16px', accentColor: '#10b981', cursor: 'pointer' }}
+          />
+          <span>Online Only</span>
+        </label>
       </div>
 
       <div className="glass-panel" style={{ padding: '20px' }}>

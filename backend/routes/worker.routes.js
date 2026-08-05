@@ -133,4 +133,25 @@ router.post('/feedback/click', async (req, res) => {
     }
 });
 
+// Get all workers for admin control panel
+router.get('/', async (req, res) => {
+    try {
+        const result = await db.query("SELECT * FROM workers ORDER BY created_at DESC");
+        const workers = result.rows.map(w => ({
+            id: w.id,
+            name: w.full_name || 'Worker',
+            phone_number: w.phone_number,
+            skills: w.skills || [],
+            rating: w.rating ? parseFloat(w.rating) : 4.5,
+            is_online: w.is_online || false,
+            is_available: w.is_available || false,
+            availability_state: w.availability_state || 'OFFLINE',
+            created_at: w.created_at
+        }));
+        res.json({ success: true, workers });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 module.exports = router;
