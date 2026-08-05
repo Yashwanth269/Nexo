@@ -129,6 +129,7 @@ class ApiService {
   getHeatmapSnapshots(hours = 24) { return this.request(`/admin/heatmap?hours=${hours}`); }
   getRealtimeMetrics() { return this.request('/metrics/realtime'); }
   getModelMaturity() { return this.request('/admin/model-maturity'); }
+  getLiveMap(zone = this.zone) { return this.request(`/admin/live-map?zone=${encodeURIComponent(zone)}`); }
 
   // Bookings & Dispatch
   getJobs(status = 'ALL', limit = 50) { return this.request(`/jobs?status=${status}&limit=${limit}`); }

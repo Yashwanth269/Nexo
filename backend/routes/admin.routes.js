@@ -186,6 +186,97 @@ router.get('/overview-stats', async (req, res) => {
 });
 
 /**
+ * GET /api/admin/live-map
+ * Returns real-time pin data for the Live Operations Map:
+ *   - customers: active jobs (REQUESTED / MATCHING) with location
+ *   - workers:   online workers with current_lat / current_lng
+ */
+router.get('/live-map', async (req, res) => {
+    try {
+        const zone = req.query.zone || 'Kolar';
+
+        // Active customer jobs with valid coordinates
+        const jobsRes = await db.query(`
+            SELECT
+                id,
+                user_id,
+                category,
+                status,
+                CAST(location_lat AS float) AS lat,
+                CAST(location_lng AS float) AS lng,
+                address,
+                created_at
+            FROM jobs
+            WHERE status IN ('REQUESTED', 'MATCHING', 'ASSIGNED', 'IN_PROGRESS')
+              AND location_lat IS NOT NULL
+              AND location_lng IS NOT NULL
+              AND location_lat != 0
+              AND location_lng != 0
+            ORDER BY created_at DESC
+            LIMIT 100
+        `);
+
+        // Online workers with valid coordinates
+        const workersRes = await db.query(`
+            SELECT
+                id,
+                full_name,
+                skills,
+                rating,
+                verification_status,
+                is_available,
+                CAST(current_lat AS float) AS lat,
+                CAST(current_lng AS float) AS lng
+            FROM workers
+            WHERE is_online = true
+              AND current_lat IS NOT NULL
+              AND current_lng IS NOT NULL
+              AND current_lat != 0
+              AND current_lng != 0
+            LIMIT 200
+        `);
+
+        const customers = jobsRes.rows.map(j => ({
+            id: j.id,
+            type: 'customer',
+            lat: j.lat,
+            lng: j.lng,
+            category: j.category || 'Service',
+            status: j.status,
+            address: j.address || '',
+            createdAt: j.created_at,
+        }));
+
+        const workers = workersRes.rows.map(w => ({
+            id: w.id,
+            type: 'worker',
+            lat: w.lat,
+            lng: w.lng,
+            name: w.full_name || 'Worker',
+            skills: Array.isArray(w.skills) ? w.skills : [],
+            rating: parseFloat(w.rating || 0).toFixed(1),
+            isAvailable: w.is_available,
+            verified: w.verification_status === 'VERIFIED',
+        }));
+
+        res.json({
+            success: true,
+            zone,
+            customers,
+            workers,
+            summary: {
+                totalCustomers: customers.length,
+                totalWorkers: workers.length,
+            }
+        });
+    } catch (err) {
+        console.error('[ADMIN-LIVE-MAP-ERROR]', err.message);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+
+/**
  * GET /api/admin/bookings-summary
  * Real Zone-Filtered Bookings Screen Analytics & Table Data
  */
