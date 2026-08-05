@@ -98,7 +98,7 @@ router.post('/create', jobCreateLimiter, async (req, res) => {
     try {
         const validated = createJobSchema.parse(req.body);
         
-        // Check user restriction status
+        // Check user restriction status & auto-ensure user exists in DB
         const uCheck = await db.query("SELECT status FROM users WHERE id = $1::uuid", [validated.userId]);
         if (uCheck.rowCount > 0 && uCheck.rows[0].status === 'RESTRICTED') {
             return res.status(403).json({ 
@@ -106,6 +106,11 @@ router.post('/create', jobCreateLimiter, async (req, res) => {
                 error: "ACCOUNT_RESTRICTED", 
                 message: "Your account is temporarily restricted from booking new jobs due to repeated late cancellations." 
             });
+        } else if (uCheck.rowCount === 0) {
+            await db.query(
+                "INSERT INTO users (id, phone_number, full_name) VALUES ($1::uuid, '9876543210', 'App User') ON CONFLICT (id) DO NOTHING",
+                [validated.userId]
+            );
         }
 
         const scheduledAt = validated.scheduledAt || validated.scheduled_at || req.body.scheduledAt || req.body.scheduled_at || null;

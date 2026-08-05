@@ -314,6 +314,9 @@ class _S3NetworkImageState extends State<S3NetworkImage> {
       height: widget.height,
       fit: widget.fit,
       placeholder: (context, url) => widget.fallback,
+      errorListener: (error) {
+        // Silently caught, gracefully falls back to themed icons/widgets
+      },
       errorWidget: (context, url, error) {
         if (_currentIndex + 1 < _urlsToTry.length) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
